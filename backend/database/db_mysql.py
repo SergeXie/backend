@@ -13,7 +13,7 @@ def create_engine_and_session(url: str | URL):
 
         # u12VxHdAT38UEa67Kc
         # 数据库引擎
-        engine = create_async_engine("mysql+aiomysql://cmdb:cmdb123456@127.0.0.1:3306/dql?charset=utf8mb4",
+        engine = create_async_engine("mysql+aiomysql://cmdb:cmdb123456@192.168.0.126:3306/dql?charset=utf8mb4",
                                      echo=False, future=True, pool_pre_ping=True)
         log.success('数据库连接成功')
     except Exception as e:
