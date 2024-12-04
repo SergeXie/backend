@@ -10,6 +10,8 @@ import chardet
 import backtrader as bt
 import pandas as pd
 from datetime import datetime
+
+from bs4 import BeautifulSoup
 from fastapi import APIRouter, Query, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy import select, desc, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +22,8 @@ from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
 from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest, DqlIndicators
 from utils.common import fetch_trading_data, PandasData, get_entities_list, generate_random_string, \
-    generate_lazy_pinyin, MyCommissionScheme, DynamicSpreadCommission, cache, select_goods_common, indicator_classes
+    generate_lazy_pinyin, MyCommissionScheme, DynamicSpreadCommission, cache, select_goods_common, indicator_classes, \
+    to_float, match_filter_data, match_ratio, format_datetime
 from utils.public_strategy import ComprehensiveAnalyzer
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
@@ -911,4 +914,281 @@ async def directly_test_result(request: Request):
 async def combine_test_result(request: Request):
 
     return await response_base.success()
+
+
+@router.post("/traderReportUpload", name="策略交易报告上传")
+async def trader_report_upload(file: UploadFile = File(...)):
+    """
+    策略交易报告上传
+    :param file:
+    :return:
+    """
+    # 指定文件保存路径
+    UPLOAD_DIRECTORY = os.path.join("utils", "trader_report")
+    # 检查文件类型（可根据需要自定义）
+    allowed_extensions = {"htm"}
+    file_extension = file.filename.split(".")[-1].lower()
+
+    if file_extension not in allowed_extensions:
+        return await response_base.fail(msg="不支持的文件类型")
+
+    # 保存文件
+    file_path = os.path.join(UPLOAD_DIRECTORY, file.filename)
+    try:
+        with open(file_path, "wb") as f:
+            f.write(await file.read())
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"文件保存失败: {str(e)}"
+        )
+
+    return await response_base.success(data={"path": file_path})
+
+
+@router.post("/submitTraderReport", name="提交交易报告")
+async def submit_trader_report(request: Request):
+    """
+    :param request:
+    :return:
+    """
+    data_json = await request.json()
+    file_path = data_json.get("file_path", None)  # 文件名
+    uid = data_json.get("uid", 0)  # 策略uid
+    goods = data_json.get("goods", None)  # 交易品种
+    period = data_json.get("period", None)  # 周期
+    startTime = data_json.get("startTime", None)  # 开始时间
+    endTime = data_json.get("endTime", None)  # 结束时间
+
+    # 检查文件是否存在
+    if not os.path.exists(file_path):
+        return await response_base.fail(msg="文件路径不存在")
+
+    # 检测文件编码
+    with open(file_path, 'rb') as file:
+        raw_data = file.read()
+        encoding = chardet.detect(raw_data)['encoding']
+
+    # 解析HTML
+    with open(file_path, 'r', encoding=encoding) as file:
+        soup = BeautifulSoup(file, 'html.parser')
+    async with async_db_session() as db:
+        # 查询策略
+        strategy = await fetch_indicators(db, uid)
+        if not strategy:
+            return await response_base.fail(msg=f"uid:{uid} not found !", data=[])
+
+        account_list = []
+
+        # 提取账户信息
+        account_info_row = soup.find('tr', align='left')
+        if account_info_row:
+            account_info_columns = account_info_row.find_all('td')
+            account = account_info_columns[0].text.replace('Account:', '').strip()
+            name = account_info_columns[2].text.replace('Name:', '').strip()
+            currency = account_info_columns[4].text.replace('Currency:', '').strip()
+
+            leverage = '1'
+            if len(account_info_columns) > 6:
+                leverage_text = account_info_columns[6].text.replace('Leverage:', '').strip()
+                if leverage_text:
+                    leverage = leverage_text
+
+            datetime_value = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            if len(account_info_columns) > 12:
+                datetime_text = account_info_columns[12].text.strip()
+                if datetime_text:
+                    parsed_datetime = datetime.strptime(datetime_text, '%Y %B %d, %H:%M')
+                    datetime_value = parsed_datetime.strftime('%Y-%m-%d %H:%M:%S')
+
+            account_info = {
+                'account': account,
+                'name': name,
+                'currency': currency,
+                'leverage': leverage,
+                'createTime': datetime_value
+            }
+
+        # 提取交易信息
+        def extract_transactions(section_header, stop_text):
+            trades = []
+            if section_header:
+                row = section_header.find_next('tr', align='center').find_next_sibling('tr')
+                while row:
+                    cols = row.find_all('td')
+                    if row.find('b', string=stop_text):
+                        break
+                    if len(cols) > 1:
+                        transaction = {
+                            'tradeid': cols[0].text.strip() if len(cols) > 0 else 0,
+                            'timestamp': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
+                            'openTime': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
+                            'orderType': cols[2].text.strip() if len(cols) > 2 else '0',
+                            'goodsId': cols[4].text.strip() if len(cols) > 4 else None,
+                            'size': to_float(cols[3].text.strip()) if len(cols) > 3 else 0.0,
+                            'openPrice': to_float(cols[5].text.strip()) if len(cols) > 5 else 0.0,
+                            'stopLoss': to_float(cols[6].text.strip()) if len(cols) > 6 else 0.0,
+                            'takeProfit': to_float(cols[7].text.strip()) if len(cols) > 7 else 0.0,
+                            'closeTime': format_datetime(cols[8].text.strip()) if len(cols) > 8 else None,
+                            'price': to_float(cols[9].text.strip()) if len(cols) > 9 else 0.0,
+                            'commission': to_float(cols[10].text.strip()) if len(cols) > 10 else 0.0,
+                            'taxes': to_float(cols[11].text.strip()) if len(cols) > 11 else 0.0,
+                            'swap': to_float(cols[12].text.strip()) if len(cols) > 12 else 0.0,
+                            'pnl': to_float(cols[13].text.strip()) if len(cols) > 13 else 0.0,
+                        }
+                        trades.append(transaction)
+                    row = row.find_next_sibling('tr', align='right')
+            return trades
+
+        closed_transactions_header = soup.find('b', string='Closed Transactions:')
+        open_transactions_header = soup.find('b', string='Open Trades:')
+
+        closed_transactions = extract_transactions(closed_transactions_header, stop_text='Closed P/L:')
+        open_transactions = extract_transactions(open_transactions_header, stop_text='Floating P/L:')
+
+        account_list.extend(closed_transactions)
+        account_list.extend(open_transactions)
+
+        # 提取报告数据
+        trader_report = {
+            "startingCash": soup.find(string="Balance:").find_next().text,
+            "FreeMargin": soup.find(string="Free Margin:").find_next().text,
+            "totalNetProfit": soup.find(string="Total Net Profit:").find_next().text,
+            "totalLoss": soup.find(string="Gross Profit:").find_next().text,
+            "ProfitFactor": soup.find(string="Profit Factor:").find_next().text,
+            "expectedPayoff": soup.find(string="Expected Payoff:").find_next().text,
+            "absoluteDrawdown": soup.find(string="Absolute Drawdown:").find_next().text,
+            "maximalDrawdown": match_filter_data(soup.find(string="Maximal Drawdown:").find_next().text),
+            "relativeLosses": match_filter_data(soup.find(string="Relative Drawdown:").find_next().text),
+            "totalTrades": soup.find(string="Total Trades:").find_next().text,
+            "shortPositions": match_filter_data(soup.find(string="Short Positions (won %):").find_next().text),
+            "shortPositionsRatio": match_ratio(soup.find(string="Short Positions (won %):").find_next().text),
+            "longPositions": match_filter_data(soup.find(string="Long Positions (won %):").find_next().text),
+            "longPositionsRatio": match_ratio(soup.find(string="Long Positions (won %):").find_next().text),
+            "profitTrades": match_filter_data(soup.find(string="Profit Trades (% of total):").find_next().text),
+            "profitTradesRatio": match_ratio(soup.find(string="Profit Trades (% of total):").find_next().text),
+            "lossTrades": match_filter_data(soup.find(string="Loss trades (% of total):").find_next().text),
+            "lossTradesRatio": match_ratio(soup.find(string="Loss trades (% of total):").find_next().text),
+            "largestProfit": 0,
+            "largestLoss": 0,
+            "averageProfitTrade": 0,
+            "averageLossTrade": 0,
+            "maximalConsecutiveProfit": 0,
+            "maximalConsecutiveLoss": 0,
+            "maximumConsecutiveWins": 0,
+            "maximumConsecutiveLosses": 0,
+            "averageConsecutiveWins": 0,
+            "averageConsecutiveLosses": 0,
+            "yieldRate": 0,
+            "winRate": 0,
+            "plr": 0,
+            "avgProfit": 0,
+            "mdr": 0,
+            "isBursted": 0,
+            "maxFUR": 0,
+            "score": 0,
+        }
+
+        # Largest Profit Trade 和 Loss Trade
+        largest_row = soup.find('td', string='Largest')
+        if largest_row:
+            # 提取 Largest profit 和 loss 数据
+            largest_profit = largest_row.find_next('td', class_='mspt').text.strip()
+            largest_loss = largest_row.find_next('td', class_='mspt').find_next('td', class_='mspt').text.strip()
+
+            # 去除空格并转换为浮动数值
+            trader_report["largestProfit"] = float(
+                largest_profit.replace(" ", "").replace(",", "")) if largest_profit else 0
+            trader_report["largestLoss"] = float(largest_loss.replace(" ", "").replace(",", "")) if largest_loss else 0
+
+        # Average Profit Trade 和 Loss Trade
+        average_row = soup.find('td', string='Average')
+        print(average_row)
+        if average_row:
+            # 提取 Average profit 和 loss 数据
+            average_profit = average_row.find_next('td', class_='mspt').text.strip()
+            average_loss = average_row.find_next('td', class_='mspt').find_next('td', class_='mspt').text.strip()
+
+            # 去除空格并转换为浮动数值
+            trader_report["averageProfitTrade"] = float(
+                average_profit.replace(" ", "").replace(",", "")) if average_profit else 0
+            trader_report["averageLossTrade"] = float(
+                average_loss.replace(" ", "").replace(",", "")) if average_loss else 0
+
+        # Maximum Consecutive Wins 和 Consecutive Losses
+        maximum_row = soup.find('td', string='Maximum')
+        if maximum_row:
+            # 提取 Maximum consecutive wins 和 consecutive losses 数据
+            max_consecutive_wins = maximum_row.find_next('td', class_='mspt').text.strip()
+            max_consecutive_losses = maximum_row.find_next('td', class_='mspt').find_next('td',
+                                                                                          class_='mspt').text.strip()
+
+            # 处理数据
+            max_consecutive_wins_value = max_consecutive_wins.split('(')[1].split(')')[0]  # 提取括号内的数字
+            max_consecutive_losses_value = max_consecutive_losses.split('(')[1].split(')')[0]  # 提取括号内的数字
+
+            trader_report["maximumConsecutiveWins"] = float(
+                max_consecutive_wins_value) if max_consecutive_wins_value else 0
+            trader_report["maximumConsecutiveLosses"] = float(
+                max_consecutive_losses_value) if max_consecutive_losses_value else 0
+
+        # Maximal Consecutive Profit 和 Loss
+        maximal_row = soup.find('td', string='Maximal')
+        if maximal_row:
+            # 提取 Maximal consecutive profit 和 loss 数据
+            maximal_consecutive_profit = maximal_row.find_next('td', class_='mspt').text.strip()
+            maximal_consecutive_loss = maximal_row.find_next('td', class_='mspt').find_next('td',
+                                                                                            class_='mspt').text.strip()
+
+            # 处理数据，提取括号内的数字
+            maximal_consecutive_profit_value = maximal_consecutive_profit.split('(')[0].strip()  # 提取括号外的数字
+            maximal_consecutive_loss_value = maximal_consecutive_loss.split('(')[0].strip()  # 提取括号外的数字
+
+            # 更新数据
+            trader_report["maximalConsecutiveProfit"] = float(
+                maximal_consecutive_profit_value.replace(" ", "").replace(",",
+                                                                          "")) if maximal_consecutive_profit_value else 0
+            trader_report["maximalConsecutiveLoss"] = float(
+                maximal_consecutive_loss_value.replace(" ", "").replace(",",
+                                                                        "")) if maximal_consecutive_loss_value else 0
+
+        # 添加入库
+        try:
+            # 创建策略结果记录
+            add_strategy_record = DqlStrategyTestResult(
+                uid=generate_random_string("TR"),
+                title=strategy.name,
+                notes=strategy.description,
+                strategyUid=uid,
+                goodsId=goods,
+                period=period,
+                startTime=startTime,
+                endTime=endTime,
+                traderResult=json.dumps(
+                    {
+                        "traderResult": account_list,
+                        "traderReport": trader_report,
+                        "floatingPointValues": [],
+                        "netAssetValues": []
+                    }
+                ),
+                parameter=json.dumps(data_json.get("parameter", {})),
+                isBursted=0, status=0, yieldRate=0,
+                mdr=0, winRate=0, plr=0, tradeCount=0,
+                pnl=0, maxProfit=0, maxLoss=0, avgProfit=0, maxFUR=0, score=0,
+                is_delete=0, spread=0,
+                leverage=leverage,
+                calculationStatus=1
+            )
+            db.add(add_strategy_record)
+            await db.commit()
+
+        except Exception as e:
+            info = traceback.format_exc()
+            log.info("策略存储插入数据库失败：{}".format(info))
+            await db.rollback()  # 如果发生异常，回滚事务
+            await db.close()
+            return None
+
+        return await response_base.success()
 
