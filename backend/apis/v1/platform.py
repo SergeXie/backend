@@ -93,12 +93,6 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
         _, last_day = calendar.monthrange(now.year, now.month)  # 获取本月最后一天
         end_time = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)  # 月底
 
-    elif period == "H4":
-        # H4 周期，调整到最近的 4 小时对齐点
-        start_time = now.replace(hour=(now.hour // 4) * 4,
-                                 minute=0, second=0, microsecond=0) + datetime.timedelta(hours=1)
-        end_time = start_time + datetime.timedelta(hours=4)
-
     else:
         # 其他周期处理
         start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
@@ -108,6 +102,9 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
     print("end_time:", end_time)
 
     async with async_db_session() as db:
+        # 因M1数据没有更新到FPG-XAUUSD_合成，临时策略用FPG-XAUUSD,后续需要改
+        if goods == "FPG-XAUUSD_合成":
+            goods = "FPG-XAUUSD"
 
         select_model_class, result = await select_goods_common(db, goods, model_classes)
 
@@ -230,6 +227,7 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
 
         return await response_base.success(data={"goods": goods, "period": period, "utc": 2, "is_final": is_final,
                                                  "lineData": lineData})
+
 
 @router.get("/selectFrontKline", name="获取K线历史数据")
 async def select_kline_front(lineId: Optional[int] = 0,
