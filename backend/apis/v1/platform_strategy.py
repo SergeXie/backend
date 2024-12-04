@@ -455,13 +455,8 @@ async def test_result_list(request: Request):
     }
 
     async with async_db_session() as db:
-        query = (
-            select(
-                DqlStrategyTestResult,
-                DqlStrategy.name
-            )
-            .join(DqlStrategy, DqlStrategy.uid == DqlStrategyTestResult.strategyUid)
-            .where(
+        query = (select(DqlStrategyTestResult).where(
+                DqlStrategyTestResult.strategyUid == strategyUid,
                 DqlStrategyTestResult.goodsId.like(goods),
                 DqlStrategyTestResult.is_delete == 0,
                 DqlStrategyTestResult.period.like(period),
@@ -501,7 +496,8 @@ async def test_result_list(request: Request):
 
         results_list = []
 
-        for data, strategy_name in results:
+        for data in results:
+            data = data[0]
             result_dict = {
                 "testerUids": data.uid,
                 "strategyUid": data.strategyUid,
@@ -525,7 +521,7 @@ async def test_result_list(request: Request):
                 "weight": data.weight,
                 "weightNotes": data.weightNotes,
                 "status": data.status,
-                "name": strategy_name,
+                "name": data.title,
             }
 
             trader_result = json.loads(data.traderResult).get("traderReport", {})
