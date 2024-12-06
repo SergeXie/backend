@@ -1,5 +1,7 @@
 from collections import defaultdict
 import json
+from typing import Optional
+
 import pymysql
 from fastapi import APIRouter
 from starlette.requests import Request
@@ -25,7 +27,7 @@ async def get_hero_detail(heroId, remark=None, position=None):
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
             # 构建 SQL 语句
             query = f"""
-                        UPDATE lz_hero_rank SET remark = %s, position = %s WHERE heroId = %s;
+                        UPDATE lz_hero_details SET remark = %s, position = %s WHERE heroId = %s;
                     """
             cursor.execute(query, (remark, position, heroId))
             # 提交事务
@@ -74,8 +76,8 @@ def get_hero_data(heroName=None, heroCareer=None, remark=None,
                     t1.province, 
                     t1.provincePower, 
                     t1.updatetime, 
-                    t1.remark,
-                    t1.position,
+                    t4.remark,
+                    t4.position,
                     t3.heroType
                 FROM 
                     lz_hero_rank t1
@@ -83,6 +85,7 @@ def get_hero_data(heroName=None, heroCareer=None, remark=None,
                     SELECT MAX(pkId) AS pkId FROM lz_hero_rank GROUP BY heroName
                 ) t2 ON t1.pkId = t2.pkId
                 INNER JOIN lz_hero t3 ON t1.heroId = t3.id
+                INNER JOIN lz_hero_details t4 ON t1.heroId = t4.heroId
             """
 
             # 动态条件
@@ -96,10 +99,10 @@ def get_hero_data(heroName=None, heroCareer=None, remark=None,
                 conditions.append("t1.heroCareer LIKE %s")
                 params.append(f"%{heroCareer}%")
             if remark:
-                conditions.append("t1.remark LIKE %s")
+                conditions.append("t4.remark LIKE %s")
                 params.append(f"%{remark}%")
             if position:
-                conditions.append("t1.position LIKE %s")
+                conditions.append("t4.position LIKE %s")
                 params.append(f"%{position}%")
 
             # 处理 screens 条件
