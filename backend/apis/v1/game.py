@@ -1,0 +1,313 @@
+from collections import defaultdict
+import json
+import pymysql
+from fastapi import APIRouter
+from starlette.requests import Request
+
+from common.response.response_schema import response_base
+
+router = APIRouter()
+
+# 配置数据库连接信息
+DB_CONFIG = {
+    'host': '8.138.95.62',
+    'user': 'dqldb',
+    'password': 'u12VxHdAT38UEa67Kc',
+    'database': 'game',
+    'port': 3306,
+    'charset': 'utf8mb4'
+}
+
+
+async def get_hero_detail(heroId, remark=None, position=None):
+    connection = pymysql.connect(**DB_CONFIG)
+    try:
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            # 构建 SQL 语句
+            query = f"""
+                        UPDATE lz_hero_rank SET remark = %s, position = %s WHERE heroId = %s;
+                    """
+            cursor.execute(query, (remark, position, heroId))
+            # 提交事务
+            connection.commit()
+
+            return True
+    except Exception as e:
+        # 如果发生异常，打印错误信息并回滚
+        print(f"Error occurred: {e}")
+        connection.rollback()
+        return False
+    finally:
+        # 关闭数据库连接
+        connection.close()
+
+
+# 查询英雄的基本信息
+def get_hero_data(heroName=None, heroCareer=None, remark=None,
+                  position=None, screens=[], filterCriteria=None):
+    connection = pymysql.connect(**DB_CONFIG)
+    try:
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            # 基础查询语句
+            base_query = """
+                SELECT 
+                    t1.pkId, 
+                    t1.heroId, 
+                    t1.photo, 
+                    t1.heroName, 
+                    t1.heroCareer, 
+                    t1.firstPlaceScore, 
+                    t1.fiftyScores, 
+                    t1.tenthPlaceScore, 
+                    t1.eightyScores, 
+                    t1.lastPlaceScore, 
+                    t1.peakHeroWinRate, 
+                    t1.peakHeroShowRate, 
+                    t1.peakHeroBanRate, 
+                    t1.topHeroWinRate, 
+                    t1.topHeroShowRate, 
+                    t1.topHeroBanRate, 
+                    t1.kzInfo, 
+                    t1.bkzInfo, 
+                    t1.tfInfo, 
+                    t1.dfInfo, 
+                    t1.province, 
+                    t1.provincePower, 
+                    t1.updatetime, 
+                    t1.remark,
+                    t1.position,
+                    t3.heroType
+                FROM 
+                    lz_hero_rank t1
+                INNER JOIN (
+                    SELECT MAX(pkId) AS pkId FROM lz_hero_rank GROUP BY heroName
+                ) t2 ON t1.pkId = t2.pkId
+                INNER JOIN lz_hero t3 ON t1.heroId = t3.id
+            """
+
+            # 动态条件
+            conditions = []
+            params = []
+
+            if heroName:
+                conditions.append("t1.heroName LIKE %s")
+                params.append(f"%{heroName}%")
+            if heroCareer:
+                conditions.append("t1.heroCareer LIKE %s")
+                params.append(f"%{heroCareer}%")
+            if remark:
+                conditions.append("t1.remark LIKE %s")
+                params.append(f"%{remark}%")
+            if position:
+                conditions.append("t1.position LIKE %s")
+                params.append(f"%{position}%")
+
+            # 处理 screens 条件
+            if screens:
+                for screen in screens:
+                    name = screen.get("name")
+                    name_value = screen.get("nameValue")  # 运算符
+                    value = screen.get("value")          # 筛选值
+                    check_value = screen.get("checkValue")  # 是否启用此筛选
+
+                    if name and name_value and check_value:
+                        conditions.append(f"t1.{name} {name_value} %s")
+                        params.append(value)
+
+            # 拼接条件
+            if conditions:
+                base_query += " WHERE " + f" {filterCriteria} ".join(conditions)
+
+            # 添加排序
+            base_query += " ORDER BY t3.heroType, t1.heroId;"
+
+            # 执行查询
+            cursor.execute(base_query, params)
+            result = cursor.fetchall()
+
+        return result
+    finally:
+        connection.close()
+
+
+# 批量查询所有英雄的装备信息
+def get_all_hero_equips():
+    connection = pymysql.connect(**DB_CONFIG)
+    try:
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            query = """
+                SELECT t5.heroId, t5.szTitle, t5.szIcon, t5.equipwinRate, t5.equipShowRate
+                FROM lz_hero_equip t5
+                INNER JOIN (
+                    SELECT heroId, szTitle, MAX(createTime) AS latestTime
+                    FROM lz_hero_equip
+                    GROUP BY heroId, szTitle
+                ) latestEquip ON t5.heroId = latestEquip.heroId 
+                AND t5.szTitle = latestEquip.szTitle 
+                AND t5.createTime = latestEquip.latestTime
+                ORDER BY t5.heroId, t5.szTitle;
+            """
+            cursor.execute(query)
+            result = cursor.fetchall()
+        return result
+    finally:
+        connection.close()
+
+
+# 批量查询所有英雄的符文信息
+def get_all_hero_runes():
+    connection = pymysql.connect(**DB_CONFIG)
+    try:
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            query = """
+                SELECT t5.heroId, t5.runeDetail, t5.runeWinRate, t5.runeshowRate
+                FROM lz_hero_rune t5
+                INNER JOIN (
+                    SELECT heroId, runeDetail, MAX(createTime) AS latestTime
+                    FROM lz_hero_rune
+                    GROUP BY heroId, runeDetail
+                ) latestRune ON t5.heroId = latestRune.heroId 
+                AND t5.runeDetail = latestRune.runeDetail 
+                AND t5.createTime = latestRune.latestTime
+                ORDER BY t5.heroId, t5.runeDetail;
+            """
+            cursor.execute(query)
+            result = cursor.fetchall()
+        return result
+    finally:
+        connection.close()
+
+
+def get_hero_gold_play():
+    connection = pymysql.connect(**DB_CONFIG)
+    try:
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            query = """
+                SELECT t1.heroId, t1.goldPlay
+                FROM lz_hero_gold_medal AS t1
+                INNER JOIN (
+                    SELECT heroId, MAX(createTime) AS maxCreateTime
+                    FROM lz_hero_gold_medal
+                    GROUP BY heroId
+                ) AS t2
+                ON t1.heroId = t2.heroId AND t1.createTime = t2.maxCreateTime
+            """
+            cursor.execute(query)
+            result = cursor.fetchall()
+            return {item['heroId']: item['goldPlay'] for item in result}
+    finally:
+        connection.close()
+
+
+def get_hero_data_with_gold_play():
+    hero_data = get_hero_data()  # 获取英雄数据
+    gold_play_data = get_hero_gold_play()  # 获取 goldPlay 数据
+
+    # 将 goldPlay 数据合并到 hero_data 中
+    for hero in hero_data:
+        hero['goldPlay'] = gold_play_data.get(hero['heroId'], 0)  # 默认为 0
+
+    return hero_data
+
+
+# 定义 API 路由，返回英雄信息及装备信息
+@router.post("/heroList")
+async def read_hero_data(request: Request):
+    """
+    :param heroName: 英雄筛选
+    :param heroCareer: 职位筛选
+    :param remark: 备注
+    :param position: 位置
+    :param screens: 动态条件数组，格式为：
+        [
+            {"title": "巅峰胜率", "name": "peakHeroWinRate", "nameValue": ">=", "value": 3, "checkValue": true},
+            {"title": "顶端胜率", "name": "topHeroWinRate", "nameValue": "<", "value": 2, "checkValue": true}
+        ]
+    :return:
+    """
+    data_request = await request.json()
+    heroName = data_request.get("heroName", None)
+    heroCareer = data_request.get("heroCareer", None)
+    remark = data_request.get("remark", None)
+    position = data_request.get("position", None)
+    screens = data_request.get("screens", [])  # 筛选
+    filterCriteria = data_request.get("filterCriteria", "AND")  # AND|OR
+
+    hero_data = get_hero_data(heroName=heroName, heroCareer=heroCareer,
+                              remark=remark, position=position, screens=screens,
+                              filterCriteria=filterCriteria)
+    all_equips = get_all_hero_equips()
+    all_runes = get_all_hero_runes()
+    gold_play_data = get_hero_gold_play()  # 获取 goldPlay 数据
+
+    # 将 goldPlay 数据合并到 hero_data 中
+    for hero in hero_data:
+        hero['goldPlay'] = gold_play_data.get(hero['heroId'], 0)  # 默认为 0
+
+    # 将装备信息按 heroId 分组
+    equip_dict = defaultdict(list)
+    for equip in all_equips:
+        equip_dict[equip['heroId']].append({
+            "szTitle": equip["szTitle"],
+            "szIcon": equip["szIcon"],
+            "equipwinRate": equip["equipwinRate"],
+            "equipShowRate": equip["equipShowRate"]
+        })
+
+    # 将符文信息按 heroId 分组
+    rune_dict = defaultdict(list)
+    for rune in all_runes:
+        rune_detail = json.loads(rune['runeDetail'])  # 解析 runeDetail JSON 字符串
+        rune_dict[rune['heroId']].append({
+            "runeDetail": rune_detail,  # 解析后的符文列表
+            "runeWinRate": rune["runeWinRate"],
+            "runeshowRate": rune["runeshowRate"]
+        })
+
+    # 为每个英雄附加装备信息和符文信息
+    for hero in hero_data:
+        hero["updatetime"] = hero["updatetime"].strftime("%Y-%m-%d %H:%M:%S")
+        hero['equips'] = equip_dict[hero['heroId']]
+        hero['runes'] = rune_dict[hero['heroId']]
+
+        if hero.get("kzInfo"):
+            hero["kzInfo"] = json.loads(hero.get("kzInfo", []))
+            hero["bkzInfo"] = json.loads(hero.get("bkzInfo", []))
+            hero["tfInfo"] = json.loads(hero.get("tfInfo", []))
+            hero["dfInfo"] = json.loads(hero.get("dfInfo", []))
+        else:
+            hero["kzInfo"] = []
+            hero["bkzInfo"] = []
+            hero["tfInfo"] = []
+            hero["dfInfo"] = []
+
+    return await response_base.success(data=hero_data)
+
+
+@router.post("/heroDetailOperate", name="添加修改英雄详情")
+async def hero_detail_operate(request: Request):
+
+    """
+    heroId：英雄ID
+    remark: 备注
+    position：位置
+    添加或修改英雄详细信息
+    :return:
+    """
+    data = await request.json()
+
+    # 1 根据传递的heroId进行数据库查询该条字段, 如果存在！则根据请求的参数进行插入数据库
+    result = await get_hero_detail(data.get("heroId", None),
+                                   data.get("remark", None), data.get("position", None))
+    # 响应
+    if result:
+        return await response_base.success()
+    else:
+        return await response_base.fail(msg="添加或修改失败！")
+
+
+
+
+
+
+

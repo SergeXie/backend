@@ -27,6 +27,8 @@ from utils.common import fetch_trading_data, PandasData, get_entities_list, gene
 from utils.public_strategy import ComprehensiveAnalyzer
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
+from utils.trader_report_calculate import calculate_consecutive_win_loss, calculate_trade_metrics, calculate_plr, \
+    calculate_mdr, calculate_max_fur, calculate_additional_metrics
 
 router = APIRouter()
 
@@ -1089,6 +1091,26 @@ async def submit_trader_report(request: Request):
             "score": 0,
         }
 
+        # 计算所需的指标
+        print("account_list:{}".format(account_list))
+        initial_cash = float(trader_report["startingCash"])
+        consecutive_metrics = calculate_consecutive_win_loss(account_list)
+        trade_metrics = calculate_trade_metrics(account_list, initial_cash)
+        plr = calculate_plr(account_list)
+        mdr = calculate_mdr(account_list, initial_cash)
+        max_fur = calculate_max_fur(account_list)
+        additional_metrics = calculate_additional_metrics(account_list)
+
+        trader_report["averageConsecutiveWins"] = consecutive_metrics["averageConsecutiveWins"]
+        trader_report["averageConsecutiveLosses"] = consecutive_metrics["averageConsecutiveLosses"]
+        trader_report["yieldRate"] = trade_metrics["yieldRate"]
+        trader_report["winRate"] = trade_metrics["winRate"]
+        trader_report["avgProfit"] = trade_metrics["avgProfit"]
+        trader_report["plr"] = plr
+        trader_report["mdr"] = mdr
+        trader_report["max_fur"] = max_fur
+        print("trader_report:{}".format(trader_report))
+
         # Largest Profit Trade 和 Loss Trade
         largest_row = soup.find('td', string='Largest')
         if largest_row:
@@ -1173,16 +1195,19 @@ async def submit_trader_report(request: Request):
                     }
                 ),
                 parameter=json.dumps(data_json.get("parameter", {})),
-                isBursted=0, status=0, yieldRate=0,
-                mdr=0, winRate=0, plr=0, tradeCount=0,
-                pnl=0, maxProfit=0, maxLoss=0, avgProfit=0, maxFUR=0, score=0,
+                isBursted=0, status=0, yieldRate=trader_report["yieldRate"],
+                mdr=trader_report["mdr"], winRate=trader_report["winRate"],
+                plr=trader_report["plr"], tradeCount=additional_metrics["tradeCount"],
+                pnl=additional_metrics["pnl"], maxProfit=additional_metrics["maxProfit"],
+                maxLoss=additional_metrics["maxLoss"], avgProfit=trader_report["avgProfit"],
+                maxFUR=trader_report["max_fur"], score=0,
                 is_delete=0, spread=0,
                 leverage=leverage,
                 calculationStatus=1
             )
             db.add(add_strategy_record)
             await db.commit()
-
+            print("ok")
         except Exception as e:
             info = traceback.format_exc()
             log.info("策略存储插入数据库失败：{}".format(info))

@@ -40,11 +40,9 @@ async def test_user(page_no: Optional[int] = 1, page_size: Optional[int] = 100):
         platform_goods = await db.execute(select(DplGoodsTest).offset(offset).limit(page_size))
         result = platform_goods.scalars().all()
 
-
         data_list = [{"pkId": data.pkid, "goods": data.goods,
                       "digits": data.digits, "goodType": data.goodType,
                       "platform": data.platform} for data in result]
-
 
         return await response_base.success(data=data_list)
 
