@@ -10,7 +10,6 @@ import chardet
 import backtrader as bt
 import pandas as pd
 from datetime import datetime
-
 from bs4 import BeautifulSoup
 from fastapi import APIRouter, Query, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy import select, desc, update, func
@@ -28,7 +27,7 @@ from utils.public_strategy import ComprehensiveAnalyzer
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
 from utils.trader_report_calculate import calculate_consecutive_win_loss, calculate_trade_metrics, calculate_plr, \
-    calculate_mdr, calculate_max_fur, calculate_additional_metrics
+    calculate_mdr, calculate_max_fur, calculate_additional_metrics, calculate_metrics
 
 router = APIRouter()
 
@@ -461,7 +460,6 @@ async def test_result_list(request: Request):
 
     async with async_db_session() as db:
         query = (select(DqlStrategyTestResult).where(
-                DqlStrategyTestResult.strategyUid == strategyUid,
                 DqlStrategyTestResult.goodsId.like(goods),
                 DqlStrategyTestResult.is_delete == 0,
                 DqlStrategyTestResult.period.like(period),
@@ -1092,7 +1090,6 @@ async def submit_trader_report(request: Request):
         }
 
         # 计算所需的指标
-        print("account_list:{}".format(account_list))
         initial_cash = float(trader_report["startingCash"])
         consecutive_metrics = calculate_consecutive_win_loss(account_list)
         trade_metrics = calculate_trade_metrics(account_list, initial_cash)
@@ -1109,7 +1106,10 @@ async def submit_trader_report(request: Request):
         trader_report["plr"] = plr
         trader_report["mdr"] = mdr
         trader_report["max_fur"] = max_fur
-        print("trader_report:{}".format(trader_report))
+        # print("trader_report:{}".format(trader_report))
+
+        newReportTemplate = calculate_metrics(account_list)
+        print("result:{}".format(newReportTemplate))
 
         # Largest Profit Trade 和 Loss Trade
         largest_row = soup.find('td', string='Largest')
@@ -1125,7 +1125,6 @@ async def submit_trader_report(request: Request):
 
         # Average Profit Trade 和 Loss Trade
         average_row = soup.find('td', string='Average')
-        print(average_row)
         if average_row:
             # 提取 Average profit 和 loss 数据
             average_profit = average_row.find_next('td', class_='mspt').text.strip()
@@ -1203,7 +1202,8 @@ async def submit_trader_report(request: Request):
                 maxFUR=trader_report["max_fur"], score=0,
                 is_delete=0, spread=0,
                 leverage=leverage,
-                calculationStatus=1
+                calculationStatus=1,
+                newReportTemplate=json.dumps(newReportTemplate)
             )
             db.add(add_strategy_record)
             await db.commit()
