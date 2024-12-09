@@ -271,7 +271,7 @@ class CommonStrategy(bt.Strategy):
             spread = int(self.datas[0].spread[0])
 
             if trade.isclosed:
-                order_type = "close"
+                order_type = 'close'
                 trader_dict["openTime"] = trade.open_datetime().strftime('%Y-%m-%d %H:%M:%S')
                 trader_dict["openPrice"] = float(format(trade.price, precision_format))
                 trader_dict["closeTime"] = trade.close_datetime().strftime('%Y-%m-%d %H:%M:%S')
@@ -412,6 +412,7 @@ class CommonStrategy(bt.Strategy):
             print(f"交易完成，利润：{trade.pnl}, 数量：{trade.size}, 价格：{trade.price} 交易时间：{current_datetime}")
 
             self.calculate_float_net_values()
+
 
             # 用于计算实时买卖点
             date_obj = datetime.datetime.strptime(trader_dict["timestamp"], "%Y-%m-%d %H:%M:%S")

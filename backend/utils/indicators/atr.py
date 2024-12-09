@@ -10,6 +10,7 @@ class ResponseATRStopLossData(bt.Strategy):
     指标数据返回
     """
     def __init__(self, indicator_params, indicator_name, comments, begin_time=None):
+        self.digits = int(self.data.digits[0])
         self.indicator_params = indicator_params
         self.indicator_name = indicator_name
         self.comments = comments
@@ -86,13 +87,13 @@ class ResponseATRStopLossData(bt.Strategy):
         self.result_data_up.append({
             "kLineId": current_kline_id,
             "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
-            "price": target_up_value,
+            "price": round(target_up_value, self.digits) if target_up_value else None,
         })
 
         self.result_data_dn.append({
             "kLineId": current_kline_id,
             "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
-            "price": target_dn_value,
+            "price": round(target_dn_value, self.digits) if target_dn_value else None,
         })
 
     def get_analysis(self):
@@ -102,31 +103,13 @@ class ResponseATRStopLossData(bt.Strategy):
                 "type": "line",
                 "color": self.indicator_params.get("TrendUpColor", "#00FF00"),
                 "data": self.result_data_up
+
             },
             {
                 "type": "line",
                 "color": self.indicator_params.get("TrenDownColor", "#FF0000"),
                 "data": self.result_data_dn
             },
-            # {
-            #     "type": "bmp",  # 表示买点
-            #     "arrow": "1",
-            #     "data": self.buy_poit
-            # },
-            # {
-            #     "type": "bmp",  # 表示卖点
-            #     "arrow": "2",
-            #     "data": self.sell_poit
-            # },
-            # {
-            #     "type": "bmp",  # 表示平仓点
-            #     "arrow": "3",
-            #     "data": self.close_poit
-            # },
-            # {
-            #     "type": "text",
-            #     "data": ''
-            # },
         ]
 
         return [self.result_data_dict["lines"],
