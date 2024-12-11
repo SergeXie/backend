@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from utils.common import format_datetime, to_float
+
 
 def calculate_consecutive_win_loss(account_list):
     consecutive_wins = 0
@@ -206,8 +208,8 @@ def calculate_single_metrics(account_list):
 
     # 汇总到结果字典
     metrics.update({
-        "totalPnl": total_pnl,
-        "grossProfit": gross_profit,
+        "totalPnl": round(total_pnl, 2),
+        "grossProfit": round(gross_profit, 2),
         "grossLoss": gross_loss,
         "profitLossRatio": profit_loss_ratio,
         "countTotal": count_total,
@@ -216,7 +218,7 @@ def calculate_single_metrics(account_list):
         "countLost": count_lost,
         "avgProfitRatio": round(avg_profit_ratio),
         "avgWon": round(avg_won, 2),
-        "avgLost": avg_lost,
+        "avgLost": round(avg_lost, 2),
         "avgProfitLossRatio": round(avg_profit_loss_ratio, 2),
         "maxPnl": max_pnl,
         "maxLost": max_lost,
@@ -231,7 +233,7 @@ def calculate_single_metrics(account_list):
         "avgBreakevenPeriod": round(avg_breakeven_period, 2),
         "maxEquity": max_equity,
         "maxPositionSize": max_position_size,
-        "totalCosts": total_costs,
+        "totalCosts": round(total_costs, 2),
         "analysis": total_pnl / max_equity * 100 if max_equity > 0 else 0
     })
 
@@ -290,3 +292,50 @@ def calculate_periods(account_list):
     avg_breakeven_period = sum(breakeven_periods) / len(breakeven_periods) if breakeven_periods else 0
 
     return avg_holding_period, avg_profit_period, avg_loss_period, avg_breakeven_period
+
+
+# 提取交易信息
+def extract_transactions(section_header, stop_text):
+    trades = []
+    if section_header:
+        row = section_header.find_next('tr', align='center').find_next_sibling('tr')
+        while row:
+            cols = row.find_all('td')
+            if row.find('b', string=stop_text):
+                break
+            if len(cols) > 1:
+                transaction = {
+                    'tradeid': cols[0].text.strip() if len(cols) > 0 else 0,
+                    'timestamp': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
+                    'openTime': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
+                    'orderType': cols[2].text.strip() if len(cols) > 2 else '0',
+                    'goodsId': cols[4].text.strip() if len(cols) > 4 else None,
+                    'size': to_float(cols[3].text.strip()) if len(cols) > 3 else 0.0,
+                    'openPrice': to_float(cols[5].text.strip()) if len(cols) > 5 else 0.0,
+                    'stopLoss': to_float(cols[6].text.strip()) if len(cols) > 6 else 0.0,
+                    'takeProfit': to_float(cols[7].text.strip()) if len(cols) > 7 else 0.0,
+                    'closeTime': format_datetime(cols[8].text.strip()) if len(cols) > 8 else None,
+                    'price': to_float(cols[9].text.strip()) if len(cols) > 9 else 0.0,
+                    'commission': to_float(cols[10].text.strip()) if len(cols) > 10 else 0.0,
+                    'taxes': to_float(cols[11].text.strip()) if len(cols) > 11 else 0.0,
+                    'swap': to_float(cols[12].text.strip()) if len(cols) > 12 else 0.0,
+                    'pnl': to_float(cols[13].text.strip()) if len(cols) > 13 else 0.0,
+                }
+                trades.append(transaction)
+            row = row.find_next_sibling('tr', align='right')
+    return trades
+
+def extract_order_prefixes(account_list):
+    """
+    从 account_list 中提取 tradeid 和 goodsId 为空的数据的 orderType 的前缀（@ 之前部分），并去重。
+    """
+    result = set()  # 使用 set 自动去重
+    for trade in account_list:
+        # 检查 tradeid 和 goodsId 是否为空
+        if not trade.get("tradeid") and not trade.get("goodsId"):
+            order_type = trade.get("orderType", "")
+            if "@" in order_type:
+                # 提取 @ 之前的数据并加入 set
+                prefix = order_type.split("@")[0]
+                result.add(prefix)
+    return list(result)  # 转换回列表
