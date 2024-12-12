@@ -1,6 +1,7 @@
 import backtrader as bt
 import numpy as np
 import tensorflow as tf
+from tensorflow import keras
 import backtrader as bt
 import joblib
 
@@ -24,7 +25,7 @@ class ResponseDLData(bt.Strategy):
         }
         model_path = model_path_dict.get(indicator_params.get('TimePeriods', "deeplearn_model/goole_model_M15.h5"))
         # 导入模型
-        self.model = tf.keras.models.load_model(model_path)
+        self.model = keras.models.load_model(filepath=model_path)
         # 编译模型
         train_prices = self.close_data.reshape(-1, 1)
         # 数据归一化

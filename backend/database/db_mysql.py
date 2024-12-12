@@ -5,15 +5,16 @@ from fastapi import Depends
 from sqlalchemy import URL
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from common.log import log
+from typing import Union
 from core.conf import settings
 
 
-def create_engine_and_session(url: str | URL):
+def create_engine_and_session(url: Union[str, URL]):
     try:
 
         # u12VxHdAT38UEa67Kc
         # 数据库引擎
-        engine = create_async_engine("mysql+aiomysql://cmdb:cmdb123456@127.0.0.1:3306/dql?charset=utf8mb4",
+        engine = create_async_engine("mysql+aiomysql://cmdb:cmdb123456@192.168.0.126:3306/dql?charset=utf8mb4",
                                      echo=False, future=True, pool_pre_ping=True)
         log.success('数据库连接成功')
     except Exception as e:

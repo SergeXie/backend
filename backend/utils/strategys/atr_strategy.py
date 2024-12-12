@@ -78,7 +78,6 @@ class ATRStrategy(CommonStrategy):
         else:
             print("Invalid trend value")
 
-
         # 检查是否到达数据末尾且仍持有仓位
         if self.need_closr:
             if self.data_line_count == (self.data.buflen() - (self.atr_len + 1)) and self.position:

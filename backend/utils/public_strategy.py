@@ -230,12 +230,44 @@ class CommonStrategy(bt.Strategy):
             self.isbursted = 1
 
         if order.status in [order.Completed]:
+
+            print('order$$$查看', order.size,
+                  order.created.price,
+                  self.datas[0].datetime.datetime(0),
+                  'Buy' if order.isbuy() else 'Sell',
+                  order.ref,
+
+                  )
+
             cash = self.broker.get_cash()
             value = self.broker.getvalue()
             order_type = 'Buy' if order.isbuy() else 'Sell'
 
             self.log(f'{order_type} 订单执行完成，价格：{order.executed.price}, 交易价：{order.executed.value} '
                      f'当前关仓价：{self.datas[0].close[0]}, 数量：{order.executed.size}, 当前资金：{cash}, 订单类型：{order.ordtype}')
+
+        # # 精度
+        # digits = self.datas[0].digits[0]
+        # precision_format = f".{int(digits)}f"
+        # # 用于计算实时买卖点
+        # date_obj = datetime.datetime.strptime(trader_dict["timestamp"], "%Y-%m-%d %H:%M:%S")
+        # # 将datetime对象转换为时间戳
+        # if order_type == 'buy' or order_type == 'sell':  # 在开仓时候记录[orderid:时间戳]
+        #     self.trade_ref_dict[trade.ref] = int(date_obj.timestamp())
+        #     date_obj = int(date_obj.timestamp())
+        # elif order_type == 'close':
+        #     date_obj = self.trade_ref_dict.get(trade.ref)
+        #
+        # # print(trade.ref, date_obj)
+        # self.order_point.append({
+        #     "datatime": self.datas[0].datetime.datetime(),
+        #     "order_type": order_type,
+        #     "price": float(format(trade.history[-1].event.price, precision_format)),
+        #     "size": trade.size,
+        #     "orderId": date_obj,
+        # })
+
+
 
     def notify_trade(self, trade):
         """
@@ -310,6 +342,7 @@ class CommonStrategy(bt.Strategy):
             trader_dict["initialCash"] = float(format(self.starting_cash, precision_format))
 
             self.trader_result.append(trader_dict)
+            print(trader_dict)
 
             # 交易报告
             if trade.isclosed:
@@ -405,7 +438,9 @@ class CommonStrategy(bt.Strategy):
 
             self.calculate_float_net_values()
 
-
+            # 精度
+            digits = self.datas[0].digits[0]
+            precision_format = f".{int(digits)}f"
             # 用于计算实时买卖点
             date_obj = datetime.datetime.strptime(trader_dict["timestamp"], "%Y-%m-%d %H:%M:%S")
             # 将datetime对象转换为时间戳
@@ -415,14 +450,10 @@ class CommonStrategy(bt.Strategy):
             elif order_type == 'close':
                 date_obj = self.trade_ref_dict.get(trade.ref)
 
-            # print(trade.ref, date_obj)
-            self.order_point.append({
-                "datatime": self.datas[0].datetime.datetime(),
-                "order_type": order_type,
-                "price": float(format(trade.history[-1].event.price, precision_format)),
-                "size": trade.size,
-                "orderId": date_obj,
-            })
+            print(date_obj)
+
+
+
 
         except Exception as e:
             info = traceback.format_exc()
