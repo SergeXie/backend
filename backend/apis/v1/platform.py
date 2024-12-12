@@ -1,5 +1,4 @@
 import calendar
-import datetime
 import json
 import time
 import traceback
@@ -23,7 +22,6 @@ from utils.timezone import timezone
 import pandas as pd
 from utils.indicators import *
 
-
 router = APIRouter()
 
 # 保存内存变量
@@ -33,7 +31,6 @@ product_list = []
 @router.get("/selectAllGoods", name="查询所有平台品种列表",
             responses={200: {"model": GoodsResponse}, 400: {"model": ErrorModel}})
 async def test_user(page_no: Optional[int] = 1, page_size: Optional[int] = 100):
-
     async with async_db_session() as db:
         # 计算偏移量
         offset = (page_no - 1) * page_size
@@ -227,7 +224,6 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
                                                  "lineData": lineData})
 
 
-
 @router.get("/selectFrontKline", name="获取K线历史数据")
 async def select_kline_front(lineId: Optional[int] = 0,
                              goods: str = Query(..., title="交易平台-交易品种"),
@@ -269,10 +265,13 @@ async def select_kline_front(lineId: Optional[int] = 0,
 
             trader_datas = detail.scalars().first()
 
-            # 将时间转换为字符串时间
-            formatted_datetime = trader_datas.tradeDateTime.strftime('%Y-%m-%d %H:%M:%S')
+            if trader_datas:
+                # 将时间转换为字符串时间
+                formatted_datetime = trader_datas.tradeDateTime.strftime('%Y-%m-%d %H:%M:%S')
 
-            query = query.where(select_model_class.tradeDateTime <= formatted_datetime)
+                query = query.where(select_model_class.tradeDateTime <= formatted_datetime)
+            else:
+                query = query
 
         if period.startswith("W") or period.startswith("D") or period.startswith("MN"):
             # 根据period参数的取值进行条件判断
@@ -330,7 +329,7 @@ async def select_platform_goods_k_line(lineId: int,
             # 计算偏移量
             # 查询指定模型的数据
             query = select(select_model_class).where(
-    select_model_class.tradingGoods == result.trading_goods,
+                select_model_class.tradingGoods == result.trading_goods,
                 select_model_class.platform == result.platform,
                 select_model_class.type == period,
                 select_model_class.tradeDateTime >= formatted_datetime).limit(1000)
@@ -373,7 +372,6 @@ async def select_multiple_goods_k_lines(goods: str = Query(..., title="交易平
     """
     # 查询中间表 DplGoodsTest
     async with async_db_session() as db:
-
         select_model_class, result = await select_goods_common(db, goods, model_classes)
 
         if not select_model_class:
@@ -385,7 +383,6 @@ async def select_multiple_goods_k_lines(goods: str = Query(..., title="交易平
             select_model_class.type == period,
             select_model_class.tradeDateTime.between(beginTime, endTime)).order_by(
             select_model_class.tradeDateTime.desc())
-
 
         result_list = await select_kline_data(db, result_data)  # 不使用缓存处理函数
 
@@ -428,7 +425,6 @@ async def add_trader_goods_strategy(reqeust: Request, add_trader_strategy_schema
 @router.post("/traderGoodsOrder", name="回测手动下单交易接口")
 async def select_trader_goods_strategy(request: Request,
                                        add_trader_ticks: AddTraderTicksData):
-
     """
     :param request
     :param pkId: 交易品种ID
@@ -638,10 +634,10 @@ async def update_data():
 
             # 将修改后的traderResult转换回JSON字符串
             traderResult_json = json.dumps(
-                     {"traderResult": traderResult,
-                      "traderReport": traderReport,
-                      "floatingPointValues": floatingPointValues,
-                      "netAssetValues": netAssetValues})
+                {"traderResult": traderResult,
+                 "traderReport": traderReport,
+                 "floatingPointValues": floatingPointValues,
+                 "netAssetValues": netAssetValues})
 
             # 更新plr字段
             stmt = (
@@ -667,6 +663,7 @@ async def clear_goods_echo():
     cache.clear()
 
     return "OK"
+
 
 @router.post("/indicatorDifferenceData", name="对比不同版本的指标数据")
 async def indicator_goods_kline(request: Request):
@@ -711,6 +708,7 @@ async def indicator_goods_kline(request: Request):
     # print('result', result)
     return await response_base.success(data=result)
 
+
 # 求对称差集
 def symmetric_difference(lst1, lst2):
     # 对称差集结果
@@ -727,6 +725,7 @@ def symmetric_difference(lst1, lst2):
             sym_diff.append(elem)
 
     return sym_diff
+
 
 # 求不同点
 def list_difference(lst1, lst2):
@@ -827,12 +826,12 @@ def list_difference(lst1, lst2):
         result['data'] = difference2(ls1, ls2)
         return result
     if data_type == 'text':
-
         ls1 = lst1['data']
         ls2 = lst2['data']
         result = lst1
         result['data'] = difference2(ls1, ls2)
         return result
+
 
 def difference1(lst1, lst2):  # 左右两边的数据没有比较
     common_elements = [item for item in lst1 if item in lst2]
@@ -847,11 +846,11 @@ def difference1(lst1, lst2):  # 左右两边的数据没有比较
         # 找到start和end在a1_tuples中的索引，并获取它们之间的子数组
         start_index_a1 = lst1.index(start)
         end_index_a1 = lst1.index(end)
-        subarray_a1 = lst1[start_index_a1: end_index_a1+1]
+        subarray_a1 = lst1[start_index_a1: end_index_a1 + 1]
         # 找到start和end在a2_tuples中的索引，并获取它们之间的子数组
         start_index_a2 = lst2.index(start)
         end_index_a2 = lst2.index(end)
-        subarray_a2 = lst2[start_index_a2: end_index_a2+1]
+        subarray_a2 = lst2[start_index_a2: end_index_a2 + 1]
         # 如果两个子数组不同，则将[start, end]添加到结果中
 
         # print(subarray_a1, subarray_a2)
@@ -869,17 +868,16 @@ def difference1(lst1, lst2):  # 左右两边的数据没有比较
     if lst1[-1] != lst2[-1]:
         end = common_elements[-1]
         end_index_a1 = lst1.index(end)
-        result1.append(lst1[end_index_a1-1:])
+        result1.append(lst1[end_index_a1 - 1:])
         end_index_a2 = lst2.index(end)
-        result2.append(lst2[end_index_a2-1:])
+        result2.append(lst2[end_index_a2 - 1:])
 
     if len(common_elements) == 0:
         result1 = [lst1]
         result2 = [lst2]
 
     return result1, result2
-    # print(result1)
-    # print(result2)
+
 
 def difference2(lst1, lst2):
     return symmetric_difference(lst1, lst2)

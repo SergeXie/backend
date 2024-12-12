@@ -29,33 +29,33 @@ def get_uuid4_str() -> str:
 
 
 class DplGoodsTest(Base):
-
     __tablename__ = "dql_goods"
 
     pkid: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    goods: Mapped[str] = mapped_column(VARCHAR(64),comment='平台-交易品种')
-    goodType: Mapped[str] = mapped_column(VARCHAR(64),comment='品种类型')
+    goods: Mapped[str] = mapped_column(VARCHAR(64), comment='平台-交易品种')
+    goodType: Mapped[str] = mapped_column(VARCHAR(64), comment='品种类型')
     table_name: Mapped[str] = mapped_column(VARCHAR(32), comment='平台表名')
     trading_goods: Mapped[str] = mapped_column(VARCHAR(64), unique=True, index=True, comment='交易品种')
     platform: Mapped[str] = mapped_column(VARCHAR(64), unique=True, index=True, comment='平台')
     digits: Mapped[int] = mapped_column(Integer, nullable=False, server_default='2', comment='精度')
-    isSynthesise: Mapped[int] = mapped_column(Integer, nullable=False, server_default='0', comment='是否是需要合成的品种')
-
+    isSynthesise: Mapped[int] = mapped_column(Integer, nullable=False, server_default='0',
+                                              comment='是否是需要合成的品种')
 
 
 class BaseTrading(Base):
-
     __abstract__ = True
 
-    pkId:Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    pkId: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     platform: Mapped[str] = mapped_column(String(64), nullable=False, comment='平台')
     tradingGoods: Mapped[str] = mapped_column(String(64), nullable=False, comment='交易品种')
     type: Mapped[str] = mapped_column(String(64), nullable=False, server_default='0', comment='种类年线、日线等')
     tradeDateTime: Mapped[datetime | None] = mapped_column(DateTime, nullable=False, comment='时间点')
     digits: Mapped[int] = mapped_column(Integer, nullable=False, server_default='2', comment='精度')
     spread: Mapped[float] = mapped_column(Float, nullable=False, server_default='0.0000000000', comment='点差')
-    swapLong: Mapped[float] = mapped_column(Float, nullable=False, server_default='0.0000000000', comment='多单隔夜利息')
-    swapShort: Mapped[float] = mapped_column(Float, nullable=False, server_default='0.0000000000', comment='空单隔夜利息')
+    swapLong: Mapped[float] = mapped_column(Float, nullable=False, server_default='0.0000000000',
+                                            comment='多单隔夜利息')
+    swapShort: Mapped[float] = mapped_column(Float, nullable=False, server_default='0.0000000000',
+                                             comment='空单隔夜利息')
     opening: Mapped[float] = mapped_column(Float, nullable=False, server_default='0.0000000000', comment='开盘价')
     closed: Mapped[float] = mapped_column(Float, nullable=False, server_default='0.0000000000', comment='收盘价')
     high: Mapped[float] = mapped_column(Float, nullable=False, server_default='0.0000000000', comment='最高价')
@@ -67,6 +67,10 @@ class BaseTrading(Base):
 
 class TradingFPG(BaseTrading):
     __tablename__ = 'dql_trading_fpg'
+
+
+class TradingFPG2(BaseTrading):
+    __tablename__ = 'dql_trading_fpg_tests'
 
 
 class TradingBRC5(BaseTrading):
@@ -135,11 +139,10 @@ class DqlStrategy(Base):
     weights: Mapped[str] = mapped_column(Float, nullable=False, comment='指标权重')
     is_delete: Mapped[int] = mapped_column(Integer, nullable=False, comment='0 未删除 1 已删除')
     createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
-                                                server_default='CURRENT_TIMESTAMP', comment='创建时间')
+                                                 server_default='CURRENT_TIMESTAMP', comment='创建时间')
 
 
 class DqlStrategyTestResult(Base):
-
     """
     指标策略结果表
     """
@@ -158,7 +161,7 @@ class DqlStrategyTestResult(Base):
     traderResult: Mapped[str] = mapped_column(LONGTEXT, nullable=False, comment='交易结果')
     indicatorResult: Mapped[str] = mapped_column(LONGTEXT, nullable=False, comment='指标数据结果')
     parameter: Mapped[str] = mapped_column(String(1024), nullable=False, comment='策略参数')
-    startTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,comment='开始时间')
+    startTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False, comment='开始时间')
     endTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False, comment='结束时间')
     isBursted: Mapped[int] = mapped_column(Integer, nullable=False, comment='是否爆仓 0 未爆仓 1 已爆仓')
     status: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment='1 已入库 0 未入库')
