@@ -10,7 +10,8 @@ import chardet
 import backtrader as bt
 import pandas as pd
 from datetime import datetime
-from fastapi import APIRouter, Query, HTTPException, UploadFile, File, BackgroundTasks
+from bs4 import BeautifulSoup
+from fastapi import APIRouter, Query, HTTPException, UploadFile, File
 from sqlalchemy import select, desc, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
@@ -18,12 +19,16 @@ from apis.v1.platform import model_classes
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest, DqlIndicators
+from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DqlIndicators, TradingStrategy
 from utils.common import fetch_trading_data, PandasData, get_entities_list, generate_random_string, \
-    generate_lazy_pinyin, MyCommissionScheme, DynamicSpreadCommission, cache, select_goods_common, indicator_classes
+    generate_lazy_pinyin, indicator_classes, \
+    to_float, match_filter_data, match_ratio
 from utils.public_strategy import ComprehensiveAnalyzer
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
+from utils.trader_report_calculate import calculate_consecutive_win_loss, calculate_trade_metrics, calculate_plr, \
+    calculate_mdr, calculate_max_fur, calculate_additional_metrics, calculate_metrics, extract_order_prefixes, \
+    extract_transactions
 
 router = APIRouter()
 
@@ -81,7 +86,8 @@ def get_param(file_path):
 
 
 async def fetch_indicators(db: AsyncSession, uid: int):
-    select_indicators = await db.execute(select(DqlStrategy).where(DqlStrategy.uid == uid))
+    select_indicators = await db.execute(select(DqlStrategy).where(
+        DqlStrategy.uid == uid, DqlStrategy.is_delete == 0))
     return select_indicators.scalars().first()
 
 
@@ -455,13 +461,7 @@ async def test_result_list(request: Request):
     }
 
     async with async_db_session() as db:
-        query = (
-            select(
-                DqlStrategyTestResult,
-                DqlStrategy.name
-            )
-            .join(DqlStrategy, DqlStrategy.uid == DqlStrategyTestResult.strategyUid)
-            .where(
+        query = (select(DqlStrategyTestResult).where(
                 DqlStrategyTestResult.goodsId.like(goods),
                 DqlStrategyTestResult.is_delete == 0,
                 DqlStrategyTestResult.period.like(period),
@@ -501,7 +501,8 @@ async def test_result_list(request: Request):
 
         results_list = []
 
-        for data, strategy_name in results:
+        for data in results:
+            data = data[0]
             result_dict = {
                 "testerUids": data.uid,
                 "strategyUid": data.strategyUid,
@@ -525,7 +526,8 @@ async def test_result_list(request: Request):
                 "weight": data.weight,
                 "weightNotes": data.weightNotes,
                 "status": data.status,
-                "name": strategy_name,
+                "name": data.title,
+                "traderReportType": data.traderReportType,
             }
 
             trader_result = json.loads(data.traderResult).get("traderReport", {})
@@ -915,4 +917,321 @@ async def directly_test_result(request: Request):
 async def combine_test_result(request: Request):
 
     return await response_base.success()
+
+
+@router.post("/traderReportUpload", name="策略交易报告上传")
+async def trader_report_upload(file: UploadFile = File(...)):
+    """
+    策略交易报告上传
+    """
+    # 指定文件保存路径
+    upload_directory = os.path.join("utils", "trader_report")
+    os.makedirs(upload_directory, exist_ok=True)  # 确保保存目录存在
+
+    # 检查文件类型（可根据需要自定义）
+    allowed_extensions = {"htm"}
+    file_extension = file.filename.split(".")[-1].lower()
+
+    if file_extension not in allowed_extensions:
+        return await response_base.fail(msg="不支持的文件类型")
+
+    # 生成唯一文件名
+    current_time = datetime.now().strftime("%Y%m%d%H%M%S")  # 格式化当前时间为YYYYMMDDHHMMSS
+    unique_filename = f"{file.filename.split('.')[0]}_{current_time}.{file_extension}"
+
+    # 保存文件
+    file_path = os.path.join(upload_directory, unique_filename)
+    try:
+        with open(file_path, "wb") as f:
+            f.write(await file.read())
+    except Exception as e:
+        return await response_base.fail(msg="文件保存失败!")
+
+    return await response_base.success(data={"path": file_path})
+
+@router.post("/submitTraderReport", name="提交交易报告")
+async def submit_trader_report(request: Request):
+    """
+    :param request:
+    :return:
+    """
+    data_json = await request.json()
+    file_path = data_json.get("file_path", None)  # 文件名
+    uid = data_json.get("uid", None)  # 策略uid
+    goods = data_json.get("goods", None)  # 交易品种
+    period = data_json.get("period", None)  # 周期
+    startTime = data_json.get("startTime", None)  # 开始时间
+    endTime = data_json.get("endTime", None)  # 结束时间
+    upload_type = data_json.get("uploadType", "0")  # 上传类型
+
+    # 检查文件是否存在
+    if not os.path.exists(file_path):
+        return await response_base.fail(msg="文件路径不存在")
+
+    # 检测文件编码
+    with open(file_path, 'rb') as file:
+        raw_data = file.read()
+        encoding = chardet.detect(raw_data)['encoding']
+
+    # 解析HTML
+    with open(file_path, 'r', encoding=encoding) as file:
+        soup = BeautifulSoup(file, 'html.parser')
+    async with async_db_session() as db:
+        # 查询策略
+        if upload_type == "0": # 手动上传需要判断！
+            strategy = await fetch_indicators(db, uid)
+            if not strategy:
+                return await response_base.fail(code=400, msg=f"提交失败,未找到存在策略！", data=[])
+
+        account_list = []
+        # 提取账户信息
+        account_info_row = soup.find('tr', align='left')
+        # 账户信息（保留部分）
+        if account_info_row:
+            account_info_columns = account_info_row.find_all('td')
+            account = account_info_columns[0].text.replace('Account:', '').strip()
+            name = account_info_columns[2].text.replace('Name:', '').strip()
+            currency = account_info_columns[4].text.replace('Currency:', '').strip()
+
+            leverage = '1'
+            if len(account_info_columns) > 6:
+                leverage_text = account_info_columns[6].text.replace('Leverage:', '').strip()
+                if leverage_text:
+                    leverage = leverage_text
+
+            datetime_value = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            if len(account_info_columns) > 12:
+                datetime_text = account_info_columns[12].text.strip()
+                if datetime_text:
+                    parsed_datetime = datetime.strptime(datetime_text, '%Y %B %d, %H:%M')
+                    datetime_value = parsed_datetime.strftime('%Y-%m-%d %H:%M:%S')
+
+            account_info = {
+                'account': account,
+                'name': name,
+                'currency': currency,
+                'leverage': leverage,
+                'createTime': datetime_value
+            }
+
+        closed_transactions_header = soup.find('b', string='Closed Transactions:')
+        open_transactions_header = soup.find('b', string='Open Trades:')
+
+        closed_transactions = extract_transactions(closed_transactions_header, stop_text='Closed P/L:')
+        open_transactions = extract_transactions(open_transactions_header, stop_text='Floating P/L:')
+
+        account_list.extend(closed_transactions)
+        account_list.extend(open_transactions)
+
+        # 提取报告数据
+        trader_report = {
+            "startingCash": soup.find(string="Balance:").find_next().text,
+            "FreeMargin": soup.find(string="Free Margin:").find_next().text,
+            "totalNetProfit": soup.find(string="Total Net Profit:").find_next().text,
+            "totalLoss": soup.find(string="Gross Profit:").find_next().text,
+            "ProfitFactor": soup.find(string="Profit Factor:").find_next().text,
+            "expectedPayoff": soup.find(string="Expected Payoff:").find_next().text,
+            "absoluteDrawdown": soup.find(string="Absolute Drawdown:").find_next().text,
+            "maximalDrawdown": match_filter_data(soup.find(string="Maximal Drawdown:").find_next().text),
+            "relativeLosses": match_filter_data(soup.find(string="Relative Drawdown:").find_next().text),
+            "totalTrades": soup.find(string="Total Trades:").find_next().text,
+            "shortPositions": match_filter_data(soup.find(string="Short Positions (won %):").find_next().text),
+            "shortPositionsRatio": match_ratio(soup.find(string="Short Positions (won %):").find_next().text),
+            "longPositions": match_filter_data(soup.find(string="Long Positions (won %):").find_next().text),
+            "longPositionsRatio": match_ratio(soup.find(string="Long Positions (won %):").find_next().text),
+            "profitTrades": match_filter_data(soup.find(string="Profit Trades (% of total):").find_next().text),
+            "profitTradesRatio": match_ratio(soup.find(string="Profit Trades (% of total):").find_next().text),
+            "lossTrades": match_filter_data(soup.find(string="Loss trades (% of total):").find_next().text),
+            "lossTradesRatio": match_ratio(soup.find(string="Loss trades (% of total):").find_next().text),
+            "largestProfit": 0,
+            "largestLoss": 0,
+            "averageProfitTrade": 0,
+            "averageLossTrade": 0,
+            "maximalConsecutiveProfit": 0,
+            "maximalConsecutiveLoss": 0,
+            "maximumConsecutiveWins": 0,
+            "maximumConsecutiveLosses": 0,
+            "averageConsecutiveWins": 0,
+            "averageConsecutiveLosses": 0,
+            "yieldRate": 0,
+            "winRate": 0,
+            "plr": 0,
+            "avgProfit": 0,
+            "mdr": 0,
+            "isBursted": 0,
+            "maxFUR": 0,
+            "score": 0,
+        }
+
+        # 计算所需的指标
+        initial_cleaned = trader_report["startingCash"].replace(' ', '')
+        initial_cash = float(initial_cleaned)
+        consecutive_metrics = calculate_consecutive_win_loss(account_list)
+        trade_metrics = calculate_trade_metrics(account_list, initial_cash)
+        plr = calculate_plr(account_list)
+        mdr = calculate_mdr(account_list, initial_cash)
+        max_fur = calculate_max_fur(account_list)
+        additional_metrics = calculate_additional_metrics(account_list)
+
+        trader_report["averageConsecutiveWins"] = consecutive_metrics["averageConsecutiveWins"]
+        trader_report["averageConsecutiveLosses"] = consecutive_metrics["averageConsecutiveLosses"]
+        trader_report["yieldRate"] = trade_metrics["yieldRate"]
+        trader_report["winRate"] = trade_metrics["winRate"]
+        trader_report["avgProfit"] = trade_metrics["avgProfit"]
+        trader_report["plr"] = plr
+        trader_report["mdr"] = mdr
+        trader_report["max_fur"] = max_fur
+
+        newReportTemplate = calculate_metrics(account_list)
+
+        # Largest Profit Trade 和 Loss Trade
+        largest_row = soup.find('td', string='Largest')
+        if largest_row:
+            # 提取 Largest profit 和 loss 数据
+            largest_profit = largest_row.find_next('td', class_='mspt').text.strip()
+            largest_loss = largest_row.find_next('td', class_='mspt').find_next('td', class_='mspt').text.strip()
+
+            # 去除空格并转换为浮动数值
+            trader_report["largestProfit"] = float(
+                largest_profit.replace(" ", "").replace(",", "")) if largest_profit else 0
+            trader_report["largestLoss"] = float(largest_loss.replace(" ", "").replace(",", "")) if largest_loss else 0
+
+        # Average Profit Trade 和 Loss Trade
+        average_row = soup.find('td', string='Average')
+        if average_row:
+            # 提取 Average profit 和 loss 数据
+            average_profit = average_row.find_next('td', class_='mspt').text.strip()
+            average_loss = average_row.find_next('td', class_='mspt').find_next('td', class_='mspt').text.strip()
+
+            # 去除空格并转换为浮动数值
+            trader_report["averageProfitTrade"] = float(
+                average_profit.replace(" ", "").replace(",", "")) if average_profit else 0
+            trader_report["averageLossTrade"] = float(
+                average_loss.replace(" ", "").replace(",", "")) if average_loss else 0
+
+        # Maximum Consecutive Wins 和 Consecutive Losses
+        maximum_row = soup.find('td', string='Maximum')
+        if maximum_row:
+            # 提取 Maximum consecutive wins 和 consecutive losses 数据
+            max_consecutive_wins = maximum_row.find_next('td', class_='mspt').text.strip()
+            max_consecutive_losses = maximum_row.find_next('td', class_='mspt').find_next('td',
+                                                                                          class_='mspt').text.strip()
+
+            # 处理数据
+            max_consecutive_wins_value = max_consecutive_wins.split('(')[1].split(')')[0]  # 提取括号内的数字
+            max_consecutive_losses_value = max_consecutive_losses.split('(')[1].split(')')[0]  # 提取括号内的数字
+
+            trader_report["maximumConsecutiveWins"] = float(
+                max_consecutive_wins_value.replace(' ', '')) if max_consecutive_wins_value else 0
+            trader_report["maximumConsecutiveLosses"] = float(
+                max_consecutive_losses_value.replace(' ', '')) if max_consecutive_losses_value else 0
+
+        # Maximal Consecutive Profit 和 Loss
+        maximal_row = soup.find('td', string='Maximal')
+        if maximal_row:
+            # 提取 Maximal consecutive profit 和 loss 数据
+            maximal_consecutive_profit = maximal_row.find_next('td', class_='mspt').text.strip()
+            maximal_consecutive_loss = maximal_row.find_next('td', class_='mspt').find_next('td',
+                                                                                            class_='mspt').text.strip()
+            # 处理数据，提取括号内的数字
+            maximal_consecutive_profit_value = maximal_consecutive_profit.split('(')[0].strip()  # 提取括号外的数字
+            maximal_consecutive_loss_value = maximal_consecutive_loss.split('(')[0].strip()  # 提取括号外的数字
+
+            # 更新数据
+            trader_report["maximalConsecutiveProfit"] = float(
+                maximal_consecutive_profit_value.replace(" ", "").replace(",",
+                                                                          "")) if maximal_consecutive_profit_value else 0
+            trader_report["maximalConsecutiveLoss"] = float(
+                maximal_consecutive_loss_value.replace(" ", "").replace(",",
+                                                                        "")) if maximal_consecutive_loss_value else 0
+
+        trading_strategy_uid_list = extract_order_prefixes(account_list)
+
+        # 添加入库
+        try:
+            if upload_type == "1":
+                print("trading_strategy_uid_list:{}".format(trading_strategy_uid_list))
+                # 自动上传，根据 trading_strategy_uid_list 进行查询交易策略表的uid
+                trading_strategy_db = await db.execute(select(TradingStrategy).filter(
+                    TradingStrategy.tradeUid.in_(trading_strategy_uid_list)))
+                trading_strategy_datas = trading_strategy_db.scalars().all()
+                if not trading_strategy_datas:
+                    return await response_base.fail(msg="该文件不支持自动上传提交，未提取到关键信息部分")
+
+                for trading in trading_strategy_datas:
+                    strategy = await fetch_indicators(db, trading.strategyUid)
+                    # 创建策略结果记录
+                    add_strategy_record = DqlStrategyTestResult(
+                        uid=generate_random_string("TR"),
+                        title=strategy.name,
+                        notes=strategy.description,
+                        strategyUid=trading.strategyUid,
+                        goodsId=trading.goods,
+                        period=trading.period,
+                        startTime=startTime,
+                        endTime=endTime,
+                        traderResult=json.dumps(
+                            {
+                                "traderResult": account_list,
+                                "traderReport": trader_report,
+                                "floatingPointValues": [],
+                                "netAssetValues": []
+                            }
+                        ),
+                        parameter=trading.parameter,
+                        isBursted=0, status=0, yieldRate=trader_report["yieldRate"],
+                        mdr=trader_report["mdr"], winRate=trader_report["winRate"],
+                        plr=trader_report["plr"], tradeCount=additional_metrics["tradeCount"],
+                        pnl=additional_metrics["pnl"], maxProfit=additional_metrics["maxProfit"],
+                        maxLoss=additional_metrics["maxLoss"], avgProfit=trader_report["avgProfit"],
+                        maxFUR=trader_report["max_fur"], score=0,
+                        is_delete=0, spread=0,
+                        leverage=leverage,
+                        calculationStatus=1,
+                        newReportTemplate=json.dumps(newReportTemplate)
+                    )
+                    db.add(add_strategy_record)
+                    await db.commit()
+            else:
+                # 创建策略结果记录
+                add_strategy_record = DqlStrategyTestResult(
+                    uid=generate_random_string("TR"),
+                    title=strategy.name,
+                    notes=strategy.description,
+                    strategyUid=uid,
+                    goodsId=goods,
+                    period=period,
+                    startTime=startTime,
+                    endTime=endTime,
+                    traderResult=json.dumps(
+                        {
+                            "traderResult": account_list,
+                            "traderReport": trader_report,
+                            "floatingPointValues": [],
+                            "netAssetValues": []
+                        }
+                    ),
+                    parameter=json.dumps(data_json.get("parameter", {})),
+                    isBursted=0, status=0, yieldRate=trader_report["yieldRate"],
+                    mdr=trader_report["mdr"], winRate=trader_report["winRate"],
+                    plr=trader_report["plr"], tradeCount=additional_metrics["tradeCount"],
+                    pnl=additional_metrics["pnl"], maxProfit=additional_metrics["maxProfit"],
+                    maxLoss=additional_metrics["maxLoss"], avgProfit=trader_report["avgProfit"],
+                    maxFUR=trader_report["max_fur"], score=0,
+                    is_delete=0, spread=0,
+                    leverage=leverage,
+                    calculationStatus=1,
+                    newReportTemplate=json.dumps(newReportTemplate),
+                    traderReportType=upload_type
+                )
+                db.add(add_strategy_record)
+                await db.commit()
+        except Exception as e:
+            info = traceback.format_exc()
+            log.info("交易报告提交失败：{}".format(info))
+            await db.rollback()  # 如果发生异常，回滚事务
+            await db.close()
+            return await response_base.fail(msg="提交失败！错误信息：{}".format(e))
+
+        return await response_base.success()
 

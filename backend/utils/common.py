@@ -1,6 +1,7 @@
 import datetime
 import json
 import random
+import re
 import string
 import time
 import traceback
@@ -63,6 +64,50 @@ indicator_classes = {
     "RSI": ResponseRSIData,
     "SMCP": ResponseSMCPData,
 }
+
+
+def match_ratio(data):
+    # 使用正则表达式提取百分比
+    match = re.search(r'\((\d+\.\d+)%\)', data)
+    if match:
+        match = float(match.group(1))  # 提取并转换为浮动数值
+    else:
+        match = 0.0  # 如果没有匹配到，默认值为 0
+
+    return match
+
+
+def match_filter_data(data):
+    # 使用正则表达式提取数字
+    match = re.search(r'(\d+)', data)
+    if match:
+        match = int(match.group(1))  # 提取并转换为整数
+    else:
+        match = 0  # 默认值
+
+    return match
+
+
+def to_float(value):
+    try:
+        return float(value.replace(',', ''))
+    except ValueError:
+        return 0
+
+def datetimesp(dt_float):
+    # 将浮点数转换为日期时间格式
+    dt_datetime = datetime.datetime.fromordinal(int(dt_float)) + datetime.timedelta(days=dt_float % 1)
+    dt_datetime = dt_datetime.replace(microsecond=0)  # 将微秒部分设置为0
+
+    return str(dt_datetime)
+
+
+def format_datetime(date_str):
+    try:
+        # 将 "2024.04.22 11:40:25" 格式转换为 "2024-04-22 11:40:25"
+        return datetime.datetime.strptime(date_str, '%Y.%m.%d %H:%M:%S').strftime('%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        return None  # 如果格式不正确，返回 '0'
 
 
 def generate_order_id():
