@@ -1,4 +1,5 @@
 import datetime
+from numba import cuda
 import json
 import random
 import re
@@ -12,8 +13,10 @@ from starlette.responses import Response
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DplGoodsTest, DqlIndicators, TradingFPG, TradingBRC5, TradingFPG2, TradingOnda, TradingFXTM5, TradingIndex, TradingIndex2
+from models.dql_platform import DplGoodsTest, DqlIndicators, TradingFPG, TradingBRC5, TradingOnda, TradingFXTM5, TradingIndex, TradingIndex2
 from utils.indicators import *
+from utils.indicators.atr_kmeans import ResponseATRKmeansData
+from utils.indicators.deeplearn_v2 import ResponseDL2Data
 from utils.indicators.deeplearn import ResponseDLData
 from utils.indicators.BBTrend import ResponseBBTrendData
 from utils.indicators.acp import ResponseACPData
@@ -39,7 +42,6 @@ limit_num = 1000
 # 创建模型类字典
 model_classes = {
     'dql_trading_fpg': TradingFPG,
-    'dql_trading_fpg_tests': TradingFPG2,
     'dql_trading_bcr5': TradingBRC5,
     "dql_trading_onda": TradingOnda,
     "dql_trading_fxtm5": TradingFXTM5,
@@ -49,6 +51,8 @@ model_classes = {
 }
 
 indicator_classes = {
+    "ATR_KMEANS": ResponseATRKmeansData,
+    "DL2": ResponseDL2Data,
     "DL": ResponseDLData,
     "BBTrend": ResponseBBTrendData,
     "ACP": ResponseACPData,
@@ -450,6 +454,7 @@ async def fetch_trading_data(db, goods, period, model_classes,
                 ).order_by(select_model_class.tradeDateTime.desc())
 
             else:
+                print('正常时间检测')
                 # 正常根据起始时间至结束时间查询
                 query = select(select_model_class).where(
                     select_model_class.tradingGoods == result.trading_goods,
@@ -598,6 +603,9 @@ async def get_indicator_data(request, data_type, name):
                     return await response_base.fail(msg="uids not found !", data=[])
 
                 indicator_params = request_item.get("parameter", {})
+                # 在参数中增加k线的品种和周期
+                indicator_params['Kline_period'] = request_item.get("period", None)
+                indicator_params['Kline_goods'] = request_item.get("goods", None)
 
                 period = request_item.get("period", None)
                 if period and period[0] in ['H', 'W', 'D', 'M']:

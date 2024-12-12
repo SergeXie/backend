@@ -102,20 +102,6 @@ class PCStrategy(CommonStrategy):
                     self.sltp = self.TI.lines.mountain_poit_index_sltp[0]
                     self.trend_change_last = trend_change_now
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         if (self.data_line_count == self.data.buflen()-1) and self.position:
             print("end", self.position.size)
             self.order = self.close(size=0.1)

@@ -5,10 +5,11 @@ from fastapi import Depends
 from sqlalchemy import URL
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from common.log import log
+from typing import Union
 from core.conf import settings
 
 
-def create_engine_and_session(url: str | URL):
+def create_engine_and_session(url: Union[str, URL]):
     try:
 
         # u12VxHdAT38UEa67Kc

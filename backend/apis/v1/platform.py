@@ -1,8 +1,8 @@
+import calendar
 import datetime
 import json
 import time
 import traceback
-import calendar
 import uuid
 from typing import Optional
 from fastapi import APIRouter, Query
@@ -225,6 +225,7 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
 
         return await response_base.success(data={"goods": goods, "period": period, "utc": 2, "is_final": is_final,
                                                  "lineData": lineData})
+
 
 
 @router.get("/selectFrontKline", name="获取K线历史数据")
@@ -769,7 +770,6 @@ def list_difference(lst1, lst2):
         ]
     """
     data_type = lst1['type']
-
     if data_type == 'line':
         result = []
         ls1 = lst1['data']
@@ -878,6 +878,8 @@ def difference1(lst1, lst2):  # 左右两边的数据没有比较
         result2 = [lst2]
 
     return result1, result2
+    # print(result1)
+    # print(result2)
 
 def difference2(lst1, lst2):
     return symmetric_difference(lst1, lst2)

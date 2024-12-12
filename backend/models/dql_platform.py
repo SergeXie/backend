@@ -67,10 +67,6 @@ class BaseTrading(Base):
 
 class TradingFPG(BaseTrading):
     __tablename__ = 'dql_trading_fpg'
-    
-
-class TradingFPG2(BaseTrading):
-    __tablename__ = 'dql_trading_fpg_tests'
 
 
 class TradingBRC5(BaseTrading):
