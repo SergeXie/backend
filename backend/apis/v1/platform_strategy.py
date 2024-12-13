@@ -1188,7 +1188,9 @@ async def submit_trader_report(request: Request):
                         is_delete=0, spread=0,
                         leverage=leverage,
                         calculationStatus=1,
-                        newReportTemplate=json.dumps(newReportTemplate)
+                        newReportTemplate=json.dumps(newReportTemplate),
+                        traderReportType=upload_type
+
                     )
                     db.add(add_strategy_record)
                     await db.commit()
