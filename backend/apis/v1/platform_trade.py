@@ -609,15 +609,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     # 用户订阅的策略列表 形状为['NTRXAUM1S000', 'NTRXAUM1S0001']
                     User_Subscription_Strategy = inverse_dict.get(websocket)
                     hold = []
+                    print(User_Subscription_Strategy)
                     for i in User_Subscription_Strategy:
                         if i in strategy_hold_order_pickle.keys():
                             base, tmp = get_strategy_str(i, strategy_hold_order_pickle[i], strategy_hold_order_pickle[i], CMD='HeartBeat')
-                            print(tmp)
-                            # tmp = strategy_hold_order_pickle[i]
-                            # tmp_str = f"{tmp.get('orderId')},{tmp.get('price')},{tmp.get('size')},{tmp.get('order_type')},{tmp.get('datatime')}|"
-                            hold.append(tmp)
+                            await send_websocket(websocket, base+tmp)
 
-                    await send_websocket(websocket, base+'|'.join(str(i) for i in hold))
+                    # await send_websocket(websocket, base+'|'.join(str(i) for i in hold))
                 else:
                     await send_websocket(websocket, f"")
                 # manager.disconnect_clientId(websocket=websocket, clientId=clientId)

@@ -71,6 +71,7 @@ class TempInd(bt.Indicator):
     # left 记录一组顶或底中，右线到中线的距离
     lines = ('mountain_poit', # 用于画线的
              'mountain_poit_index',
+             'mountain_poit_index_sltp',  # 止赢止损价
              'mountain_poit_original',  # 当前版本表示原始连线（即没有左偏）
              'mountain_poit_h', 'mountain_poit_l',
              'mountain_poit_h_po', 'mountain_poit_l_po',
@@ -239,8 +240,11 @@ class TempInd(bt.Indicator):
                     self.lines.mountain_poit[i[1] + 1] = i[0]
             for i in temp_arry1:  # 用于绘制峰线
                 self.lines.mountain_poit_original[i[1] + 1] = i[0]
+            # print(temp_arry)
             for i in temp_arry:  # 用于进行买卖
+                # print(i)
                 self.lines.mountain_poit_index[i[2]] = i[3]
+                self.lines.mountain_poit_index_sltp[i[2]] = i[0]
                 self.lines.left[i[2]] = i[2] - i[1]
 
                 if not self.params.plot_po:  #  将破点添加

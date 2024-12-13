@@ -43,7 +43,7 @@ class ResponseATRStopLossData(bt.Strategy):
         if self.start_date:
             #  小于起始时间的不计算指标
             if self.datas[0].datetime.datetime(0) <= self.start_date:
-                print("datetime:{}".format(self.datas[0].datetime.datetime(0)))
+                # print("datetime:{}".format(self.datas[0].datetime.datetime(0)))
                 return
 
         # 检查是否有持仓

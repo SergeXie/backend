@@ -51,7 +51,7 @@ class ResponsePCData(bt.Strategy):
                           IsLeftKOffset=self.indicator_params.get("IsLeftKOffset", 1),
                           )
         self.CI = Custom_indicators(self.data, self.indicator_params)
-        self.mountain_poit_index = self.TI.lines.mountain_poit_index
+        # self.mountain_poit_index = self.TI.lines.mountain_poit_index
         # self.mountain_poit_original = self.TI.lines.mountain_poit_original
         # self.abc = self.TI.lines.mountain_poit
         self.open_list = []
@@ -74,82 +74,82 @@ class ResponsePCData(bt.Strategy):
 
         current_kline_id = int(self.data.klineId[0])
 
-        self.data_line_count += 1
-        trend_change_now = self.TI.lines.mountain_poit_index[0]  # 获取当前
-        if not self.position and (self.data.buflen() - self.data_line_count > 1):  # 没有持仓
-            if self.broker.get_cash() < 0:
-                self.tm = -2
-            if trend_change_now == -1 and self.tm == 0:
-                # print("没有持仓，开始买入")
-                self.order = self.buy()
-                self.buy_poit.append({
-                        "kLineId": current_kline_id,
-                        "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
-                        "price": self.data.high[0]})
-                self.trend_change_last = trend_change_now
-                mou_mon = self.data.close[0]
-            elif trend_change_now == 1 and self.tm == 0:
-                # print("没有持仓，开始卖出")
-                self.order = self.sell()
-                self.sell_poit.append({
-                        "kLineId": current_kline_id,
-                        "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
-                        "price": self.data.low[0]})
-                # print(self.position)
-                self.trend_change_last = trend_change_now
-                mou_mon = self.data.close[0]
-            if not np.isnan(self.TI.lines.left[-1]):
-                le = self.TI.lines.left[-1]
-            else:
-                le = 0
-            # le = self.TI.lines.left[-1] if not np.isnan(self.TI.lines.left[-1]) else 0
-            if self.tm == -1 and self.data.low[0] > self.data.low[-int(le)]:
-                self.order = self.buy()
-                self.buy_poit.append({
-                        "kLineId": current_kline_id,
-                        "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
-                        "price": self.data.high[0]})
-                # print("开始买入")
-                self.trend_change_last = -1
-            elif self.tm == 1 and self.data.high[0] < self.data.high[-int(le)]:
-                self.order = self.sell()
-                self.sell_poit.append({
-                        "kLineId": current_kline_id,
-                        "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
-                        "price": self.data.low[0]})
-                # print("开始卖出")
-                self.trend_change_last = 1
-            else:
-                self.tm = 0
-        else:
-            if trend_change_now != self.trend_change_last:
-                close_now = self.data.close[0]
-                if trend_change_now == -1 and self.position.size < 0 :  # 如果当前为底 持有空头仓位
-                    # print("平仓")
-                    self.close()  # 平仓
-                    self.close_poit.append({
-                        "kLineId": current_kline_id,
-                        "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
-                        "price": self.data.low[0]})
-                    self.trend_change_last = trend_change_now
-                    self.tm = -1   # 只有当前的k的最低比底的底大 ，表明上升趋势， 开始做多
-
-                elif trend_change_now == 1 and self.position.size > 0:  # 如果当前为顶 持有多头仓位
-
-                    # print("对多头平仓")
-                    self.close()  # 平仓
-                    self.close_poit.append({
-                        "kLineId": current_kline_id,
-                        "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
-                        "price": self.data.low[0]})
-                    self.trend_change_last = trend_change_now
-                    self.tm = 1   # 当前的k的最高比顶的高大 ，表明下降趋势， 开始做空
-
-        # 实现最后的平仓
-        if (self.data_line_count == self.data.buflen()-1) and self.position:
-            pass
-            # print("end", self.position.size)
-            # self.close()
+        # self.data_line_count += 1
+        # trend_change_now = self.TI.lines.mountain_poit_index[0]  # 获取当前
+        # if not self.position and (self.data.buflen() - self.data_line_count > 1):  # 没有持仓
+        #     if self.broker.get_cash() < 0:
+        #         self.tm = -2
+        #     if trend_change_now == -1 and self.tm == 0:
+        #         # print("没有持仓，开始买入")
+        #         self.order = self.buy()
+        #         self.buy_poit.append({
+        #                 "kLineId": current_kline_id,
+        #                 "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
+        #                 "price": self.data.high[0]})
+        #         self.trend_change_last = trend_change_now
+        #         mou_mon = self.data.close[0]
+        #     elif trend_change_now == 1 and self.tm == 0:
+        #         # print("没有持仓，开始卖出")
+        #         self.order = self.sell()
+        #         self.sell_poit.append({
+        #                 "kLineId": current_kline_id,
+        #                 "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
+        #                 "price": self.data.low[0]})
+        #         # print(self.position)
+        #         self.trend_change_last = trend_change_now
+        #         mou_mon = self.data.close[0]
+        #     if not np.isnan(self.TI.lines.left[-1]):
+        #         le = self.TI.lines.left[-1]
+        #     else:
+        #         le = 0
+        #     # le = self.TI.lines.left[-1] if not np.isnan(self.TI.lines.left[-1]) else 0
+        #     if self.tm == -1 and self.data.low[0] > self.data.low[-int(le)]:
+        #         self.order = self.buy()
+        #         self.buy_poit.append({
+        #                 "kLineId": current_kline_id,
+        #                 "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
+        #                 "price": self.data.high[0]})
+        #         # print("开始买入")
+        #         self.trend_change_last = -1
+        #     elif self.tm == 1 and self.data.high[0] < self.data.high[-int(le)]:
+        #         self.order = self.sell()
+        #         self.sell_poit.append({
+        #                 "kLineId": current_kline_id,
+        #                 "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
+        #                 "price": self.data.low[0]})
+        #         # print("开始卖出")
+        #         self.trend_change_last = 1
+        #     else:
+        #         self.tm = 0
+        # else:
+        #     if trend_change_now != self.trend_change_last:
+        #         close_now = self.data.close[0]
+        #         if trend_change_now == -1 and self.position.size < 0 :  # 如果当前为底 持有空头仓位
+        #             # print("平仓")
+        #             self.close()  # 平仓
+        #             self.close_poit.append({
+        #                 "kLineId": current_kline_id,
+        #                 "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
+        #                 "price": self.data.low[0]})
+        #             self.trend_change_last = trend_change_now
+        #             self.tm = -1   # 只有当前的k的最低比底的底大 ，表明上升趋势， 开始做多
+        #
+        #         elif trend_change_now == 1 and self.position.size > 0:  # 如果当前为顶 持有多头仓位
+        #
+        #             # print("对多头平仓")
+        #             self.close()  # 平仓
+        #             self.close_poit.append({
+        #                 "kLineId": current_kline_id,
+        #                 "timestamp": self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
+        #                 "price": self.data.low[0]})
+        #             self.trend_change_last = trend_change_now
+        #             self.tm = 1   # 当前的k的最高比顶的高大 ，表明下降趋势， 开始做空
+        #
+        # # 实现最后的平仓
+        # if (self.data_line_count == self.data.buflen()-1) and self.position:
+        #     pass
+        #     # print("end", self.position.size)
+        #     # self.close()
 
         # 将顶底数据添加到结果列表（偏移）
         self.mountain_poit2 = self.TI.lines.mountain_poit[0]
@@ -468,5 +468,5 @@ class ResponsePCData(bt.Strategy):
         return [self.result_data_dict["lines"],
                 startime,  #  开始时间
                 endtime,  #  结束时间
-                self.result_data_dict["buyselldata"]
+                None
                 ]
