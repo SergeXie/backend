@@ -461,14 +461,22 @@ async def test_result_list(request: Request):
     }
 
     async with async_db_session() as db:
-        query = (select(DqlStrategyTestResult).where(
-                DqlStrategyTestResult.goodsId.like(goods),
-                DqlStrategyTestResult.is_delete == 0,
-                DqlStrategyTestResult.period.like(period),
-                DqlStrategyTestResult.strategyUid == strategyUid,
-                DqlStrategyTestResult.status == status
-            )
+        query = select(DqlStrategyTestResult).where(
+            DqlStrategyTestResult.is_delete == 0,
+            DqlStrategyTestResult.status == status
         )
+
+        # 对goods字段处理，如果不是'%'，则添加过滤条件
+        if goods != '%':
+            query = query.where(DqlStrategyTestResult.goodsId.like(goods))
+
+        # 对period字段处理，如果不是'%'，则添加过滤条件
+        if period != '%':
+            query = query.where(DqlStrategyTestResult.period.like(period))
+
+        # 对strategyUid字段处理，如果不是'%'，则添加过滤条件
+        if strategyUid != '%':
+            query = query.where(DqlStrategyTestResult.strategyUid == strategyUid)
 
         for screen in screens:
             name = getattr(DqlStrategyTestResult, screen['name'])
