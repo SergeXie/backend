@@ -94,9 +94,11 @@ def match_filter_data(data):
 
 def to_float(value):
     try:
-        return float(value.replace(',', ''))
-    except ValueError:
-        return 0
+        # 移除空格和其他可能的千位分隔符
+        return float(value.replace(' ', '').replace(',', ''))
+    except (ValueError, AttributeError):
+        return 0.0
+
 
 def datetimesp(dt_float):
     # 将浮点数转换为日期时间格式
