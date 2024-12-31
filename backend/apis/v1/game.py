@@ -1,9 +1,6 @@
 import datetime
 from collections import defaultdict
 import json
-from typing import Optional
-
-import pandas as pd
 import pymysql
 from fastapi import APIRouter
 from starlette.requests import Request
@@ -36,31 +33,35 @@ base_query = """
         t1.tenthPlaceScore,
         t1.eightyScores,
         t1.lastPlaceScore,
-        t1.peakHeroWinRate,
-        t1.peakHeroShowRate,
-        t1.peakHeroBanRate,
-        t1.topHeroWinRate,
-        t1.topHeroShowRate,
-        t1.topHeroBanRate,
-        t1.kzInfo,
-        t1.bkzInfo,
-        t1.tfInfo,
-        t1.dfInfo,
         t1.province,
         t1.provincePower,
         t1.updatetime,
-        t1.createTime, 
-        h.heroType, -- 选择 lz_hero 表中的 heroType 字段
-        d.remark,   -- 选择 lz_hero_details 表中的 remark 字段
-        d.position  -- 选择 lz_hero_details 表中的 position 字段
+        t1.createTime,
+        t3.heroType,   -- lz_hero 表中的 heroType 字段
+        t4.remark,     -- lz_hero_details 表中的 remark 字段
+        t4.position,   -- lz_hero_details 表中的 position 字段
+        t2.peakHeroWinRate,
+        t2.peakHeroShowRate,
+        t2.peakHeroBanRate,
+        t2.topHeroWinRate,
+        t2.topHeroShowRate,
+        t2.topHeroBanRate,
+        t2.kzInfo,
+        t2.bkzInfo,
+        t2.tfInfo,
+        t2.dfInfo
     FROM 
         lz_hero_rank t1
     INNER JOIN 
-        lz_hero h ON t1.heroId = h.id  -- 连接 lz_hero 表，heroId 对应 id
+        lz_hero_stats t2 ON t1.heroId = t2.heroId -- 关联 lz_hero_stats 表，heroId 对应 heroId
     INNER JOIN 
-        lz_hero_details d ON t1.heroId = d.heroId -- 连接 lz_hero_details 表，heroId 对应 heroId
+        lz_hero t3 ON t1.heroId = t3.id          -- 关联 lz_hero 表，heroId 对应 id
+    INNER JOIN 
+        lz_hero_details t4 ON t1.heroId = t4.heroId -- 关联 lz_hero_details 表，heroId 对应 heroId
     WHERE 
-        DATE(t1.createTime) = %s;  -- 筛选 lz_hero_rank 中 createTime 为指定日期的数据
+        DATE(t1.createTime) = %s  -- 筛选指定日期的数据
+    ORDER BY 
+        t3.heroType, t1.heroId;
 """
 
 
@@ -75,7 +76,6 @@ async def get_hero_detail(heroId, remark=None, position=None):
             cursor.execute(query, (remark, position, heroId))
             # 提交事务
             connection.commit()
-
             return True
     except Exception as e:
         # 如果发生异常，打印错误信息并回滚
@@ -88,8 +88,7 @@ async def get_hero_detail(heroId, remark=None, position=None):
 
 
 # 查询英雄的基本信息
-def get_hero_data(heroName=None, heroCareer=None, remark=None,
-                  position=None, screens=[], filterCriteria=None, dataView=None):
+def get_hero_data():
     connection = pymysql.connect(**DB_CONFIG)
     try:
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
@@ -106,65 +105,34 @@ def get_hero_data(heroName=None, heroCareer=None, remark=None,
                     t1.tenthPlaceScore,
                     t1.eightyScores,
                     t1.lastPlaceScore,
-                    t1.peakHeroWinRate,
-                    t1.peakHeroShowRate,
-                    t1.peakHeroBanRate,
-                    t1.topHeroWinRate,
-                    t1.topHeroShowRate,
-                    t1.topHeroBanRate,
-                    t1.kzInfo,
-                    t1.bkzInfo,
-                    t1.tfInfo,
-                    t1.dfInfo,
                     t1.province,
                     t1.provincePower,
                     t1.updatetime,
                     t1.createTime,
                     t4.remark,
                     t4.position,
-                    t3.heroType
+                    t3.heroType,
+                    t2.peakHeroWinRate,
+                    t2.peakHeroShowRate,
+                    t2.peakHeroBanRate,
+                    t2.topHeroWinRate,
+                    t2.topHeroShowRate,
+                    t2.topHeroBanRate,
+                    t2.kzInfo,
+                    t2.bkzInfo,
+                    t2.tfInfo,
+                    t2.dfInfo
                 FROM
                     lz_hero_rank t1
                 INNER JOIN (
                     SELECT MAX(pkId) AS pkId FROM lz_hero_rank GROUP BY heroName
-                ) t2 ON t1.pkId = t2.pkId
+                ) t5 ON t1.pkId = t5.pkId
                 INNER JOIN lz_hero t3 ON t1.heroId = t3.id
                 INNER JOIN lz_hero_details t4 ON t1.heroId = t4.heroId
+                LEFT JOIN lz_hero_stats t2 ON t1.heroId = t2.heroId
             """
-
             # 动态条件
-            conditions = []
             params = []
-
-            # 添加动态过滤条件
-            if heroName:
-                conditions.append("t1.heroName LIKE %s")
-                params.append(f"%{heroName}%")
-            if heroCareer:
-                conditions.append("t1.heroCareer LIKE %s")
-                params.append(f"%{heroCareer}%")
-            if remark:
-                conditions.append("t4.remark LIKE %s")
-                params.append(f"%{remark}%")
-            if position:
-                conditions.append("t4.position LIKE %s")
-                params.append(f"%{position}%")
-
-            # 处理 screens 条件
-            if screens:
-                for screen in screens:
-                    name = screen.get("name")
-                    name_value = screen.get("nameValue")  # 运算符
-                    value = screen.get("value")          # 筛选值
-                    check_value = screen.get("checkValue")  # 是否启用此筛选
-
-                    if name and name_value and check_value:
-                        conditions.append(f"t1.{name} {name_value} %s")
-                        params.append(value)
-
-            # 拼接条件
-            if conditions:
-                base_query += " WHERE " + f" {filterCriteria} ".join(conditions)
 
             # 添加排序
             base_query += " ORDER BY t3.heroType, t1.heroId;"
@@ -235,6 +203,7 @@ def get_all_hero_runes2():
 
 def get_hero_gold_play2():
     return []
+
 
 # 批量查询所有英雄的符文信息
 def get_all_hero_runes():
@@ -328,19 +297,10 @@ async def read_hero_data(request: Request):
     :return:
     """
     data_request = await request.json()
-    heroName = data_request.get("heroName", None)
-    heroCareer = data_request.get("heroCareer", None)
-    remark = data_request.get("remark", None)
-    position = data_request.get("position", None)
-    screens = data_request.get("screens", [])  # 筛选
-    filterCriteria = data_request.get("filterCriteria", "AND")  # AND|OR
     dataView = data_request.get("dataValue", 1)  # 1 最新  0 旧数据
 
     if dataView:
-        hero_data = get_hero_data(heroName=heroName, heroCareer=heroCareer,
-                                  remark=remark, position=position, screens=screens,
-                                  filterCriteria=filterCriteria, dataView=dataView)
-
+        hero_data = get_hero_data()
         all_equips = get_all_hero_equips()
         all_runes = get_all_hero_runes()
         gold_play_data = get_hero_gold_play()  # 获取 goldPlay 数据
@@ -348,10 +308,6 @@ async def read_hero_data(request: Request):
         # 将 goldPlay 数据合并到 hero_data 中
         for hero in hero_data:
             hero['goldPlay'] = gold_play_data.get(hero['heroId'], 0)  # 默认为 0
-
-        # # 将 goldPlay 数据合并到 hero_data 中
-        # for hero in hero_data:
-        #     hero['goldPlay'] = 0
 
         # 将装备信息按 heroId 分组
         equip_dict = defaultdict(list)
