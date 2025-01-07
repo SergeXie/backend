@@ -282,7 +282,7 @@ def get_previous_business_day():
 
 
 # 定义 API 路由，返回英雄信息及装备信息
-@router.post("/heroList")
+@router.post("/heroList", name="国内-王者营地")
 async def read_hero_data(request: Request):
     """
     :param heroName: 英雄筛选
@@ -422,6 +422,64 @@ async def hero_detail_operate(request: Request):
         return await response_base.success()
     else:
         return await response_base.fail(msg="添加或修改失败！")
+
+
+@router.get("/abroadHeroList", name="国际服-王者荣耀")
+async def abroad_hero_list():
+    connection = pymysql.connect(**DB_CONFIG)
+    try:
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            # 基础查询语句
+            base_query = """
+                SELECT
+                    t1.id,
+                    t1.cname,
+                    t1.heroCareer,
+                    t1.icon,
+                    t1.banRate,
+                    t1.showRate,
+                    t1.winRate,
+                    t1.tfInfo,
+                    t1.dfInfo,
+                    t1.tfInfoCombinationValue,
+                    t1.dfInfoCombinationValue,
+                    t1.createTime,
+                    t4.remark,
+                    t4.position
+                FROM 
+                    lz_hero_abroad t1
+                INNER JOIN 
+                    lz_hero_details t4 ON t1.id = t4.heroId
+            """
+
+            # 执行查询
+            cursor.execute(base_query)
+            result = cursor.fetchall()
+
+            result_list = [
+                {
+                    "heroId": x["id"],
+                    "heroName": x["cname"],
+                    "heroCareer": x["heroCareer"],
+                    "photo": x["icon"],
+                    "banRate": x["banRate"],
+                    "showRate": x["showRate"],
+                    "winRate": x["winRate"],
+                    "tfInfo": json.loads(x.get("tfInfo")) if x.get("tfInfo") else [],
+                    "dfInfo": json.loads(x.get("dfInfo")) if x.get("dfInfo") else [],
+                    "tfInfoCombinationValue": x.get("tfInfoCombinationValue", 0),
+                    "dfInfoCombinationValue": x.get("dfInfoCombinationValue", 0),
+                    "remark": x.get("remark"),  # 从 t4 表获取的字段
+                    "position": x.get("position"),  # 从 t4 表获取的字段
+                    "updatetime": x["createTime"].strftime('%Y-%m-%d %H:%M:%S')
+                }
+                for x in result
+            ]
+
+        return await response_base.success(data=result_list)
+
+    finally:
+        connection.close()
 
 
 
