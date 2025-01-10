@@ -19,7 +19,7 @@ from apis.v1.platform import model_classes
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DqlIndicators, TradingStrategy
+from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DqlIndicators, TradingStrategy, DplGoodsTest
 from utils.common import fetch_trading_data, PandasData, get_entities_list, generate_random_string, \
     generate_lazy_pinyin, indicator_classes, \
     to_float, match_filter_data, match_ratio
@@ -131,7 +131,7 @@ async def create_strategy_record(db: AsyncSession, indicator_data_request, strat
         return None
 
 
-async def run_backtest(db: AsyncSession, indicator_data_request, strategys, tester_uid, task_name=None):
+async def run_backtest(db: AsyncSession, indicator_data_request, strategys, tester_uid, goods_data, task_name=None):
     """
 
     :param db: 会话
@@ -177,7 +177,8 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
             # 加载策略goodsId
             cerebro.addstrategy(strategy_classes.get(class_name), indicator_params,
                                 goodsId=indicator_data_request.get("goods", None),
-                                begin_time=indicator_data_request.get("startTime", None))
+                                begin_time=indicator_data_request.get("startTime", None),
+                                baseLots=goods_data.baseLots)
 
         Indicators_subType = None
         # 指标数据
@@ -202,7 +203,7 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
         # mult 合约单位100  leverage 杠杆
         cerebro.broker.setcommission(
             commission=indicator_data_request.get("commission", 0),
-            mult=100, leverage=indicator_data_request.get("leverage", 1))
+            mult=goods_data.profitRatio, leverage=indicator_data_request.get("leverage", 1))
 
         if indicator_data_request.get("spread", 0):
             # 设置滑点/点差
@@ -625,7 +626,13 @@ async def indicator_sync_batch_test(request: Request):
             if not strategy:
                 return await response_base.fail(msg=f"uid:{strategy_data_requests.get('uid', 0)} not found !", data=[])
 
-            backtest_result = await run_backtest(db, strategy_data_requests, strategy, 0, task_name="sync")
+            # 根据品种或者品种表的手数和盈亏倍率
+            dp_goods_data = await db.execute(select(DplGoodsTest).where(
+                DplGoodsTest.goods == strategy_data_requests.get("goods")))
+
+            goods_data = dp_goods_data.scalars().first()
+
+            backtest_result = await run_backtest(db, strategy_data_requests, strategy, 0, goods_data, task_name="sync")
 
             if backtest_result is None:
                 continue

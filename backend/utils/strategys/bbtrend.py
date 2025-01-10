@@ -37,7 +37,7 @@ class BBTrendStrategy(CommonStrategy):
              'tr_tmp', 'up', 'dn', 'trend_change')
     # 初始化各种指标、设置变量，以及为策略的其他部分做准备
     # 使用长连接的接口时候，不会传begin_time
-    def __init__(self, indicator_params, goodsId=None, begin_time=None):
+    def __init__(self, indicator_params, goodsId=None, begin_time=None, baseLots=0.1):
         # 调用父类方法 （固定写法）
         super().__init__(goodsId=None)
 
@@ -75,8 +75,9 @@ class BBTrendStrategy(CommonStrategy):
         self.data_line_count = 0
         self.prev_trend = 0
 
-        # self.start_date = datetime.datetime.strptime(begin_time, '%Y-%m-%d %H:%M:%S')  # 设置开始日期
+        self.baseLots = baseLots
 
+        # self.start_date = datetime.datetime.strptime(begin_time, '%Y-%m-%d %H:%M:%S')  # 设置开始日期
 
     def next(self):
 
@@ -179,21 +180,21 @@ class BBTrendStrategy(CommonStrategy):
                     # 检查是否有持仓
                     if not self.position:
                         if self.dir == 1:
-                            self.order = self.buy(size=0.1)
+                            self.order = self.buy(size=self.baseLots)
                         elif self.dir == -1:
-                            self.order = self.sell(size=0.1)
+                            self.order = self.sell(size=self.baseLots)
                     else:
                         if self.lines.trend_change[0] != self.lines.trend_change[-1]:
                             if self.dir == -1 and self.position.size > 0:
-                                self.order = self.close(size=0.1)  # 平仓，以下一日开盘价卖出
+                                self.order = self.close(size=self.baseLots)  # 平仓，以下一日开盘价卖出
 
                                 # 平仓后立即卖出
-                                self.order = self.sell(size=0.1)
+                                self.order = self.sell(size=self.baseLots)
 
                             elif self.dir == 1 and self.position.size < 0:
-                                self.order = self.close(size=0.1)  # 平仓，以下一日开盘价卖出
+                                self.order = self.close(size=self.baseLots)  # 平仓，以下一日开盘价卖出
                                 # 平仓后立即买入
-                                self.order = self.buy(size=0.1)
+                                self.order = self.buy(size=self.baseLots)
 
                     self.prev_trend = self.dir
 

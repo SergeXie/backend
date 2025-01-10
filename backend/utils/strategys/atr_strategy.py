@@ -7,7 +7,7 @@ from utils.public_strategy import CommonStrategy
 
 class ATRStrategy(CommonStrategy):
     # 初始化各种指标、设置变量，以及为策略的其他部分做准备
-    def __init__(self, indicator_params, goodsId=None, begin_time=None):
+    def __init__(self, indicator_params, goodsId=None, begin_time=None, baseLots=0.1):
         # 调用父类方法 （固定写法）
         super().__init__(goodsId)
         # 接收参数变量
@@ -21,6 +21,7 @@ class ATRStrategy(CommonStrategy):
         self.data_line_count = 0
         self.dataspread = self.datas[0].spread
         self.prev_trend = 0
+        self.baseLots = baseLots
         if not begin_time:
             begin_time='2014-08-15 00:00:00'
             self.need_closr = False
@@ -57,21 +58,21 @@ class ATRStrategy(CommonStrategy):
                     # 检查是否有持仓
                     if not self.position:
                         if trend == 1:
-                            self.order = self.buy(size=0.1)
+                            self.order = self.buy(size=self.baseLots)
                         elif trend == -1:
-                            self.order = self.sell(size=0.1)
+                            self.order = self.sell(size=self.baseLots)
                     else:
                         if self.atr_stoploss.lines.trend_change[0] != self.atr_stoploss.lines.trend_change[-1]:
                             if trend == -1 and self.position.size > 0:
-                                self.order = self.close(size=0.1)  # 平仓，以下一日开盘价卖出
+                                self.order = self.close(size=self.baseLots)  # 平仓，以下一日开盘价卖出
 
                                 # 平仓后立即卖出
-                                self.order = self.sell(size=0.1)
+                                self.order = self.sell(size=self.baseLots)
 
                             elif trend == 1 and self.position.size < 0:
-                                self.order = self.close(size=0.1)  # 平仓，以下一日开盘价卖出
+                                self.order = self.close(size=self.baseLots)  # 平仓，以下一日开盘价卖出
                                 # 平仓后立即买入
-                                self.order = self.buy(size=0.1)
+                                self.order = self.buy(size=self.baseLots)
 
                     self.prev_trend = trend
 

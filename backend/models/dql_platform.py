@@ -41,6 +41,12 @@ class DplGoodsTest(Base):
     isSynthesise: Mapped[int] = mapped_column(Integer, nullable=False, server_default='0',
                                               comment='是否是需要合成的品种')
 
+    baseLots: Mapped[float] = mapped_column(Float, nullable=False, comment='基础下单手数')
+
+    profitRatio: Mapped[int] = mapped_column(Integer, nullable=False, comment='盈亏倍率')
+
+
+
 
 class BaseTrading(Base):
     __abstract__ = True

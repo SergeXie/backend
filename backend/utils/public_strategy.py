@@ -417,12 +417,12 @@ class CommonStrategy(bt.Strategy):
                     self.consecutive_wins = 0
                     self.max_consecutive_losses = max(self.max_consecutive_losses, self.consecutive_losses)
 
-                self.trade_count += 1
-
                 if profit > self.max_winning_trade:
                     self.max_winning_trade = profit
                 if profit < self.max_losing_trade:
                     self.max_losing_trade = profit
+            else:
+                self.trade_count += 1
 
             # 计算当前余额并更新最大资金值
             current_cash = self.broker.get_cash()
