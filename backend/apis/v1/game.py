@@ -1,7 +1,6 @@
+import datetime
 from collections import defaultdict
 import json
-from typing import Optional
-
 import pymysql
 from fastapi import APIRouter
 from starlette.requests import Request
@@ -21,6 +20,51 @@ DB_CONFIG = {
 }
 
 
+# SQL 查询语句
+base_query = """
+    SELECT
+        t1.pkId,
+        t1.heroId,
+        t1.photo,
+        t3.cname as heroName,
+        t2.heroCareer,
+        t1.firstPlaceScore,
+        t1.fiftyScores,
+        t1.tenthPlaceScore,
+        t1.eightyScores,
+        t1.lastPlaceScore,
+        t1.province,
+        t1.provincePower,
+        t1.updatetime,
+        t1.createTime,
+        t3.heroType,   -- lz_hero 表中的 heroType 字段
+        t4.remark,     -- lz_hero_details 表中的 remark 字段
+        t4.position,   -- lz_hero_details 表中的 position 字段
+        t2.peakHeroWinRate,
+        t2.peakHeroShowRate,
+        t2.peakHeroBanRate,
+        t2.topHeroWinRate,
+        t2.topHeroShowRate,
+        t2.topHeroBanRate,
+        t2.kzInfo,
+        t2.bkzInfo,
+        t2.tfInfo,
+        t2.dfInfo
+    FROM 
+        lz_hero_rank t1
+    INNER JOIN 
+        lz_hero_stats t2 ON t1.heroId = t2.heroId -- 关联 lz_hero_stats 表，heroId 对应 heroId
+    INNER JOIN 
+        lz_hero t3 ON t1.heroId = t3.id          -- 关联 lz_hero 表，heroId 对应 id
+    INNER JOIN 
+        lz_hero_details t4 ON t1.heroId = t4.heroId -- 关联 lz_hero_details 表，heroId 对应 heroId
+    WHERE 
+        DATE(t1.createTime) = %s  -- 筛选指定日期的数据
+    ORDER BY 
+        t3.heroType, t1.heroId;
+"""
+
+
 async def get_hero_detail(heroId, remark=None, position=None):
     connection = pymysql.connect(**DB_CONFIG)
     try:
@@ -32,7 +76,6 @@ async def get_hero_detail(heroId, remark=None, position=None):
             cursor.execute(query, (remark, position, heroId))
             # 提交事务
             connection.commit()
-
             return True
     except Exception as e:
         # 如果发生异常，打印错误信息并回滚
@@ -45,81 +88,51 @@ async def get_hero_detail(heroId, remark=None, position=None):
 
 
 # 查询英雄的基本信息
-def get_hero_data(heroName=None, heroCareer=None, remark=None,
-                  position=None, screens=[], filterCriteria=None):
+def get_hero_data():
     connection = pymysql.connect(**DB_CONFIG)
     try:
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
             # 基础查询语句
             base_query = """
-                SELECT 
-                    t1.pkId, 
-                    t1.heroId, 
-                    t1.photo, 
-                    t1.heroName, 
-                    t1.heroCareer, 
-                    t1.firstPlaceScore, 
-                    t1.fiftyScores, 
-                    t1.tenthPlaceScore, 
-                    t1.eightyScores, 
-                    t1.lastPlaceScore, 
-                    t1.peakHeroWinRate, 
-                    t1.peakHeroShowRate, 
-                    t1.peakHeroBanRate, 
-                    t1.topHeroWinRate, 
-                    t1.topHeroShowRate, 
-                    t1.topHeroBanRate, 
-                    t1.kzInfo, 
-                    t1.bkzInfo, 
-                    t1.tfInfo, 
-                    t1.dfInfo, 
-                    t1.province, 
-                    t1.provincePower, 
-                    t1.updatetime, 
+                SELECT
+                    t1.pkId,
+                    t1.heroId,
+                    t1.photo,
+                    t1.heroName,
+                    t2.heroCareer,
+                    t1.firstPlaceScore,
+                    t1.fiftyScores,
+                    t1.tenthPlaceScore,
+                    t1.eightyScores,
+                    t1.lastPlaceScore,
+                    t1.province,
+                    t1.provincePower,
+                    t1.updatetime,
+                    t1.createTime,
                     t4.remark,
                     t4.position,
-                    t3.heroType
-                FROM 
+                    t3.heroType,
+                    t2.peakHeroWinRate,
+                    t2.peakHeroShowRate,
+                    t2.peakHeroBanRate,
+                    t2.topHeroWinRate,
+                    t2.topHeroShowRate,
+                    t2.topHeroBanRate,
+                    t2.kzInfo,
+                    t2.bkzInfo,
+                    t2.tfInfo,
+                    t2.dfInfo
+                FROM
                     lz_hero_rank t1
                 INNER JOIN (
-                    SELECT MAX(pkId) AS pkId FROM lz_hero_rank GROUP BY heroName
-                ) t2 ON t1.pkId = t2.pkId
+                    SELECT MAX(pkId) AS pkId FROM lz_hero_rank GROUP BY heroId
+                ) t5 ON t1.pkId = t5.pkId
                 INNER JOIN lz_hero t3 ON t1.heroId = t3.id
                 INNER JOIN lz_hero_details t4 ON t1.heroId = t4.heroId
+                LEFT JOIN lz_hero_stats t2 ON t1.heroId = t2.heroId
             """
-
             # 动态条件
-            conditions = []
             params = []
-
-            if heroName:
-                conditions.append("t1.heroName LIKE %s")
-                params.append(f"%{heroName}%")
-            if heroCareer:
-                conditions.append("t1.heroCareer LIKE %s")
-                params.append(f"%{heroCareer}%")
-            if remark:
-                conditions.append("t4.remark LIKE %s")
-                params.append(f"%{remark}%")
-            if position:
-                conditions.append("t4.position LIKE %s")
-                params.append(f"%{position}%")
-
-            # 处理 screens 条件
-            if screens:
-                for screen in screens:
-                    name = screen.get("name")
-                    name_value = screen.get("nameValue")  # 运算符
-                    value = screen.get("value")          # 筛选值
-                    check_value = screen.get("checkValue")  # 是否启用此筛选
-
-                    if name and name_value and check_value:
-                        conditions.append(f"t1.{name} {name_value} %s")
-                        params.append(value)
-
-            # 拼接条件
-            if conditions:
-                base_query += " WHERE " + f" {filterCriteria} ".join(conditions)
 
             # 添加排序
             base_query += " ORDER BY t3.heroType, t1.heroId;"
@@ -131,6 +144,28 @@ def get_hero_data(heroName=None, heroCareer=None, remark=None,
         return result
     finally:
         connection.close()
+
+
+def get_hero_data_by_date(date):
+    """
+    查询指定日期的英雄数据，连接 lz_hero 和 lz_hero_details 表
+    :param date: 日期字符串，例如 '2024-12-11'
+    :return: 查询结果（字典列表）
+    """
+    connection = pymysql.connect(**DB_CONFIG)
+    try:
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            # 执行查询，防止 SQL 注入
+            cursor.execute(base_query, (date,))
+            result = cursor.fetchall()
+
+        return result
+
+    except Exception as e:
+        print(f"查询失败: {e}")
+    finally:
+        if connection:
+            connection.close()
 
 
 # 批量查询所有英雄的装备信息
@@ -155,6 +190,19 @@ def get_all_hero_equips():
         return result
     finally:
         connection.close()
+
+def get_all_hero_equips2():
+
+    return []
+
+
+def get_all_hero_runes2():
+
+    return []
+
+
+def get_hero_gold_play2():
+    return []
 
 
 # 批量查询所有英雄的符文信息
@@ -197,7 +245,10 @@ def get_hero_gold_play():
             """
             cursor.execute(query)
             result = cursor.fetchall()
-            return {item['heroId']: item['goldPlay'] for item in result}
+            if result:
+                return {item['heroId']: item['goldPlay'] for item in result}
+            else:
+                return {}
     finally:
         connection.close()
 
@@ -213,8 +264,25 @@ def get_hero_data_with_gold_play():
     return hero_data
 
 
+def get_previous_business_day():
+    """
+    获取前一天的日期，如果是周末则返回最近的周五日期。
+    """
+    today = datetime.date.today()
+    # 获取前一天
+    previous_day = today - datetime.timedelta(days=1)
+
+    # 如果是周六 (5) 或周日 (6)，调整到周五
+    if previous_day.weekday() == 5:  # 周六
+        previous_day -= datetime.timedelta(days=1)
+    elif previous_day.weekday() == 6:  # 周日
+        previous_day -= datetime.timedelta(days=2)
+
+    return previous_day.strftime('%Y-%m-%d')
+
+
 # 定义 API 路由，返回英雄信息及装备信息
-@router.post("/heroList")
+@router.post("/heroList", name="国内-王者营地")
 async def read_hero_data(request: Request):
     """
     :param heroName: 英雄筛选
@@ -229,62 +297,109 @@ async def read_hero_data(request: Request):
     :return:
     """
     data_request = await request.json()
-    heroName = data_request.get("heroName", None)
-    heroCareer = data_request.get("heroCareer", None)
-    remark = data_request.get("remark", None)
-    position = data_request.get("position", None)
-    screens = data_request.get("screens", [])  # 筛选
-    filterCriteria = data_request.get("filterCriteria", "AND")  # AND|OR
+    dataView = data_request.get("dataValue", 1)  # 1 最新  0 旧数据
 
-    hero_data = get_hero_data(heroName=heroName, heroCareer=heroCareer,
-                              remark=remark, position=position, screens=screens,
-                              filterCriteria=filterCriteria)
-    all_equips = get_all_hero_equips()
-    all_runes = get_all_hero_runes()
-    gold_play_data = get_hero_gold_play()  # 获取 goldPlay 数据
+    if dataView:
+        hero_data = get_hero_data()
+        all_equips = get_all_hero_equips()
+        all_runes = get_all_hero_runes()
+        gold_play_data = get_hero_gold_play()  # 获取 goldPlay 数据
 
-    # 将 goldPlay 数据合并到 hero_data 中
-    for hero in hero_data:
-        hero['goldPlay'] = gold_play_data.get(hero['heroId'], 0)  # 默认为 0
+        # 将 goldPlay 数据合并到 hero_data 中
+        for hero in hero_data:
+            hero['goldPlay'] = gold_play_data.get(hero['heroId'], 0)  # 默认为 0
 
-    # 将装备信息按 heroId 分组
-    equip_dict = defaultdict(list)
-    for equip in all_equips:
-        equip_dict[equip['heroId']].append({
-            "szTitle": equip["szTitle"],
-            "szIcon": equip["szIcon"],
-            "equipwinRate": equip["equipwinRate"],
-            "equipShowRate": equip["equipShowRate"]
-        })
+        # 将装备信息按 heroId 分组
+        equip_dict = defaultdict(list)
+        for equip in all_equips:
+            equip_dict[equip['heroId']].append({
+                "szTitle": equip["szTitle"],
+                "szIcon": equip["szIcon"],
+                "equipwinRate": equip["equipwinRate"],
+                "equipShowRate": equip["equipShowRate"]
+            })
 
-    # 将符文信息按 heroId 分组
-    rune_dict = defaultdict(list)
-    for rune in all_runes:
-        rune_detail = json.loads(rune['runeDetail'])  # 解析 runeDetail JSON 字符串
-        rune_dict[rune['heroId']].append({
-            "runeDetail": rune_detail,  # 解析后的符文列表
-            "runeWinRate": rune["runeWinRate"],
-            "runeshowRate": rune["runeshowRate"]
-        })
+        # 将符文信息按 heroId 分组
+        rune_dict = defaultdict(list)
+        for rune in all_runes:
+            rune_detail = json.loads(rune['runeDetail'])  # 解析 runeDetail JSON 字符串
+            rune_dict[rune['heroId']].append({
+                "runeDetail": rune_detail,  # 解析后的符文列表
+                "runeWinRate": rune["runeWinRate"],
+                "runeshowRate": rune["runeshowRate"]
+            })
 
-    # 为每个英雄附加装备信息和符文信息
-    for hero in hero_data:
-        hero["updatetime"] = hero["updatetime"].strftime("%Y-%m-%d %H:%M:%S")
-        hero['equips'] = equip_dict[hero['heroId']]
-        hero['runes'] = rune_dict[hero['heroId']]
+        # 为每个英雄附加装备信息和符文信息
+        for hero in hero_data:
+            hero["updatetime"] = hero["updatetime"].strftime("%Y-%m-%d %H:%M:%S")
+            hero['equips'] = equip_dict[hero['heroId']]
+            hero['runes'] = rune_dict[hero['heroId']]
 
-        if hero.get("kzInfo"):
-            hero["kzInfo"] = json.loads(hero.get("kzInfo", []))
-            hero["bkzInfo"] = json.loads(hero.get("bkzInfo", []))
-            hero["tfInfo"] = json.loads(hero.get("tfInfo", []))
-            hero["dfInfo"] = json.loads(hero.get("dfInfo", []))
-        else:
-            hero["kzInfo"] = []
-            hero["bkzInfo"] = []
-            hero["tfInfo"] = []
-            hero["dfInfo"] = []
+            if hero.get("kzInfo"):
+                hero["kzInfo"] = json.loads(hero.get("kzInfo", []))
+                hero["bkzInfo"] = json.loads(hero.get("bkzInfo", []))
+                hero["tfInfo"] = json.loads(hero.get("tfInfo", []))
+                hero["dfInfo"] = json.loads(hero.get("dfInfo", []))
+            else:
+                hero["kzInfo"] = []
+                hero["bkzInfo"] = []
+                hero["tfInfo"] = []
+                hero["dfInfo"] = []
 
-    return await response_base.success(data=hero_data)
+        return await response_base.success(data=hero_data)
+
+    else:
+        # 示例调用
+        date_to_query = get_previous_business_day()
+        print("查询的日期是:", date_to_query)
+
+        hero_data = get_hero_data_by_date(date_to_query)
+        all_equips = get_all_hero_equips()
+        all_runes = get_all_hero_runes()
+        gold_play_data = get_hero_gold_play()  # 获取 goldPlay 数据
+
+        # 将 goldPlay 数据合并到 hero_data 中
+        for hero in hero_data:
+            hero['goldPlay'] = gold_play_data.get(hero['heroId'], 0)  # 默认为 0
+
+        # 将装备信息按 heroId 分组
+        equip_dict = defaultdict(list)
+        for equip in all_equips:
+            equip_dict[equip['heroId']].append({
+                "szTitle": equip["szTitle"],
+                "szIcon": equip["szIcon"],
+                "equipwinRate": equip["equipwinRate"],
+                "equipShowRate": equip["equipShowRate"]
+            })
+
+        # 将符文信息按 heroId 分组
+        rune_dict = defaultdict(list)
+        for rune in all_runes:
+            rune_detail = json.loads(rune['runeDetail'])  # 解析 runeDetail JSON 字符串
+            rune_dict[rune['heroId']].append({
+                "runeDetail": rune_detail,  # 解析后的符文列表
+                "runeWinRate": rune["runeWinRate"],
+                "runeshowRate": rune["runeshowRate"]
+            })
+
+        # 为每个英雄附加装备信息和符文信息
+        for hero in hero_data:
+            hero["updatetime"] = hero["updatetime"].strftime("%Y-%m-%d %H:%M:%S")
+            hero['equips'] = equip_dict[hero['heroId']]
+            hero['runes'] = rune_dict[hero['heroId']]
+
+            if hero.get("kzInfo"):
+                hero["kzInfo"] = json.loads(hero.get("kzInfo", []))
+                hero["bkzInfo"] = json.loads(hero.get("bkzInfo", []))
+                hero["tfInfo"] = json.loads(hero.get("tfInfo", []))
+                hero["dfInfo"] = json.loads(hero.get("dfInfo", []))
+            else:
+                hero["kzInfo"] = []
+                hero["bkzInfo"] = []
+                hero["tfInfo"] = []
+                hero["dfInfo"] = []
+
+        return await response_base.success(data=hero_data)
 
 
 @router.post("/heroDetailOperate", name="添加修改英雄详情")
@@ -309,8 +424,59 @@ async def hero_detail_operate(request: Request):
         return await response_base.fail(msg="添加或修改失败！")
 
 
+@router.get("/abroadHeroList", name="国际服-王者荣耀")
+async def abroad_hero_list():
+    connection = pymysql.connect(**DB_CONFIG)
+    try:
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            # 基础查询语句
+            base_query = """
+                SELECT
+                    t1.id,
+                    t1.cname,
+                    t1.heroCareer,
+                    t1.icon,
+                    t1.banRate,
+                    t1.showRate,
+                    t1.winRate,
+                    t1.tfInfo,
+                    t1.dfInfo,
+                    t1.tfInfoCombinationValue,
+                    t1.dfInfoCombinationValue,
+                    t1.createTime,
+                    t4.remark,
+                    t4.position
+                FROM 
+                    lz_hero_abroad t1
+                INNER JOIN 
+                    lz_hero_details t4 ON t1.id = t4.heroId
+            """
 
+            # 执行查询
+            cursor.execute(base_query)
+            result = cursor.fetchall()
 
+            result_list = [
+                {
+                    "heroId": x["id"],
+                    "heroName": x["cname"],
+                    "heroCareer": x["heroCareer"],
+                    "photo": x["icon"],
+                    "banRate": x["banRate"],
+                    "showRate": x["showRate"],
+                    "winRate": x["winRate"],
+                    "tfInfo": json.loads(x.get("tfInfo")) if x.get("tfInfo") else [],
+                    "dfInfo": json.loads(x.get("dfInfo")) if x.get("dfInfo") else [],
+                    "tfInfoCombinationValue": x.get("tfInfoCombinationValue", 0),
+                    "dfInfoCombinationValue": x.get("dfInfoCombinationValue", 0),
+                    "remark": x.get("remark"),  # 从 t4 表获取的字段
+                    "position": x.get("position"),  # 从 t4 表获取的字段
+                    "updatetime": x["createTime"].strftime('%Y-%m-%d %H:%M:%S')
+                }
+                for x in result
+            ]
 
+        return await response_base.success(data=result_list)
 
-
+    finally:
+        connection.close()

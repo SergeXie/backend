@@ -6,7 +6,7 @@ from utils.public_strategy import CommonStrategy
 class PCStrategy(CommonStrategy):
 
     # 初始化各种指标、设置变量，以及为策略的其他部分做准备
-    def __init__(self, indicator_params, goodsId=None, begin_time=None):
+    def __init__(self, indicator_params, goodsId=None, begin_time=None, baseLots=0.1):
         # 调用父类方法 （固定写法）
         super().__init__(goodsId=None)
         self.indicator_params = indicator_params
@@ -22,6 +22,7 @@ class PCStrategy(CommonStrategy):
         self.data_line_count = 0
         self.trend_change_last = 0
         self.tm = 0  # tm用于判断平仓后要不要进行买卖
+        self.baseLots = baseLots
 
     def next(self):
         """
@@ -57,11 +58,11 @@ class PCStrategy(CommonStrategy):
             # le = self.TI.lines.left[-1] if not np.isnan(self.TI.lines.left[-1]) else 0
             if self.tm == -1 and self.data.low[0] > self.data.low[-int(le)]:
                 # print("开多仓")
-                self.order = self.buy(size=0.1)
+                self.order = self.buy(size=self.baseLots)
                 self.trend_change_last = -1
             elif self.tm == 1 and self.data.high[0] < self.data.high[-int(le)]:
                 # print("开空仓")
-                self.order = self.sell(size=0.1)
+                self.order = self.sell(size=self.baseLots)
                 self.trend_change_last = 1
             else:
                 self.tm = 0
@@ -70,16 +71,16 @@ class PCStrategy(CommonStrategy):
                 close_now = self.data.close[0]
                 if trend_change_now == -1 and self.position.size < 0 :  # 如果当前为底 持有空头仓位
                     # print("对空头平仓")
-                    self.order = self.close(size=0.1)  # 平仓
+                    self.order = self.close(size=self.baseLots)  # 平仓
                     self.trend_change_last = trend_change_now
                     self.tm = -1   # 只有当前的k的最低比底的底大 ，表明上升趋势， 开始做多
 
                 elif trend_change_now == 1 and self.position.size > 0:  # 如果当前为顶 持有多头仓位
                     # print("对多头平仓")
-                    self.order = self.close(size=0.1)  # 平仓
+                    self.order = self.close(size=self.baseLots)  # 平仓
                     self.trend_change_last = trend_change_now
                     self.tm = 1   # 当前的k的最高比顶的高大 ，表明下降趋势， 开始做空
 
         if (self.data_line_count == self.data.buflen()-1) and self.position:
             print("end", self.position.size)
-            self.order = self.close(size=0.1)
+            self.order = self.close(size=self.baseLots)

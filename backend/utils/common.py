@@ -1,5 +1,5 @@
 import datetime
-from numba import cuda
+# from numba import cuda
 import json
 import random
 import re
@@ -13,7 +13,8 @@ from starlette.responses import Response
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DplGoodsTest, DqlIndicators, TradingFPG, TradingBRC5, TradingOnda, TradingFXTM5, TradingIndex, TradingIndex2
+from models.dql_platform import DplGoodsTest, DqlIndicators, TradingFPG, TradingBRC5, TradingOnda, TradingFXTM5, \
+    TradingIndex, TradingIndex2, TradingFPG2
 from utils.indicators import *
 # from utils.indicators.atr_kmeans import ResponseATRKmeansData
 from utils.indicators.deeplearn_v2 import ResponseDL2Data
@@ -25,6 +26,7 @@ from utils.indicators.cci import ResponseCCIData
 from utils.indicators.dma import ResponseDMAData
 from utils.indicators.ma import ResponseMAMovingAverageIndicator
 from utils.indicators.macd import ResponseMACDData
+from utils.indicators.macd_v1 import ResponseMACDData_v1
 from utils.indicators.bollinger import ResponseBollingerData
 from utils.indicators.ema import ResponseEMAData
 from utils.indicators.btatr import ResponseATRData
@@ -42,6 +44,7 @@ limit_num = 1000
 # 创建模型类字典
 model_classes = {
     'dql_trading_fpg': TradingFPG,
+    'dql_trading_fpg_tests': TradingFPG2,
     'dql_trading_bcr5': TradingBRC5,
     "dql_trading_onda": TradingOnda,
     "dql_trading_fxtm5": TradingFXTM5,
@@ -61,6 +64,7 @@ indicator_classes = {
     "CCI": ResponseCCIData,
     "DMA": ResponseDMAData,
     "MACD": ResponseMACDData,
+    "MACD_v1": ResponseMACDData_v1,
     "MA": ResponseMAMovingAverageIndicator,
     "Bollinger": ResponseBollingerData,
     "EMA": ResponseEMAData,
@@ -639,6 +643,13 @@ async def get_indicator_data(request, data_type, name):
                 df.set_index('datetime', inplace=True)
                 data = PandasData(dataname=df)
                 cerebro.adddata(data)
+                print("断点11111111111111111111")
+                print(indicators)
+                print(indicator_classes.get(indicators.className))
+                print(indicator_params)
+                print(indicators.name)
+                print(indicators.description)
+                print("断点11111111111111111111")
 
                 cerebro.addstrategy(indicator_classes.get(indicators.className),
                                     indicator_params, indicators.name, indicators.description)

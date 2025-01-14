@@ -41,6 +41,12 @@ class DplGoodsTest(Base):
     isSynthesise: Mapped[int] = mapped_column(Integer, nullable=False, server_default='0',
                                               comment='是否是需要合成的品种')
 
+    baseLots: Mapped[float] = mapped_column(Float, nullable=False, comment='基础下单手数')
+
+    profitRatio: Mapped[int] = mapped_column(Integer, nullable=False, comment='盈亏倍率')
+
+
+
 
 class BaseTrading(Base):
     __abstract__ = True
@@ -139,10 +145,11 @@ class DqlStrategy(Base):
     weights: Mapped[str] = mapped_column(Float, nullable=False, comment='指标权重')
     is_delete: Mapped[int] = mapped_column(Integer, nullable=False, comment='0 未删除 1 已删除')
     createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
-                                                 server_default='CURRENT_TIMESTAMP', comment='创建时间')
+                                                server_default='CURRENT_TIMESTAMP', comment='创建时间')
 
 
 class DqlStrategyTestResult(Base):
+
     """
     指标策略结果表
     """
@@ -161,7 +168,7 @@ class DqlStrategyTestResult(Base):
     traderResult: Mapped[str] = mapped_column(LONGTEXT, nullable=False, comment='交易结果')
     indicatorResult: Mapped[str] = mapped_column(LONGTEXT, nullable=False, comment='指标数据结果')
     parameter: Mapped[str] = mapped_column(String(1024), nullable=False, comment='策略参数')
-    startTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False, comment='开始时间')
+    startTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,comment='开始时间')
     endTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False, comment='结束时间')
     isBursted: Mapped[int] = mapped_column(Integer, nullable=False, comment='是否爆仓 0 未爆仓 1 已爆仓')
     status: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment='1 已入库 0 未入库')

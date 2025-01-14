@@ -277,6 +277,7 @@ class ConnectionManager:
     # 链接函数
     async def connect(self, websocket: WebSocket, # ws对象
                       modified_tradeUid: str):  # 交易策略uid
+        print("触发连接", modified_tradeUid)
         creat_pooling = False
         if not modified_tradeUid in original_dict.keys():  # 如果交易id不在字典中
             # 创建新的键值
@@ -305,11 +306,17 @@ class ConnectionManager:
         else:
             print("通知失败，已不在websocket连接通道里面")
 
-    async def disconnect(self, websocket: WebSocket):
-        tradeUids = inverse_dict.get(websocket)
-        if tradeUids:
-            for tradeUid in tradeUids:
-                original_dict[tradeUid].remove(websocket)
+    async def disconnect(self, websocket: WebSocket, modified_tradeUid: str):
+        if modified_tradeUid == "all":
+            tradeUids = inverse_dict.get(websocket)
+            if tradeUids:
+                for tradeUid in tradeUids:
+                    original_dict[tradeUid].remove(websocket)
+        else:
+            try:
+                original_dict[modified_tradeUid].remove(websocket)
+            except:
+                pass
         print(original_dict)
 
 
@@ -328,12 +335,16 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 async def send_tradeUid(clientid, data):
-    with open(file_path, 'a') as file:
-        file.write(f"{data}\n")
-    await manager.send_message_tradeUid(data, clientid)
+    if data is not None:
+        with open(file_path, 'a') as file:
+            file.write(f"{data}\n")
+        data = "<<" + data + ">>"
+        await manager.send_message_tradeUid(data, clientid)
 
 async def send_websocket(websocket, data):
-    await manager.send_message_websocket(data, websocket)
+    if data is not None:
+        data = "<<" + data + ">>"
+        await manager.send_message_websocket(data, websocket)
 
 
 # 保存历史订单
@@ -396,7 +407,7 @@ def get_strategy_str(tradeUid, new_order_point, new_data, CMD=None):
     replacement_rules = {"sell": "Sell", "buy": "Buy"}
     type = replacement_rules.get(type, type)
 
-    base = (f"TradeUid={tradeUid}&"  # 教育策略uid
+    base = (f"TradeUid={tradeUid}&"  # 交易策略uid
             f"Cmd={CMD}&"
             f"TimeStamp={int(datetime.now().timestamp())}&"
             )
@@ -416,11 +427,12 @@ def get_strategy_str(tradeUid, new_order_point, new_data, CMD=None):
     if CMD == 'Open':
         return base + data + ','.join(str(i) for i in [orderId, symbol, type, price, lots, sl, tp, exp, mc, opentime])
     elif CMD == 'Close':
-        return base + data + ','.join(str(i) for i in [orderId, symbol, 'Close', price])
+        return base + data + ','.join(str(i) for i in [orderId, symbol, 'Close', price, opentime])
     elif CMD == 'HeartBeat':
-        return base + data, ','.join(str(i) for i in [orderId, symbol, type, price, lots, sl, tp, exp, mc, opentime])
+        return base + data + ','.join(str(i) for i in [orderId, symbol, type, price, lots, sl, tp, exp, mc, opentime])
     elif CMD == 'Connect':
         return base + 'Code=200'
+
 
 
 
@@ -476,30 +488,12 @@ async def send_forex_updates(data):
                         tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Open')
                         # print('开仓',tmp)
                         await send_tradeUid(tradeUid, tmp)
-                        # await send_tradeUid(tradeUid, f"cmd=order&tradeUid={tradeUid}&"
-                        #                               f"datatime={new_order_point.get('datatime')}&"
-                        #                               f"symbol={goods}&"
-                        #                               f"type={new_order_point.get('order_type')}&"
-                        #                               f"size={new_order_point.get('size')}&"
-                        #                               f"price={new_order_point.get('price')}&"
-                        #                               f"orderId={new_order_point.get('orderId')}&"
-                        #                               f"stoploss={int(0)}&"
-                        #                               f"magicCode={new_order_point.get('orderId')}&"
-                        #                               f"comment={str(goods)+str(period)+'_'+str(new_order_point.get('orderId'))}&"
-                        #                               f"timeStamp={int(datetime.now().timestamp())}")
+
                     else:  # 关仓
                         tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Close')
                         # print('关仓', tmp)
                         await send_tradeUid(tradeUid, tmp)
-                        # await send_tradeUid(tradeUid, f"cmd=close&tradeUid={tradeUid}&"
-                        #                               f"datatime={new_order_point.get('datatime')}&"
-                        #                               f"symbol={goods}&"
-                        #                               f"type=close&"
-                        #                               f"orderId={new_order_point.get('orderId')}&"
-                        #                               f"price={new_order_point.get('price')}&"
-                        #                               f"magicCode={new_order_point.get('orderId')}&"
-                        #                               f"comment={str(goods)+str(period)+'_'+str(new_order_point.get('orderId'))}&"
-                        #                               f"timeStamp={int(datetime.now().timestamp())}")
+
                     print('产生买卖点')
                     # 持单的保存
 
@@ -612,23 +606,24 @@ async def websocket_endpoint(websocket: WebSocket):
                     print(User_Subscription_Strategy)
                     for i in User_Subscription_Strategy:
                         if i in strategy_hold_order_pickle.keys():
-                            base, tmp = get_strategy_str(i, strategy_hold_order_pickle[i], strategy_hold_order_pickle[i], CMD='HeartBeat')
-                            await send_websocket(websocket, base+tmp)
+                            tmp = get_strategy_str(i, strategy_hold_order_pickle[i], strategy_hold_order_pickle[i], CMD='HeartBeat')
+                            await send_websocket(websocket,  tmp)
 
                     # await send_websocket(websocket, base+'|'.join(str(i) for i in hold))
-                else:
-                    await send_websocket(websocket, f"")
+                # else:
+                #     await send_websocket(websocket, f"")
                 # manager.disconnect_clientId(websocket=websocket, clientId=clientId)
                 pass
             elif cmd == "quit":
-                await manager.disconnect(websocket)
+                print("接到断开请求")
+                await manager.disconnect(websocket, tradeUid)
 
             # print(original_dict)
             # print(inverse_dict)
 
     except WebSocketDisconnect as e:
         print(f"WebSocket disconnected with code: {e.code}")
-        await manager.disconnect(websocket)
+        await manager.disconnect(websocket, "all")
         # await websocket.close()  # 关闭 WebSocket 连接
 
 

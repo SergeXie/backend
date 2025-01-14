@@ -9,7 +9,7 @@ from dramatiq.middleware import AsyncIO
 from sqlalchemy import select, update
 from common.log import log
 from database.db_mysql import async_db_session
-from models.dql_platform import DqlStrategy, DqlStrategyTestResult
+from models.dql_platform import DqlStrategy, DqlStrategyTestResult, DplGoodsTest
 from utils.common import fetch_trading_data, model_classes, PandasData, DynamicSpreadCommission, indicator_classes
 from utils.public_strategy import ComprehensiveAnalyzer
 from utils.strategys import reload_strategies
@@ -17,6 +17,7 @@ import backtrader as bt
 
 # 配置 RabbitMQ broker
 rabbitmq_broker = RabbitmqBroker(url="amqp://guest:guest@localhost:5672/")
+#rabbitmq_broker = RabbitmqBroker(url="amqp://admin:admin123@192.168.0.73:5672/")
 dramatiq.set_broker(rabbitmq_broker)
 rabbitmq_broker.add_middleware(AsyncIO())
 
@@ -34,6 +35,12 @@ async def print_message(message):
 async def task_run_backtest(strategy_data_requests, tester_uid, task_name=None):
     try:
         async with async_db_session() as db:
+
+            # 根据品种或者品种表的手数和盈亏倍率
+            dp_goods_data = await db.execute(select(DplGoodsTest).where(
+                DplGoodsTest.goods == strategy_data_requests.get("goods")))
+
+            goods_data = dp_goods_data.scalars().first()
 
             # 根据period参数的取值进行条件判断
             period_dict = {"period": strategy_data_requests.get("period", None),
@@ -72,7 +79,8 @@ async def task_run_backtest(strategy_data_requests, tester_uid, task_name=None):
         for class_name in json.loads(strategys.className):
             cerebro.addstrategy(strategy_classes.get(class_name), indicator_params,
                                 goodsId=strategy_data_requests.get("goods", None),
-                                begin_time=strategy_data_requests.get("startTime", None))
+                                begin_time=strategy_data_requests.get("startTime", None),
+                                baseLots=goods_data.baseLots)
         # 指标数据
         if indicator_classes.get(strategys.indicatorsClassName):
             cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),

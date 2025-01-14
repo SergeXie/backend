@@ -90,7 +90,7 @@ class ComprehensiveAnalyzer(bt.Analyzer):
                 "profitRatio": float(format(profit_ratio, self.precision_format)),  # 盈利比率 (总盈利/总亏损)
                 'countWon': count_won,  # 盈利手数
                 'countLost': count_lost,  # 亏损手数
-                "avgCount": 0,   # 持平手数
+                "avgCount": 0,  # 持平手数
                 # 第三列
                 # 'avg_pnl': avg_pnl,  # 平均利润
                 'avgProfitRatio': float(format(avg_profit_ratio, self.precision_format)),  # 平均利润 (平均盈利/平均亏损)
@@ -104,20 +104,21 @@ class ComprehensiveAnalyzer(bt.Analyzer):
                 'maxLossRatio': float(format(max_loss_ratio, self.precision_format)),  # 最大亏损/总亏损
                 'netProfitLossRatio': float(format(net_profit_loss_ratio, self.precision_format)),  # 净盈利/最大亏损
                 # 第五列
-                'maxConsecutiveWins': float(format(max_consecutive_wins, self.precision_format)), # 最大连续盈利手数
-                'maxConsecutiveLosses': float(format(max_consecutive_losses, self.precision_format)), # 最大连续亏损手数
+                'maxConsecutiveWins': float(format(max_consecutive_wins, self.precision_format)),  # 最大连续盈利手数
+                'maxConsecutiveLosses': float(format(max_consecutive_losses, self.precision_format)),  # 最大连续亏损手数
 
                 # 第六列
                 'avgLoldingPeriod': float(format(avg_holding_period, self.precision_format)),  # 平均持仓周期
                 'avgProfitPeriod': float(format(avg_profit_period, self.precision_format)),  # 平均盈利周期
                 'avgLossPeriod': float(format(avg_loss_period, self.precision_format)),  # 平均亏损周期
-                'avgBreakevenPeriod': float(format(avg_breakeven_period, self.precision_format)), # 平均持平周期
+                'avgBreakevenPeriod': float(format(avg_breakeven_period, self.precision_format)),  # 平均持平周期
                 # 第七列
-                "maxEquity": float(format(self.max_equity, self.precision_format)), # 最大使用资金
+                "maxEquity": float(format(self.max_equity, self.precision_format)),  # 最大使用资金
                 "maxPositionSize": self.max_position_size,  # 最大持仓手数
-                "totalCosts": self.total_commission + self.total_slippage, # 交易成本合计
+                "totalCosts": self.total_commission + self.total_slippage,  # 交易成本合计
                 # 第八列
-                "analysis": float(format(total_pnl / self.max_equity, self.precision_format)) if self.max_equity != 0 else 0, # 收益率
+                "analysis": float(
+                    format(total_pnl / self.max_equity, self.precision_format)) if self.max_equity != 0 else 0,  # 收益率
                 "annualizedReturn": 0,  # 年化收益率
                 "EffectiveYield": 0,  # 年化收益率
                 "AverageProfitMonth": 0,  # 月度平均盈利
@@ -140,7 +141,7 @@ class CommonStrategy(bt.Strategy):
     # 日志打印
     def log(self, txt, dt=None):
         dt = dt or self.datas[0].datetime.datetime(0)
-        print("%s, %s" % (dt, txt))
+        # print("%s, %s" % (dt, txt))
 
     def __init__(self, goodsId):
         self.goodsId = goodsId
@@ -192,7 +193,6 @@ class CommonStrategy(bt.Strategy):
 
         self.trade_ref_dict = {}
 
-
     def calculate_values(self):
         """
         计算浮值和净值
@@ -230,44 +230,12 @@ class CommonStrategy(bt.Strategy):
             self.isbursted = 1
 
         if order.status in [order.Completed]:
-
-            print('order$$$查看', order.size,
-                  order.created.price,
-                  self.datas[0].datetime.datetime(0),
-                  'Buy' if order.isbuy() else 'Sell',
-                  order.ref,
-
-                  )
-
             cash = self.broker.get_cash()
             value = self.broker.getvalue()
             order_type = 'Buy' if order.isbuy() else 'Sell'
 
             self.log(f'{order_type} 订单执行完成，价格：{order.executed.price}, 交易价：{order.executed.value} '
                      f'当前关仓价：{self.datas[0].close[0]}, 数量：{order.executed.size}, 当前资金：{cash}, 订单类型：{order.ordtype}')
-
-        # # 精度
-        # digits = self.datas[0].digits[0]
-        # precision_format = f".{int(digits)}f"
-        # # 用于计算实时买卖点
-        # date_obj = datetime.datetime.strptime(trader_dict["timestamp"], "%Y-%m-%d %H:%M:%S")
-        # # 将datetime对象转换为时间戳
-        # if order_type == 'buy' or order_type == 'sell':  # 在开仓时候记录[orderid:时间戳]
-        #     self.trade_ref_dict[trade.ref] = int(date_obj.timestamp())
-        #     date_obj = int(date_obj.timestamp())
-        # elif order_type == 'close':
-        #     date_obj = self.trade_ref_dict.get(trade.ref)
-        #
-        # # print(trade.ref, date_obj)
-        # self.order_point.append({
-        #     "datatime": self.datas[0].datetime.datetime(),
-        #     "order_type": order_type,
-        #     "price": float(format(trade.history[-1].event.price, precision_format)),
-        #     "size": trade.size,
-        #     "orderId": date_obj,
-        # })
-
-
 
     def notify_trade(self, trade):
         """
@@ -350,7 +318,7 @@ class CommonStrategy(bt.Strategy):
             trader_dict["initialCash"] = float(format(self.starting_cash, precision_format))
 
             self.trader_result.append(trader_dict)
-            print(trader_dict)
+            # print(trader_dict)
 
             # 交易报告
             if trade.isclosed:
@@ -417,12 +385,12 @@ class CommonStrategy(bt.Strategy):
                     self.consecutive_wins = 0
                     self.max_consecutive_losses = max(self.max_consecutive_losses, self.consecutive_losses)
 
-                self.trade_count += 1
-
                 if profit > self.max_winning_trade:
                     self.max_winning_trade = profit
                 if profit < self.max_losing_trade:
                     self.max_losing_trade = profit
+            else:
+                self.trade_count += 1
 
             # 计算当前余额并更新最大资金值
             current_cash = self.broker.get_cash()
@@ -442,7 +410,7 @@ class CommonStrategy(bt.Strategy):
             self.max_loss_trade = min(self.max_loss_trade, profit)
 
             current_datetime = self.datas[0].datetime.datetime(0)
-            print(f"交易完成，利润：{trade.pnl}, 数量：{trade.size}, 价格：{trade.price} 交易时间：{current_datetime}")
+            # print(f"交易完成，利润：{trade.pnl}, 数量：{trade.size}, 价格：{trade.price} 交易时间：{current_datetime}")
 
             self.calculate_float_net_values()
 
@@ -458,10 +426,14 @@ class CommonStrategy(bt.Strategy):
             elif order_type == 'close':
                 date_obj = self.trade_ref_dict.get(trade.ref)
 
-            print(date_obj)
-
-
-
+            # print(trade.ref, date_obj)
+            self.order_point.append({
+                "datatime": self.datas[0].datetime.datetime(),
+                "order_type": order_type,
+                "price": float(format(trade.history[-1].event.price, precision_format)),
+                "size": trade.size,
+                "orderId": date_obj,
+            })
 
         except Exception as e:
             info = traceback.format_exc()
@@ -597,7 +569,7 @@ class CommonStrategy(bt.Strategy):
                 "score": 0
             }
 
-            print('策略绩效指标:', self.trader_report)
+            # print('策略绩效指标:', self.trader_report)
 
         except Exception as e:
             info = traceback.format_exc()

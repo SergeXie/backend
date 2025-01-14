@@ -11,7 +11,7 @@ class ZuoShi15Strategy(CommonStrategy):
         ('lot_size', 0.1),  # 每次交易的手数
     )
 
-    def __init__(self, indicator_params, goodsId=None, begin_time=None):
+    def __init__(self, indicator_params, goodsId=None, begin_time=None, baseLots=0.1):
         super().__init__(goodsId)
         # 时区处理
         self.local_time_zone = pytz.timezone('Asia/Shanghai')  # 北京时间
@@ -25,6 +25,7 @@ class ZuoShi15Strategy(CommonStrategy):
         self.cur_day = None
         self.trader_result = []
         self.starting_cash = self.broker.startingcash  # 起始资金
+        self.baseLots = baseLots
 
     def data_dict(self, stop_loss, take_profit):
         """下单过程中，附带额外信息"""
@@ -118,6 +119,6 @@ class ZuoShi15Strategy(CommonStrategy):
             price=self.data.close[0],
             stopprice=stop_loss,
             limitprice=take_profit,
-            size=self.params.lot_size,
+            size=self.baseLots,
             **self.data_dict(stop_loss, take_profit)
         )
