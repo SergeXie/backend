@@ -4,100 +4,46 @@ import pandas as pd
 import time
 import pandas as pd
 import numpy as np
-from tensorflow.keras import backend as K
-import tensorflow.keras as keras
-from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import LSTM, Conv1D, MaxPooling1D, Dense, Flatten, Reshape, Add, Input, ConvLSTM1D, LeakyReLU, Dropout, InputLayer
-from tensorflow.keras.optimizers import Adam, SGD
-from tensorflow.keras.regularizers import l2  # 使用TensorFlow.keras自己的l2 regularizer
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from tensorflow.keras.metrics import AUC  # 使用TensorFlow.keras自己的AUC metric
-from sklearn.utils.class_weight import compute_class_weight
-from tensorflow.keras.layers import Input, AveragePooling1D, concatenate
 from tensorflow.keras.models import load_model
 import tensorflow as tf
 from utils.indicators import ATRStopLoss
 from utils.public_strategy import CommonStrategy
 import joblib
+from utils.indicators.deeplearn_v2 import train_model, split_and_sort_probability
 
-# 构建的google模型
-def inception_module_1d(x, filters):
-    # 1x1 conv
-    conv1 = Conv1D(filters=filters[0], kernel_size=1, padding='same', activation='relu')(x)
-
-    # 1x1 conv followed by 3x3 conv
-    conv3 = Conv1D(filters=filters[1], kernel_size=1, padding='same', activation='relu')(x)
-    conv3 = Conv1D(filters=filters[2], kernel_size=3, padding='same', activation='relu')(conv3)
-
-    # 1x1 conv followed by 5x5 conv
-    conv5 = Conv1D(filters=filters[3], kernel_size=1, padding='same', activation='relu')(x)
-    conv5 = Conv1D(filters=filters[4], kernel_size=5, padding='same', activation='relu')(conv5)
-
-    # 3x3 max pooling followed by 1x1 conv
-    pool = MaxPooling1D(pool_size=3, strides=1, padding='same')(x)
-    pool = Conv1D(filters=filters[4], kernel_size=1, padding='same', activation='relu')(pool)
-
-    # concatenate filters
-    out = concatenate([conv1, conv3, conv5, pool], axis=-1)
-
-    return out
-
-def create_googlenet_1d(input_shape, num_classes):
-    inputs = Input(shape=input_shape)
-
-    # Initial convolution and pooling layers
-    x = Conv1D(64, 7, strides=2, padding='same', activation='relu')(inputs)
-    x = MaxPooling1D(3, strides=2, padding='same')(x)
-
-    # Inception modules
-    x = inception_module_1d(x, [64, 96, 128, 16, 32])
-    x = inception_module_1d(x, [128, 128, 192, 32, 96])
-    x = MaxPooling1D(3, strides=2, padding='same')(x)
-
-    x = inception_module_1d(x, [192, 96, 208, 16, 48])
-    x = inception_module_1d(x, [160, 112, 224, 24, 64])
-    x = inception_module_1d(x, [128, 128, 256, 24, 64])
-    x = inception_module_1d(x, [112, 144, 288, 32, 64])
-    x = inception_module_1d(x, [256, 160, 320, 32, 128])
-    x = MaxPooling1D(3, strides=2, padding='same')(x)
-
-    x = inception_module_1d(x, [256, 160, 320, 32, 128])
-    x = inception_module_1d(x, [384, 192, 384, 48, 128])
-
-    # Final pooling and dense layers
-    x = AveragePooling1D(7, strides=1)(x)
-    x = Flatten()(x)
-    x = Dropout(0.4)(x)
-    x = Dense(num_classes, activation='sigmoid')(x)
-
-    model = Model(inputs, x, name='googlenet_1d')
-    return model
 
 class DeepATRStrategy(CommonStrategy):
     # 使用长连接的接口时候，不会传begin_time
     def __init__(self, indicator_params, goodsId=None, begin_time=None, baseLots=0.1):
         # 调用父类方法 （固定写法）
         super().__init__(goodsId)
+        # 接收参数变量
+        self.indicator_params = indicator_params
+        print(self.indicator_params)
 
         self.high_data = np.array(self.data.high)
         self.close_data = np.array(self.data.close)
-        model_path_dict = {
-            0: "deeplearn_model/goole_model_M5.h5",
-            1: "deeplearn_model/goole_model_M15.h5",
-            2: "deeplearn_model/goole_model_M30.h5",
-            3: "deeplearn_model/goole_model_H1.h5",
-        }
-        model_path = model_path_dict.get(indicator_params.get('TimePeriods', "deeplearn_model/goole_model_M15.h5"))
-        # 导入模型
-        self.model = tf.keras.models.load_model(model_path)
+        self.distribution = self.indicator_params.get("TimePeriodssf")
+        self.distribution = str(self.distribution).replace("[", "").replace("]", "")
+        self.distribution = self.distribution.split(',')
+        self.distribution = list(map(float, self.distribution))
+        tmp1, tmp2 = split_and_sort_probability(self.distribution)
+        self.distribution = tmp1 + tmp2
+        # print(type(self.distribution),self.distribution)
+        # 后期替换为可输入的参数
+        # self.distribution = [-3, -2, -1.5, -1, -0.5, 3, 2, 1.5, 1, 0.5]
+        kline_goods = self.indicator_params.get("Kline_goods", '')
+        kline_period = self.indicator_params.get("Kline_period", '')
+        model_index = [kline_goods] + [kline_period]
+
+        old_model_path = '_'.join(str(i) for i in model_index)
+        new_model_path = '_'.join(str(i) for i in self.distribution + [kline_goods] + [kline_period])
+        print(old_model_path, new_model_path)
+
+        self.model = train_model(self, self.distribution, old_model_path, new_model_path)  # 数据  y的分布  模型路径和名称
         # 编译模型
-        # self.model.compile(loss='mean_squared_error', optimizer='adam')
-        train_prices = self.close_data.reshape(-1, 1)
-        # 数据归一化
-        # self.scaler = MinMaxScaler(feature_range=(0, 1))
-        self.scaler = joblib.load('scalar01')
-        # self.scaler = StandardScaler()
-        # self.scaler.fit_transform(train_prices)
+        self.scaler = joblib.load('scalar02')
+
 
         self.dir = 0
         self.offset = 0
@@ -134,13 +80,12 @@ class DeepATRStrategy(CommonStrategy):
         X_test = []
         for i in range(-100, 0):
             X_test.append(self.data.close[i])
-
         X_test = np.array(X_test).reshape(-1, 1)
-        # X_test = np.array(X_test)
-        X_test = self.scaler.transform(X_test)
+        ss = joblib.load('scalar02')
+        X_test = ss.fit_transform(X_test)
         # 调整输入数据的维度
         X_test = np.reshape(X_test, (X_test.shape[1], X_test.shape[0], 1))
-        # print('shape',X_test.shape)
+
 
         # ======================   =================#
         self.data_line_count += 1
@@ -155,7 +100,6 @@ class DeepATRStrategy(CommonStrategy):
 
         trend = self.atr_stoploss.lines.trend_change[0]
 
-
         if trend == 1 or trend == -1:
             if self.prev_trend == 0:
                 self.prev_trend = trend
@@ -167,8 +111,10 @@ class DeepATRStrategy(CommonStrategy):
                     # [-30, -20, -10, -5, -3][30, 20, 10, 5, 3]
                     predicted_prices = np.round(predicted_prices[0], 2)
                     print(predicted_prices)
-                    tmp1 = [-30, -20, -10, -5, -3]
-                    tmp2 = [30, 20, 10, 5, 3]
+                    tmp1, tmp2 = split_and_sort_probability(self.distribution)
+                    # tmp1 = [-30, -20, -10, -5, -3]
+                    # tmp2 = [30, 20, 10, 5, 3]
+                    print(tmp1, tmp2)
                     pre_sell = predicted_prices[:5]
                     pre_buy = predicted_prices[5:]
                     # 通过概率计算期望

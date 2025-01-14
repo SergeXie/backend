@@ -1,5 +1,5 @@
 import datetime
-from numba import cuda
+# from numba import cuda
 import json
 import random
 import re
@@ -26,6 +26,7 @@ from utils.indicators.cci import ResponseCCIData
 from utils.indicators.dma import ResponseDMAData
 from utils.indicators.ma import ResponseMAMovingAverageIndicator
 from utils.indicators.macd import ResponseMACDData
+from utils.indicators.macd_v1 import ResponseMACDData_v1
 from utils.indicators.bollinger import ResponseBollingerData
 from utils.indicators.ema import ResponseEMAData
 from utils.indicators.btatr import ResponseATRData
@@ -63,6 +64,7 @@ indicator_classes = {
     "CCI": ResponseCCIData,
     "DMA": ResponseDMAData,
     "MACD": ResponseMACDData,
+    "MACD_v1": ResponseMACDData_v1,
     "MA": ResponseMAMovingAverageIndicator,
     "Bollinger": ResponseBollingerData,
     "EMA": ResponseEMAData,
@@ -96,11 +98,9 @@ def match_filter_data(data):
 
 def to_float(value):
     try:
-        # 移除空格和其他可能的千位分隔符
-        return float(value.replace(' ', '').replace(',', ''))
-    except (ValueError, AttributeError):
-        return 0.0
-
+        return float(value.replace(',', ''))
+    except ValueError:
+        return 0
 
 def datetimesp(dt_float):
     # 将浮点数转换为日期时间格式
@@ -643,6 +643,13 @@ async def get_indicator_data(request, data_type, name):
                 df.set_index('datetime', inplace=True)
                 data = PandasData(dataname=df)
                 cerebro.adddata(data)
+                print("断点11111111111111111111")
+                print(indicators)
+                print(indicator_classes.get(indicators.className))
+                print(indicator_params)
+                print(indicators.name)
+                print(indicators.description)
+                print("断点11111111111111111111")
 
                 cerebro.addstrategy(indicator_classes.get(indicators.className),
                                     indicator_params, indicators.name, indicators.description)

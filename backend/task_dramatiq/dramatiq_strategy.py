@@ -16,7 +16,8 @@ from utils.strategys import reload_strategies
 import backtrader as bt
 
 # 配置 RabbitMQ broker
-rabbitmq_broker = RabbitmqBroker(url="amqp://admin:admin123@192.168.0.60:5672/")
+rabbitmq_broker = RabbitmqBroker(url="amqp://guest:guest@localhost:5672/")
+#rabbitmq_broker = RabbitmqBroker(url="amqp://admin:admin123@192.168.0.73:5672/")
 dramatiq.set_broker(rabbitmq_broker)
 rabbitmq_broker.add_middleware(AsyncIO())
 

@@ -98,7 +98,7 @@ def get_hero_data():
                     t1.pkId,
                     t1.heroId,
                     t1.photo,
-                    t3.cname as heroName,
+                    t1.heroName,
                     t2.heroCareer,
                     t1.firstPlaceScore,
                     t1.fiftyScores,
@@ -125,7 +125,7 @@ def get_hero_data():
                 FROM
                     lz_hero_rank t1
                 INNER JOIN (
-                    SELECT MAX(pkId) AS pkId FROM lz_hero_rank GROUP BY heroName
+                    SELECT MAX(pkId) AS pkId FROM lz_hero_rank GROUP BY heroId
                 ) t5 ON t1.pkId = t5.pkId
                 INNER JOIN lz_hero t3 ON t1.heroId = t3.id
                 INNER JOIN lz_hero_details t4 ON t1.heroId = t4.heroId
@@ -480,10 +480,3 @@ async def abroad_hero_list():
 
     finally:
         connection.close()
-
-
-
-
-
-
-

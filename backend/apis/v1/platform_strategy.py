@@ -151,6 +151,9 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
         period_tuple = tuple(period_dict.items())
 
         indicator_params = indicator_data_request.get("parameter", {})
+        # 在参数中增加k线的品种和周期
+        indicator_params['Kline_period'] = indicator_data_request.get("period", None)
+        indicator_params['Kline_goods'] = indicator_data_request.get("goods", None)
 
         trading_data = await fetch_trading_data(db, indicator_data_request.get("goods", None),
                                                 indicator_data_request.get("period", None), model_classes,

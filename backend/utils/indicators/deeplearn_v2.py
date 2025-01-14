@@ -56,10 +56,10 @@ class ResponseDL2Data(bt.Strategy):
         X_test = []
         for i in range(-100, 0):
             X_test.append(self.data.close[i])
-
         X_test = np.array(X_test).reshape(-1, 1)
-        # X_test = np.array(X_test)
-        # X_test = self.scaler.transform(X_test)
+        ss = joblib.load('scalar02')
+        X_test = ss.fit_transform(X_test)
+
         # 调整输入数据的维度
         X_test = np.reshape(X_test, (X_test.shape[1], X_test.shape[0], 1))
         predicted_prices = self.model.predict(X_test)
@@ -129,6 +129,8 @@ def train_model(self, distribution, old_model_path, new_model_path):
     train_prices = self.close_data.reshape(-1, 1)
     # 数据归一化
     train_scaled = train_prices
+    ss = joblib.load('scalar02')
+    train_scaled = ss.fit_transform(train_prices)
 
     # 创建训练数据集
     X_train = []
@@ -138,7 +140,8 @@ def train_model(self, distribution, old_model_path, new_model_path):
 
     for i in range(timesteps + timesteps2 + 1, len(train_scaled)):
         X_train.append(train_scaled[i - timesteps - timesteps2 - 1: i - timesteps2 - 1, 0])  # 归一化
-        y = change_y(train_scaled[i - timesteps2 - 1], train_scaled[i - timesteps2: i, 0], Probability=distribution)
+        y = change_y(train_prices[i - timesteps2 - 1], train_prices[i - timesteps2: i, 0], Probability=distribution)
+        print(y)
         y_train.append(y)
 
     X_train, y_train = np.array(X_train), np.array(y_train)
@@ -163,17 +166,14 @@ def train_model(self, distribution, old_model_path, new_model_path):
         model = create_googlenet_1d(input_shape, num_classes)
         for layer1, layer2 in zip(basemodel.layers[:-1], model.layers[:-1]):
             layer2.set_weights(layer1.get_weights())
+            layer2.trainable = False
 
         model.compile(loss='binary_crossentropy', optimizer=Adam(learning_rate=0.001), metrics=['accuracy', AUC(multi_label=True)])
 
         # 拟合模型
-        model.fit(X_train, y_train, epochs=10, batch_size=64)
+        model.fit(X_train, y_train, epochs=100, batch_size=64)
         model.save(f'deeplearn_model/FineTuningModel/{new_model_path}.h5')
 
-    # X_test = np.reshape(X_test, (1,100,1))
-    # # print(X_test.shape)
-    # predicted_prices = model.predict(X_test)
-    # print(np.round(predicted_prices,2))
     return model
 
 def split_and_sort_probability(Probability):
@@ -184,8 +184,8 @@ def split_and_sort_probability(Probability):
 def change_y(basics, list1, Probability=[-30, -20, -10, -5, -3, 30, 20, 10, 5, 3]):
     # Probability = [-30, -20, -10, -5, -3, 30, 20, 10, 5, 3]
     diff = list1-basics
-    tmp1 = [-30, -20, -10, -5, -3]
-    tmp2 = [30, 20, 10, 5, 3]
+    # tmp1 = [-30, -20, -10, -5, -3]
+    # tmp2 = [30, 20, 10, 5, 3]
     tmp1, tmp2 = split_and_sort_probability(Probability)
     # print(Probability)
     # tmp2 = [3, 5, 10, 20, 30]

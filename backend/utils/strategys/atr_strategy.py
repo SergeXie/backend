@@ -86,4 +86,3 @@ class ATRStrategy(CommonStrategy):
                 self.order = self.close()  # 平仓，以下一日开盘价卖出
         else:
             pass
-
