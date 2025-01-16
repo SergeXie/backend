@@ -82,7 +82,7 @@ class ATRStrategy(CommonStrategy):
         # 检查是否到达数据末尾且仍持有仓位
         if self.need_closr:
             if self.data_line_count == (self.data.buflen() - (self.atr_len + 1)) and self.position:
-                print("执行最后关仓")
+                print("执行最后关仓 K 线数量：{}".format(self.data_line_count))
                 self.order = self.close()  # 平仓，以下一日开盘价卖出
         else:
             pass

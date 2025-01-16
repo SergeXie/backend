@@ -40,7 +40,7 @@ async def websocket_message_processing(websocket: WebSocket, message: str):
 
 
 async def websocket_background_task():
-    uri = "ws://192.168.0.120:8000/api/v1/platform/wss"
+    uri = "ws://192.168.0.73:8000/api/v1/platform/wss"
     # uri = "ws://8.138.95.62:8000/api/v1/platform/wss"
     print("发起请求")
     while True:
