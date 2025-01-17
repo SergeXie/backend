@@ -24,7 +24,7 @@ from database.db_mysql import async_db_session
 from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DqlIndicators, TradingStrategy, DplGoodsTest
 from utils.common import fetch_trading_data, PandasData, get_entities_list, generate_random_string, \
     generate_lazy_pinyin, indicator_classes, \
-    to_float, match_filter_data, match_ratio, format_datetime
+    to_float, match_filter_data, match_ratio, format_datetime, select_goods_common, select_kline_data
 from utils.public_strategy import ComprehensiveAnalyzer
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
@@ -616,6 +616,103 @@ async def fetch_tester_result(request: Request):
         info = traceback.format_exc()
         log.error(f"获取回测结果错误：{info}")
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+
+@router.post("/fetchFloatingProfit", name="获取回测时间范围内浮动盈亏")
+async def fetch_floating_profit(request: Request):
+
+    data_request = await request.json()
+
+    testerUids = data_request.get("testerUids", [])  # 策略UID
+
+    async with async_db_session() as db:
+        # 根据 testerUids 查询历史回测结果 取得回测时间
+        query = await db.execute(select(
+            DqlStrategyTestResult).where(
+            DqlStrategyTestResult.uid.in_(testerUids),
+            DqlStrategyTestResult.is_delete == 0,
+            DqlStrategyTestResult.calculationStatus == 1).order_by(DqlStrategyTestResult.createTime.desc()))
+
+        dql_strategy_test_result_all = query.scalars().all()
+
+        result_list = []  # 存储最终的浮动盈亏数据
+
+        for data in dql_strategy_test_result_all:
+            trader_result = json.loads(data.traderResult)
+            starting_cash = trader_result.get("traderReport", {}).get("startingCash", 10000)  # 起始资金
+            # 订单记录 trader_orders
+            trader_orders = trader_result.get("traderResult", [])
+
+            # 拿起始时间-结束时间获取K线
+            start_time = data.startTime.strftime('%Y-%m-%d %H:%M:%S')
+            end_time = data.endTime.strftime('%Y-%m-%d %H:%M:%S')
+            select_model_class, result = await select_goods_common(db, data.goodsId, model_classes)
+            if not select_model_class:
+                return await response_base.fail(msg="数据库表未找到！", data=[])
+            db_select_kline = select(select_model_class).where(
+                select_model_class.tradingGoods == result.trading_goods,
+                select_model_class.platform == result.platform,
+                select_model_class.type == data.period,
+                select_model_class.tradeDateTime.between(start_time, end_time))
+
+            kline_datas = await select_kline_data(db, db_select_kline)
+
+            # === 初始化变量 ===
+            current_cash = starting_cash  # 初始资金
+            floating_pnl_list = []  # 存储浮动盈亏数据
+
+            # === 遍历 K 线计算浮动盈亏 ===
+            for kline in kline_datas:
+                current_price = kline["close"]  # K 线收盘价
+                current_date = kline["timestamp"]  # K 线时间
+
+                profit = 0  # 初始化浮动盈亏
+
+                # 遍历所有交易订单，按时间顺序执行
+                for trade in trader_orders:
+                    if trade["timestamp"] > current_date:
+                        continue  # 交易时间大于当前 K 线时间，跳过后续订单
+
+                    # 累加已实现盈亏（已平仓订单的 profit）
+                    if trade["orderType"] == "close":
+                        profit += trade["pnl"]
+
+                    # 计算当前持仓浮动盈亏
+                    trade_position = 0  # 初始持仓方向
+                    if trade["orderType"] == "buy":
+                        trade_position = 1
+                    elif trade["orderType"] == "sell":
+                        trade_position = -1
+
+                    if trade_position != 0:
+                        profit += (current_price - trade["price"]) * trade_position * 100  # 计算浮动盈亏
+
+                # 计算账户净值
+                # === 解决 current_cash 可能是字符串问题 ===
+                if isinstance(current_cash, str):
+                    current_cash = float(current_cash.replace(" ", "").replace(",", ""))
+                else:
+                    current_cash = float(current_cash)  # 确保是 float
+
+                profit = float(profit)  # 确保 profit 也是 float
+
+                # 计算账户净值
+                net_value = current_cash + profit
+
+                # 存储当前时间的浮动盈亏
+                floating_pnl_list.append({
+                    "timestamp": current_date,
+                    "pnl": round(profit, 2),
+                    "netValue": round(net_value, 2)
+                })
+
+            # === 返回最终计算结果 ===
+            result_list.append({
+                "testerUid": data.uid,
+                "floatingPnl": floating_pnl_list
+            })
+
+        return await response_base.success(data=result_list)
 
 
 @router.post("/syncBatchTest", name="策略批量回测(同步)")
