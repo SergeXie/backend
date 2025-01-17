@@ -249,8 +249,6 @@ class CommonStrategy(bt.Strategy):
         self.netAssetValues.append(float(format(self.broker.get_value(), precision_format)))
 
     def notify_order(self, order):
-        self.calculate_float_net_values()
-
         if order.status in [order.Margin, order.Rejected, order.Expired]:
             self.log("交易被拒绝/现金不足/取消 :{}".format(order.status))
             self.isbursted = 1
