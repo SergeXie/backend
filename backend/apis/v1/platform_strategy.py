@@ -631,7 +631,7 @@ async def fetch_floating_profit(request: Request):
             DqlStrategyTestResult).where(
             DqlStrategyTestResult.uid.in_(testerUids),
             DqlStrategyTestResult.is_delete == 0,
-            DqlStrategyTestResult.calculationStatus == 1).order_by(DqlStrategyTestResult.createTime.desc()))
+            DqlStrategyTestResult.calculationStatus == 1))
 
         dql_strategy_test_result_all = query.scalars().all()
 
@@ -670,22 +670,23 @@ async def fetch_floating_profit(request: Request):
 
                 # 遍历所有交易订单，按时间顺序执行
                 for trade in trader_orders:
-                    if trade["timestamp"] > current_date:
-                        continue  # 交易时间大于当前 K 线时间，跳过后续订单
+                    if trade.get("openTime", None):
+                        if trade["openTime"] > current_date:
+                            continue  # 交易时间大于当前 K 线时间，跳过后续订单
 
-                    # 累加已实现盈亏（已平仓订单的 profit）
-                    if trade["orderType"] == "close":
-                        profit += trade["pnl"]
+                        # 累加已实现盈亏（已平仓订单的 profit）
+                        if trade["orderType"] == "close":
+                            profit += trade["pnl"]
 
-                    # 计算当前持仓浮动盈亏
-                    trade_position = 0  # 初始持仓方向
-                    if trade["orderType"] == "buy":
-                        trade_position = 1
-                    elif trade["orderType"] == "sell":
-                        trade_position = -1
+                        # 计算当前持仓浮动盈亏
+                        trade_position = 0  # 初始持仓方向
+                        if trade["orderType"] == "buy":
+                            trade_position = 1
+                        elif trade["orderType"] == "sell":
+                            trade_position = -1
 
-                    if trade_position != 0:
-                        profit += (current_price - trade["price"]) * trade_position * 100  # 计算浮动盈亏
+                        if trade_position != 0:
+                            profit += (current_price - trade["price"]) * trade_position * 100  # 计算浮动盈亏
 
                 # 计算账户净值
                 # === 解决 current_cash 可能是字符串问题 ===
