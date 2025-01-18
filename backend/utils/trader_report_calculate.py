@@ -1,3 +1,4 @@
+import re
 from collections import defaultdict
 from datetime import datetime
 
@@ -345,6 +346,7 @@ def generate_trader_report(soup, account_list):
 
     # 提取报告数据
     trader_report = {
+
         "startingCash": soup.find(string="Balance:").find_next().text,
         "FreeMargin": soup.find(string="Free Margin:").find_next().text,
         "totalNetProfit": soup.find(string="Total Net Profit:").find_next().text,
@@ -382,7 +384,6 @@ def generate_trader_report(soup, account_list):
         "maxFUR": 0,
         "score": 0,
     }
-
     # 计算所需的指标
     initial_cleaned = trader_report["startingCash"].replace(' ', '')
     initial_cash = float(initial_cleaned)
@@ -393,6 +394,7 @@ def generate_trader_report(soup, account_list):
     max_fur = calculate_max_fur(account_list)
     additional_metrics = calculate_additional_metrics(account_list)
 
+    trader_report["startingCash"] = initial_cash
     trader_report["averageConsecutiveWins"] = consecutive_metrics["averageConsecutiveWins"]
     trader_report["averageConsecutiveLosses"] = consecutive_metrics["averageConsecutiveLosses"]
     trader_report["yieldRate"] = trade_metrics["yieldRate"]

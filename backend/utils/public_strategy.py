@@ -346,6 +346,8 @@ class CommonStrategy(bt.Strategy):
 
             # 交易报告
             if trade.isclosed:
+                self.calculate_net_values()
+
                 # 计算最大回撤率
                 tmp = (self.broker.getvalue() - self.last_cash) / self.last_cash
                 # 最大资金利用率
@@ -435,8 +437,6 @@ class CommonStrategy(bt.Strategy):
 
             current_datetime = self.datas[0].datetime.datetime(0)
             # print(f"交易完成，利润：{trade.pnl}, 数量：{trade.size}, 价格：{trade.price} 交易时间：{current_datetime}")
-
-            self.calculate_net_values()
 
             # 精度
             digits = self.datas[0].digits[0]

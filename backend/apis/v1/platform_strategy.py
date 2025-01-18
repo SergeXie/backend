@@ -639,66 +639,72 @@ async def fetch_floating_profit(request: Request):
 
         for data in dql_strategy_test_result_all:
             trader_result = json.loads(data.traderResult)
+
             starting_cash = trader_result.get("traderReport", {}).get("startingCash", 10000)  # 起始资金
+
             # 订单记录 trader_orders
             trader_orders = trader_result.get("traderResult", [])
 
             # 拿起始时间-结束时间获取K线
             start_time = data.startTime.strftime('%Y-%m-%d %H:%M:%S')
             end_time = data.endTime.strftime('%Y-%m-%d %H:%M:%S')
-            select_model_class, result = await select_goods_common(db, data.goodsId, model_classes)
+            select_model_class, goods_ = await select_goods_common(db, data.goodsId, model_classes)
             if not select_model_class:
                 return await response_base.fail(msg="数据库表未找到！", data=[])
             db_select_kline = select(select_model_class).where(
-                select_model_class.tradingGoods == result.trading_goods,
-                select_model_class.platform == result.platform,
+                select_model_class.tradingGoods == goods_.trading_goods,
+                select_model_class.platform == goods_.platform,
                 select_model_class.type == data.period,
                 select_model_class.tradeDateTime.between(start_time, end_time))
 
             kline_datas = await select_kline_data(db, db_select_kline)
 
             # === 初始化变量 ===
-            current_cash = starting_cash  # 初始资金
             floating_pnl_list = []  # 存储浮动盈亏数据
 
+            # 查找closeTime等于null的（持仓单子）
+            new_trader_orders = [x for x in trader_orders if x.get("closeTime", None)]
+            # 使用集合跟踪已出现的 tradeid
+            seen_tradeids = set()
+            # 生成新列表，仅包含 closeTime 为空的记录，且 tradeid 不重复
+            unique_open_trades = []
+            for trade_id in new_trader_orders:
+                seen_tradeids.add(trade_id["tradeid"])
+
+            for trade in trader_orders:
+                if trade.get("closeTime", None):
+                    unique_open_trades.append(trade)
+                elif not trade.get("closeTime", None) and trade.get("tradeid", None) not in seen_tradeids:
+                    unique_open_trades.append(trade)
+
+            starting_cash = starting_cash
             # === 遍历 K 线计算浮动盈亏 ===
             for kline in kline_datas:
                 current_price = kline["close"]  # K 线收盘价
                 current_date = kline["timestamp"]  # K 线时间
-
+                net_value = starting_cash  # 每根 K 线初始净值
                 profit = 0  # 初始化浮动盈亏
-
                 # 遍历所有交易订单，按时间顺序执行
-                for trade in trader_orders:
-                    if trade.get("openTime", None):
-                        if trade["openTime"] > current_date:
-                            continue  # 交易时间大于当前 K 线时间，跳过后续订单
+                for trade in unique_open_trades:
+                    order_type = trade["orderType"]
+                    close_time = trade.get("closeTime", None)
+                    open_time = trade.get("openTime", None)
+                    order_size = trade.get("size", None)
+                    open_price = trade.get("openPrice", None)
 
-                        # 累加已实现盈亏（已平仓订单的 profit）
-                        if trade["orderType"] == "close":
-                            profit += trade["pnl"]
+                    if close_time:
+                        # 计算浮动盈亏（持仓未平仓）
+                        if open_time < current_date and close_time > current_date:
+                            position = 1 if order_type == "buy" else -1
+                            net_value = net_value + (current_price - open_price) * position * order_size * goods_.profitRatio
 
-                        # 计算当前持仓浮动盈亏
-                        trade_position = 0  # 初始持仓方向
-                        if trade["orderType"] == "buy":
-                            trade_position = 1
-                        elif trade["orderType"] == "sell":
-                            trade_position = -1
+                    if open_time < current_date and not close_time:
+                        position = 1 if order_type == "buy" else -1
+                        net_value = net_value + (current_price - open_price) * position * order_size * goods_.profitRatio
 
-                        if trade_position != 0:
-                            profit += (current_price - trade["price"]) * trade_position * 100  # 计算浮动盈亏
-
-                # 计算账户净值
-                # === 解决 current_cash 可能是字符串问题 ===
-                if isinstance(current_cash, str):
-                    current_cash = float(current_cash.replace(" ", "").replace(",", ""))
-                else:
-                    current_cash = float(current_cash)  # 确保是 float
-
-                profit = float(profit)  # 确保 profit 也是 float
-
-                # 计算账户净值
-                net_value = current_cash + profit
+                    # 计算已实现盈亏（已平仓）
+                    if close_time and close_time <= current_date:
+                        net_value += trade["pnl"]
 
                 # 存储当前时间的浮动盈亏
                 floating_pnl_list.append({
