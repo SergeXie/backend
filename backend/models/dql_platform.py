@@ -171,7 +171,7 @@ class DqlStrategyTestResult(Base):
     startTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,comment='开始时间')
     endTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False, comment='结束时间')
     isBursted: Mapped[int] = mapped_column(Integer, nullable=False, comment='是否爆仓 0 未爆仓 1 已爆仓')
-    status: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment='1 已入库 0 未入库')
+    status: Mapped[int] = mapped_column(Integer, nullable=False, index=True, default=0, comment='1 已入库 0 未入库')
     yieldRate: Mapped[float] = mapped_column(Double, nullable=False, comment='收益率')
     mdr: Mapped[float] = mapped_column(Double, nullable=False, comment='最大回撤率')
     winRate: Mapped[float] = mapped_column(Double, nullable=False, comment='胜率')

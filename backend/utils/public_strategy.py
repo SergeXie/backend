@@ -193,6 +193,8 @@ class CommonStrategy(bt.Strategy):
 
         self.trade_ref_dict = {}
 
+        print("line的总长度：", self.data0.buflen())
+
     def calculate_values(self):
         """
         计算浮值和净值
@@ -205,24 +207,45 @@ class CommonStrategy(bt.Strategy):
         #     self.broker.set_slippage_fixed(fixed=64 / 100)
 
     def calculate_float_net_values(self):
+        print("self.data:{}".format(self.datas[0]))
         # 精度
         digits = self.datas[0].digits[0]
         precision_format = f".{int(digits)}f"
 
         # 计算浮值（按照最新的收盘价折算未平仓的交易单总盈亏） 每一根bar的持仓数量 * （当前k线的收盘价 - 持仓价格）
         # 每个持仓的数量乘以当前收盘价与买入价的差值。所有持仓的浮值总和就是总浮值。
-        float_value = 0
+        # 遍历数据计算浮动盈亏
         for data in self.datas:
-            position = self.getposition(data)  # 访问仓位信息
+            beginTime = data.datetime.datetime().strftime('%Y-%m-%d %H:%M:%S')  # 格式化时间
+            position = self.getposition(data)  # 获取仓位信息
+
+            # 如果存在仓位且在已交易仓位中，计算浮值
             if position.size != 0 and data in self.traded_positions:
-                float_value += float(format(position.size * 100 * (data.close[0] - position.price), precision_format))
+                float_value = float(format(
+                    position.size * 100 * (data.close[0] - position.price),
+                    precision_format
+                ))
+            else:
+                float_value = 0.0
 
-        # 计算浮值
-        float_value_ = float(format(self.broker.get_value() - float_value, precision_format))
-        self.floatingPointValues.append(float_value_)
+            # 总浮值计算
+            float_value_ = float(format(self.broker.get_value() - float_value, precision_format))
 
-        # 净值市值
-        self.netAssetValues.append(float(format(self.broker.get_value(), precision_format)))
+            # 添加到目标结构
+            self.floatingPointValues.append({
+                "beginTime": beginTime,
+                "float_value": float_value_
+            })
+
+    def calculate_net_values(self):
+        """
+        净值计算
+        """
+        # 精度
+        digits = self.datas[0].digits[0]
+        precision_format = f".{int(digits)}f"
+        # 净值市值计算
+        self.netAssetValues.append(float(format(self.starting_cash, precision_format)))
 
     def notify_order(self, order):
         if order.status in [order.Margin, order.Rejected, order.Expired]:
@@ -318,7 +341,6 @@ class CommonStrategy(bt.Strategy):
             trader_dict["initialCash"] = float(format(self.starting_cash, precision_format))
 
             self.trader_result.append(trader_dict)
-            # print(trader_dict)
 
             # 交易报告
             if trade.isclosed:
@@ -389,6 +411,10 @@ class CommonStrategy(bt.Strategy):
                     self.max_winning_trade = profit
                 if profit < self.max_losing_trade:
                     self.max_losing_trade = profit
+
+                # 计算平仓订单变化的净值
+                self.calculate_net_values()
+
             else:
                 self.trade_count += 1
 
@@ -412,7 +438,6 @@ class CommonStrategy(bt.Strategy):
             current_datetime = self.datas[0].datetime.datetime(0)
             # print(f"交易完成，利润：{trade.pnl}, 数量：{trade.size}, 价格：{trade.price} 交易时间：{current_datetime}")
 
-            self.calculate_float_net_values()
 
             # 精度
             digits = self.datas[0].digits[0]
@@ -440,6 +465,7 @@ class CommonStrategy(bt.Strategy):
             log.info("策略计算结果出错！：{}".format(info))
 
     def stop(self):
+
         try:
             # 策略结束时计算并输出盈亏比
             total_profit_amount = sum(self.profit_list)  # 总盈利金额
@@ -574,6 +600,8 @@ class CommonStrategy(bt.Strategy):
         except Exception as e:
             info = traceback.format_exc()
             log.info("策略计算结果出错！：{}".format(info))
+
+
 
     def get_analysis(self):
 

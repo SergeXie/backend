@@ -331,6 +331,75 @@ async def read_hero_data(request: Request):
 
         # 为每个英雄附加装备信息和符文信息
         for hero in hero_data:
+            hero["firstPlaceScore"] = int(hero["firstPlaceScore"]) if hero.get("firstPlaceScore", 0) else None
+            hero["fiftyScores"] = int(hero["fiftyScores"]) if hero.get("fiftyScores", 0) else None
+            hero["tenthPlaceScore"] = int(hero["tenthPlaceScore"]) if hero.get("tenthPlaceScore", 0) else None
+            hero["eightyScores"] = int(hero["eightyScores"]) if hero.get("eightyScores", 0) else None
+            hero["lastPlaceScore"] = int(hero["lastPlaceScore"]) if hero.get("lastPlaceScore", 0) else None
+            hero["updatetime"] = hero["updatetime"].strftime("%Y-%m-%d %H:%M:%S")
+            hero['equips'] = equip_dict[hero['heroId']]
+            hero['runes'] = rune_dict[hero['heroId']]
+
+            if hero.get("kzInfo"):
+                hero["kzInfo"] = json.loads(hero.get("kzInfo", []))
+                hero["bkzInfo"] = json.loads(hero.get("bkzInfo", []))
+                hero["tfInfo"] = json.loads(hero.get("tfInfo", []))
+                hero["dfInfo"] = json.loads(hero.get("dfInfo", []))
+            else:
+                hero["kzInfo"] = []
+                hero["bkzInfo"] = []
+                hero["tfInfo"] = []
+                hero["dfInfo"] = []
+
+        return await response_base.success(data=hero_data)
+
+    """
+    :param heroName: 英雄筛选
+    :param heroCareer: 职位筛选
+    :param remark: 备注
+    :param position: 位置
+    :param screens: 动态条件数组，格式为：
+        [
+            {"title": "巅峰胜率", "name": "peakHeroWinRate", "nameValue": ">=", "value": 3, "checkValue": true},
+            {"title": "顶端胜率", "name": "topHeroWinRate", "nameValue": "<", "value": 2, "checkValue": true}
+        ]
+    :return:
+    """
+    data_request = await request.json()
+    dataView = data_request.get("dataValue", 1)  # 1 最新  0 旧数据
+
+    if dataView:
+        hero_data = get_hero_data()
+        all_equips = get_all_hero_equips()
+        all_runes = get_all_hero_runes()
+        gold_play_data = get_hero_gold_play()  # 获取 goldPlay 数据
+
+        # 将 goldPlay 数据合并到 hero_data 中
+        for hero in hero_data:
+            hero['goldPlay'] = gold_play_data.get(hero['heroId'], 0)  # 默认为 0
+
+        # 将装备信息按 heroId 分组
+        equip_dict = defaultdict(list)
+        for equip in all_equips:
+            equip_dict[equip['heroId']].append({
+                "szTitle": equip["szTitle"],
+                "szIcon": equip["szIcon"],
+                "equipwinRate": equip["equipwinRate"],
+                "equipShowRate": equip["equipShowRate"]
+            })
+
+        # 将符文信息按 heroId 分组
+        rune_dict = defaultdict(list)
+        for rune in all_runes:
+            rune_detail = json.loads(rune['runeDetail'])  # 解析 runeDetail JSON 字符串
+            rune_dict[rune['heroId']].append({
+                "runeDetail": rune_detail,  # 解析后的符文列表
+                "runeWinRate": rune["runeWinRate"],
+                "runeshowRate": rune["runeshowRate"]
+            })
+
+        # 为每个英雄附加装备信息和符文信息
+        for hero in hero_data:
             hero["updatetime"] = hero["updatetime"].strftime("%Y-%m-%d %H:%M:%S")
             hero['equips'] = equip_dict[hero['heroId']]
             hero['runes'] = rune_dict[hero['heroId']]
@@ -480,3 +549,10 @@ async def abroad_hero_list():
 
     finally:
         connection.close()
+
+
+
+
+
+
+
