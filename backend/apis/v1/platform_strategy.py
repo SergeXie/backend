@@ -651,7 +651,8 @@ async def fetch_floating_profit(request: Request):
                 end_time = data.endTime.strftime('%Y-%m-%d %H:%M:%S')
                 select_model_class, goods_ = await select_goods_common(db, data.goodsId, model_classes)
                 if not select_model_class:
-                    return await response_base.fail(msg="数据库表未找到！", data=[])
+                    return await response_base.fail(msg="交易品种:{}未查询到".format(data.goodsId), data=[])
+
                 db_select_kline = select(select_model_class).where(
                     select_model_class.tradingGoods == goods_.trading_goods,
                     select_model_class.platform == goods_.platform,
@@ -703,13 +704,14 @@ async def fetch_floating_profit(request: Request):
                                 position = 1 if order_type == "buy" else -1
                                 net_value = net_value + (current_price - open_price) * position * order_size * goods_.profitRatio
 
-                        if open_time < current_date and not close_time:
-                            position = 1 if order_type == "buy" else -1
-                            net_value = net_value + (current_price - open_price) * position * order_size * goods_.profitRatio
+                            # 计算已实现盈亏（已平仓）
+                            if close_time and close_time <= current_date:
+                                net_value += trade["pnl"]
 
-                        # 计算已实现盈亏（已平仓）
-                        if close_time and close_time <= current_date:
-                            net_value += trade["pnl"]
+                        if open_time:
+                            if open_time < current_date and not close_time:
+                                position = 1 if order_type == "buy" else -1
+                                net_value = net_value + (current_price - open_price) * position * order_size * goods_.profitRatio
 
                     # 存储当前时间的浮动盈亏
                     floating_pnl_list.append({
