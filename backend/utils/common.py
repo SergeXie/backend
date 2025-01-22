@@ -643,33 +643,31 @@ async def get_indicator_data(request, data_type, name):
                 df.set_index('datetime', inplace=True)
                 data = PandasData(dataname=df)
                 cerebro.adddata(data)
-                print("断点11111111111111111111")
-                print(indicators)
-                print(indicator_classes.get(indicators.className))
-                print(indicator_params)
-                print(indicators.name)
-                print(indicators.description)
-                print("断点11111111111111111111")
+                try:
+                    cerebro.addstrategy(indicator_classes.get(indicators.className),
+                                        indicator_params, indicators.name, indicators.description)
 
-                cerebro.addstrategy(indicator_classes.get(indicators.className),
-                                    indicator_params, indicators.name, indicators.description)
+                    result = cerebro.run(stdstats=True, tradehistory=True)
 
-                result = cerebro.run(stdstats=True, tradehistory=True)
+                    print("result:{}".format(result))
 
-                result_data_list = result[0].get_analysis()
+                    result_data_list = result[0].get_analysis()
 
-                data_dict = {
-                    "uid": indicators.uid,
-                    "pId": request_item.get("pId", None),
-                    "index": request_item.get("index", 0),
-                    "parameter": indicator_params,
-                    "subType": indicators.subType,
-                    "startPoint": result_data_list[1],
-                    "endPoint": result_data_list[2],
-                    "buyselldata": result_data_list[3] if len(result_data_list[3:4]) > 0 else {},
-                    "data": result_data_list[0]
-                }
-                result_data.append(data_dict)
+                    data_dict = {
+                        "uid": indicators.uid,
+                        "pId": request_item.get("pId", None),
+                        "index": request_item.get("index", 0),
+                        "parameter": indicator_params,
+                        "subType": indicators.subType,
+                        "startPoint": result_data_list[1],
+                        "endPoint": result_data_list[2],
+                        "buyselldata": result_data_list[3] if len(result_data_list[3:4]) > 0 else {},
+                        "data": result_data_list[0]
+                    }
+                    result_data.append(data_dict)
+                except Exception as e:
+                    info = traceback.format_exc()
+                    log.error(f"技术指标K线{data_type} 数据错误：{info}  request_item:{request_item}")
 
         return await response_base.success(data=result_data)
 

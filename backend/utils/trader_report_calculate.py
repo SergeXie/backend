@@ -95,13 +95,13 @@ def calculate_additional_metrics(account_list):
     trade_count = len(account_list)
 
     # 盈亏
-    total_pnl = sum(trade['pnl'] for trade in account_list if trade["closeTime"])
+    total_pnl = sum(trade['pnl'] for trade in account_list)
 
     # 最大每手盈利
-    max_profit = max(trade['pnl'] for trade in account_list if trade["closeTime"]) if account_list else 0
+    max_profit = max(trade['pnl'] for trade in account_list) if account_list else 0
 
     # 最大每手亏损
-    max_loss = min(trade['pnl'] for trade in account_list if trade["closeTime"]) if account_list else 0
+    max_loss = min(trade['pnl'] for trade in account_list) if account_list else 0
 
     return {
         "tradeCount": trade_count,
@@ -343,6 +343,8 @@ def generate_trader_report(soup, account_list):
     """
     生成交易报告
     """
+
+    print("account_list:{}".format(account_list))
 
     # 提取报告数据
     trader_report = {
