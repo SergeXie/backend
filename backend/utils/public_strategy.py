@@ -202,12 +202,8 @@ class CommonStrategy(bt.Strategy):
         """
         # 点差
         spread = int(self.datas[0].spread[0])
-        # if spread != 0:
-        #     # 设置固定滑点(点差) 设置固定滑点 后续公式 手数 * spread /10 现在固定 spread / 100
-        #     self.broker.set_slippage_fixed(fixed=64 / 100)
 
     def calculate_float_net_values(self):
-        print("self.data:{}".format(self.datas[0]))
         # 精度
         digits = self.datas[0].digits[0]
         precision_format = f".{int(digits)}f"
