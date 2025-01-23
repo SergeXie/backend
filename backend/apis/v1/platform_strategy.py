@@ -1162,7 +1162,7 @@ async def submit_trader_report(request: Request):
                         datetime_value = parsed_datetime.strftime('%Y-%m-%d %H:%M:%S')
 
             # 查询策略
-            if upload_type == "0":  # 手动上传需要判断！
+            if upload_type == "2":  # 手动上传需要判断！
                 strategy = await fetch_indicators(db, uid)
                 if not strategy:
                     return await response_base.fail(code=400, msg=f"提交失败,未找到存在策略！", data=[])
