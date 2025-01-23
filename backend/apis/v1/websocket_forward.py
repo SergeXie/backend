@@ -40,8 +40,8 @@ async def websocket_message_processing(websocket: WebSocket, message: str):
 
 
 async def websocket_background_task():
-    uri = "ws://192.168.0.73:8000/api/v1/platform/wss"
-    # uri = "ws://8.138.95.62:8000/api/v1/platform/wss"
+    # uri = "ws://192.168.0.120:8000/api/v1/platform/wss"
+    uri = "ws://8.138.95.62:8000/api/v1/platform/wss"
     print("发起请求")
     while True:
         try:
@@ -87,7 +87,7 @@ async def generate_request(data):
     query_string = urllib.parse.urlencode(query_params)
 
     # 内网服务器的IP地址和端口
-    INTERNAL_SERVER_IP = "192.168.0.73"
+    INTERNAL_SERVER_IP = "192.168.0.60"
     INTERNAL_SERVER_PORT = "8081"
 
     # 构建完整的URL
