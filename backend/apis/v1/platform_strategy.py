@@ -29,7 +29,7 @@ from utils.common import fetch_trading_data, PandasData, get_entities_list, gene
 from utils.public_strategy import ComprehensiveAnalyzer
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
-from utils.trader_report_calculate import extract_transactions, generate_trader_report
+from utils.trader_report_calculate import extract_transactions, generate_trader_report, normalize_to_float
 
 router = APIRouter()
 
@@ -702,7 +702,7 @@ async def fetch_floating_profit(request: Request):
                     elif not trade.get("closeTime", None) and trade.get("tradeid", None) not in seen_tradeids:
                         unique_open_trades.append(trade)
 
-                starting_cash = starting_cash
+                starting_cash = normalize_to_float(starting_cash)
                 # === 遍历 K 线计算浮动盈亏 ===
                 for kline in kline_datas:
                     current_price = kline["close"]  # K 线收盘价
