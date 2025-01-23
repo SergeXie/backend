@@ -339,6 +339,13 @@ def extract_order_prefixes(value_):
         return prefix
 
 
+def normalize_to_float(value):
+    if isinstance(value, str):
+        # 去除空格并转换为浮点数
+        return float(value.replace(" ", ""))
+    return float(value)  # 如果已经是浮点数，则直接返回
+
+
 def generate_trader_report(soup, account_list):
     """
     生成交易报告
