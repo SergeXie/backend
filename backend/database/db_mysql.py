@@ -14,9 +14,21 @@ def create_engine_and_session(url: Union[str, URL]):
 
         # u12VxHdAT38UEa67Kc
         # 数据库引擎
-        engine = create_async_engine("mysql+aiomysql://cmdb:cmdb123456@192.168.0.126:3306/dql?charset=utf8mb4",
-                                     echo=False, future=True, pool_pre_ping=True)
+        # engine = create_async_engine("mysql+aiomysql://cmdb:cmdb123456@192.168.0.126:3306/dql?charset=utf8mb4",
+        #                              echo=False, future=True, pool_pre_ping=True)
+
+        engine = create_async_engine(
+            "mysql+aiomysql://cmdb:cmdb123456@192.168.0.126:3306/dql?charset=utf8mb4",
+            echo=False,
+            future=True,
+            pool_pre_ping=True,  # 连接获取前检测是否可用，防止失效连接
+            pool_recycle=1800,  # 30 分钟后回收连接，防止 MySQL 连接超时
+            pool_size=10,  # 连接池最大连接数，适用于高并发
+            max_overflow=5,  # 连接池最大溢出数，可创建额外连接数
+            pool_timeout=30,  # 获取连接的超时时间，防止阻塞
+        )
         log.success('数据库连接成功')
+
     except Exception as e:
         info = traceback.format_exc()
         print("bug:{}".format(info))

@@ -675,7 +675,6 @@ async def indicator_goods_kline(request: Request):
     :return:
     """
     returndata = await get_indicator_data(request, "PeriodKLines", name=None)
-    print(returndata)
     indicator_data_list = returndata['data']
 
     need_compared_Data = []  # 将需要对比的数据加载到这里
@@ -710,6 +709,7 @@ async def indicator_goods_kline(request: Request):
     result['data'] = diff
     # print('result', result)
     return await response_base.success(data=result)
+
 
 # 求对称差集
 def symmetric_difference(lst1, lst2):

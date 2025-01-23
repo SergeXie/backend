@@ -192,7 +192,7 @@ class DqlStrategyTestResult(Base):
     newReportTemplate: Mapped[str] = mapped_column(LONGTEXT, nullable=False, comment='新报告模板')
 
     traderReportType: Mapped[int] = mapped_column(Integer, nullable=False, index=True,
-                                                  comment='交易报告上传类型  0 手动上传  1 自动上传  其他为系统报告')
+                                                  comment='交易报告上传类型  2 手动上传  1 自动上传  其他为系统报告')
 
     createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
                                                  server_default='CURRENT_TIMESTAMP', comment='创建时间')

@@ -6,8 +6,7 @@ import re
 import sys
 import traceback
 import shutil
-from collections import defaultdict
-
+from collections import defaultdict, namedtuple
 import chardet
 import backtrader as bt
 import pandas as pd
@@ -17,20 +16,20 @@ from fastapi import APIRouter, Query, HTTPException, UploadFile, File
 from sqlalchemy import select, desc, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
+from starlette.responses import Response
 from apis.v1.platform import model_classes
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
 from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DqlIndicators, TradingStrategy, DplGoodsTest
+from schemas.platorm_strategr_schemas import TestResultRequest
 from utils.common import fetch_trading_data, PandasData, get_entities_list, generate_random_string, \
     generate_lazy_pinyin, indicator_classes, \
-    to_float, match_filter_data, match_ratio, format_datetime, select_goods_common, select_kline_data
+    to_float, format_datetime, select_goods_common, select_kline_data
 from utils.public_strategy import ComprehensiveAnalyzer
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
-from utils.trader_report_calculate import calculate_consecutive_win_loss, calculate_trade_metrics, calculate_plr, \
-    calculate_mdr, calculate_max_fur, calculate_additional_metrics, calculate_metrics, extract_order_prefixes, \
-    extract_transactions, generate_trader_report
+from utils.trader_report_calculate import extract_transactions, generate_trader_report
 
 router = APIRouter()
 
@@ -127,7 +126,7 @@ async def create_strategy_record(db: AsyncSession, indicator_data_request, strat
 
     except Exception as e:
         info = traceback.format_exc()
-        log.info("策略存储插入数据库失败：{}".format(info))
+        log.error("策略存储插入数据库失败：{}".format(info))
         await db.rollback()  # 如果发生异常，回滚事务
         await db.close()
         return None
@@ -247,7 +246,7 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
 
     except Exception as e:
         info = traceback.format_exc()
-        log.info("策略结果插入数据库失败：{}".format(info))
+        log.error("策略结果插入数据库失败：{}".format(info))
         await db.rollback()  # 如果发生异常，回滚事务
         await db.close()
         return None
@@ -304,15 +303,15 @@ async def view_strategy_code(uid: str):
             except UnicodeDecodeError as e:
                 return await response_base.fail(code=400, msg=f"Error reading file: {str(e)}")
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+                log.info("系统错误：{}".format(e))
+                return Response(status_code=500, content="系统错误")
 
-            # return FileResponse(file_path, media_type="text/plain")
             return await response_base.success(data={"code": content})
 
     except Exception as e:
         info = traceback.format_exc()
         log.error(f"获取文件内容错误：{info}")
-        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+        return Response(status_code=500, content="系统错误")
 
 
 @router.post("/custom/upload", name="自定义策略文件上传")
@@ -354,7 +353,7 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         info = traceback.format_exc()
         log.error(f"上传文件错误：{info}")
-        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+        return Response(status_code=500, content="系统错误")
 
 
 @router.post("/custom/update", name="自定义策略更新")
@@ -428,11 +427,11 @@ async def upload_file_update(request: Request):
         info = traceback.format_exc()
         log.error(f"更新策略错误：{info}")
         await db.rollback()  # 如果发生异常，回滚事务
-        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+        return Response(status_code=500, content="系统错误")
 
 
 @router.post("/testResultList", name="历史回测列表")
-async def test_result_list(request: Request):
+async def test_result_list(params: TestResultRequest):
     """
     :param pageNo:
     :param pageSize:
@@ -443,18 +442,7 @@ async def test_result_list(request: Request):
     :return:
     """
 
-    data_request = await request.json()
-
-    pageSize = data_request.get("pageSize")
-    pageNo = data_request.get("pageNo")
-    goods = data_request.get("goods", '%')
-    period = data_request.get("period", '%')
-    strategyUid = data_request.get("strategyUid", '%')
-    orderBy = data_request.get("orderBy", 0)
-    status = data_request.get("status", 1)  # 是否有效 1 入库有效 0 已入库未生效
-    screens = data_request.get("screens", [])  # 筛选
-
-    orderDict = {
+    order_dict = {
         0: DqlStrategyTestResult.createTime.desc(),
         1: DqlStrategyTestResult.yieldRate,
         -1: desc(DqlStrategyTestResult.yieldRate),
@@ -467,57 +455,90 @@ async def test_result_list(request: Request):
     }
 
     async with async_db_session() as db:
-        query = select(DqlStrategyTestResult).where(
+
+        query = select(
+            DqlStrategyTestResult.uid,
+            DqlStrategyTestResult.strategyUid,
+            DqlStrategyTestResult.goodsId,
+            DqlStrategyTestResult.period,
+            DqlStrategyTestResult.parameter,
+            DqlStrategyTestResult.startTime,
+            DqlStrategyTestResult.endTime,
+            DqlStrategyTestResult.createTime,
+            DqlStrategyTestResult.tradeCount,
+            DqlStrategyTestResult.pnl,
+            DqlStrategyTestResult.plr,
+            DqlStrategyTestResult.winRate,
+            DqlStrategyTestResult.yieldRate,
+            DqlStrategyTestResult.avgProfit,
+            DqlStrategyTestResult.mdr,
+            DqlStrategyTestResult.isBursted,
+            DqlStrategyTestResult.maxFUR,
+            DqlStrategyTestResult.score,
+            DqlStrategyTestResult.paramsStrName,
+            DqlStrategyTestResult.weight,
+            DqlStrategyTestResult.weightNotes,
+            DqlStrategyTestResult.status,
+            DqlStrategyTestResult.title,
+            DqlStrategyTestResult.traderReportType,
+            DqlStrategyTestResult.maxProfit,
+            DqlStrategyTestResult.maxLoss,
+        ).where(
             DqlStrategyTestResult.is_delete == 0,
-            DqlStrategyTestResult.status == status
+            DqlStrategyTestResult.status == params.status
         )
 
-        # 对goods字段处理，如果不是'%'，则添加过滤条件
-        if goods != '%':
-            query = query.where(DqlStrategyTestResult.goodsId.like(goods))
+        if params.trader_report_type:
+            if params.trader_report_type == 3:  # 系统
+                query = query.where(DqlStrategyTestResult.traderReportType == None)
+            else:
+                query = query.where(DqlStrategyTestResult.traderReportType == params.trader_report_type)
+        if params.goods != '%':
+            query = query.where(DqlStrategyTestResult.goodsId.like(params.goods))
 
-        # 对period字段处理，如果不是'%'，则添加过滤条件
-        if period != '%':
-            query = query.where(DqlStrategyTestResult.period.like(period))
+        if params.period != '%':
+            query = query.where(DqlStrategyTestResult.period.like(params.period))
 
-        # 对strategyUid字段处理，如果不是'%'，则添加过滤条件
-        if strategyUid != '%':
-            query = query.where(DqlStrategyTestResult.strategyUid == strategyUid)
+        if params.strategy_uid != '%':
+            query = query.where(DqlStrategyTestResult.strategyUid == params.strategy_uid)
 
-        for screen in screens:
-            name = getattr(DqlStrategyTestResult, screen['name'])
-            value = screen['value']
-            name_value = screen['nameValue']
-            if name_value == '>=':
-                query = query.where(name >= value)
-            elif name_value == '<=':
-                query = query.where(name <= value)
-            elif name_value == '>':
-                query = query.where(name > value)
-            elif name_value == '<':
-                query = query.where(name < value)
-            elif name_value == '=':
-                query = query.where(name == value)
+        # 处理筛选条件
+        filter_mapping = {
+            ">=": lambda field, val: field >= val,
+            "<=": lambda field, val: field <= val,
+            ">": lambda field, val: field > val,
+            "<": lambda field, val: field < val,
+            "=": lambda field, val: field == val,
+        }
 
-        # Calculate total count before applying offset and limit
+        # "screens":[{"name":"winRate","nameValue":">=","value":5}]
+        for screen in params.screens:
+            field = getattr(DqlStrategyTestResult, screen.name, None)
+            if field and screen.nameValue in filter_mapping:
+                query = query.where(filter_mapping[screen.nameValue](field, screen.value))
+
+        # 计算总数
         total_count = await db.scalar(select(func.count()).select_from(query.subquery()))
 
-        # Apply order, offset, and limit only if pagination is provided
-        if pageSize is not None and pageNo is not None:
-            offset = (pageNo - 1) * pageSize
-            query = query.order_by(desc(DqlStrategyTestResult.weight), orderDict[orderBy]
-                                   ).offset(offset).limit(pageSize)
-        else:
-            query = query.order_by(desc(DqlStrategyTestResult.weight), orderDict[orderBy])
+        # 分页与排序
+        offset = (params.page_no - 1) * params.page_size
+        query = query.order_by(desc(DqlStrategyTestResult.weight), order_dict[params.order_by])
+        query = query.offset(offset).limit(params.page_size)
 
-        dql_strategy_all = await db.execute(query)
-        results = dql_strategy_all.fetchall()
+        # 定义字段名称
+        TestResult = namedtuple("TestResult", [
+            "uid", "strategyUid", "goodsId", "period", "parameter", "startTime",
+            "endTime", "createTime", "tradeCount", "pnl", "plr", "winRate", "yieldRate", "avgProfit",
+            "mdr", "isBursted", "maxFUR", "score", "paramsStrName", "weight",
+            "weightNotes", "status", "title", "traderReportType", "maxProfit", "maxLoss"
+        ])
 
-        results_list = []
+        results = (await db.execute(query)).fetchall()
+        results = [TestResult(*data) for data in results]  # 把元组转换为 namedtuple
 
-        for data in results:
-            data = data[0]
-            result_dict = {
+        # 处理查询结果
+        results_list = [
+            {
                 "testerUids": data.uid,
                 "strategyUid": data.strategyUid,
                 "goods": data.goodsId,
@@ -526,7 +547,7 @@ async def test_result_list(request: Request):
                 "startTime": data.startTime.strftime('%Y-%m-%d %H:%M:%S'),
                 "endTime": data.endTime.strftime('%Y-%m-%d %H:%M:%S'),
                 "createTime": data.createTime.strftime('%Y-%m-%d %H:%M:%S'),
-                "totalTrades": json.loads(data.traderResult).get("traderReport", {}).get("totalTrades", 0),
+                "totalTrades": data.tradeCount,
                 "pnl": data.pnl,
                 "plr": data.plr,
                 "winRate": data.winRate,
@@ -542,19 +563,20 @@ async def test_result_list(request: Request):
                 "status": data.status,
                 "name": data.title,
                 "traderReportType": data.traderReportType,
+                "largestProfit": data.maxProfit,  # 最大每手盈利
+                "largestLoss": data.maxLoss  # 最大每手亏损
             }
+            for data in results
+        ]
 
-            trader_result = json.loads(data.traderResult).get("traderReport", {})
-            largest_profit = float(trader_result.get("largestProfit", 0))
-            largest_loss = float(trader_result.get("largestLoss", 0))
-            result_dict["largestProfit"] = float(f"{largest_profit:.3f}")
-            result_dict["largestLoss"] = float(f"{largest_loss:.3f}")
-
-            results_list.append(result_dict)
-
-        data = {"code": 200, "message": "Success", "pageNo": pageNo, "pageSize": pageSize,
-                "data": results_list, "total": total_count}
-        return data
+        return {
+            "code": 200,
+            "message": "Success",
+            "pageNo": params.page_no,
+            "pageSize": params.page_size,
+            "data": results_list,
+            "total": total_count,
+        }
 
 
 @router.post("/fetchTesterResult", name="获取回测结果")
@@ -607,6 +629,7 @@ async def fetch_tester_result(request: Request):
                 data_dict["weightNotes"] = data.weightNotes
                 data_dict["newReportTemplate"] = json.loads(data.newReportTemplate) if data.newReportTemplate else None
                 data_dict["createTime"] = data.createTime.strftime('%Y-%m-%d %H:%M:%S')
+                data_dict["traderReportType"] = data.traderReportType
 
                 result_data.append(data_dict)
 
@@ -733,6 +756,7 @@ async def fetch_floating_profit(request: Request):
         log.error(f"获取回测时间范围内浮动盈亏错误：{info}")
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
+
 @router.post("/syncBatchTest", name="策略批量回测(同步)")
 async def indicator_sync_batch_test(request: Request):
     strategy_data_requests = await request.json()
@@ -800,8 +824,8 @@ async def indicator_sync_batch_test(request: Request):
 
             except Exception as e:
                 info = traceback.format_exc()
-                log.info("策略结果插入数据库失败信息：{}".format(info))
-                log.info("请求参数信息：{}".format(strategy_data_requests))
+                log.error("策略结果插入数据库失败信息：{}".format(info))
+                log.error("请求参数信息：{}".format(strategy_data_requests))
                 await db.rollback()  # 如果发生异常，回滚事务
                 raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
@@ -971,7 +995,7 @@ async def save_test_result(request: Request):
 
     except Exception as e:
         info = traceback.format_exc()
-        log.info("策略结果入库数据库失败信息：{}".format(info))
+        log.error("策略结果入库数据库失败信息：{}".format(info))
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 
@@ -1012,7 +1036,7 @@ async def save_all_test_result(request: Request):
 
     except Exception as e:
         info = traceback.format_exc()
-        log.info("策略结果全部入库数据库失败信息：{}".format(info))
+        log.error("策略结果全部入库数据库失败信息：{}".format(info))
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 
@@ -1091,197 +1115,90 @@ async def submit_trader_report(request: Request):
     :param request:
     :return:
     """
-    data_json = await request.json()
-    file_path = data_json.get("file_path", None)  # 文件名
-    uid = data_json.get("uid", None)  # 策略uid
-    goods = data_json.get("goods", None)  # 交易品种
-    period = data_json.get("period", None)  # 周期
-    startTime = data_json.get("startTime", None)  # 开始时间
-    endTime = data_json.get("endTime", None)  # 结束时间
-    upload_type = data_json.get("uploadType", "0")  # 上传类型
+    try:
+        data_json = await request.json()
+        file_path = data_json.get("file_path", None)  # 文件名
+        uid = data_json.get("uid", None)  # 策略uid
+        goods = data_json.get("goods", None)  # 交易品种
+        period = data_json.get("period", None)  # 周期
+        startTime = data_json.get("startTime", None)  # 开始时间
+        endTime = data_json.get("endTime", None)  # 结束时间
+        upload_type = data_json.get("uploadType", "0")  # 上传类型
 
-    # 检查文件是否存在
-    if not os.path.exists(file_path):
-        return await response_base.fail(msg="文件路径不存在")
+        # 检查文件是否存在
+        if not os.path.exists(file_path):
+            return await response_base.fail(msg="文件路径不存在")
 
-    # 检测文件编码
-    with open(file_path, 'rb') as file:
-        raw_data = file.read()
-        encoding = chardet.detect(raw_data)['encoding']
+        # 检测文件编码
+        with open(file_path, 'rb') as file:
+            raw_data = file.read()
+            encoding = chardet.detect(raw_data)['encoding']
 
-    # 解析HTML
-    with open(file_path, 'r', encoding=encoding) as file:
-        soup = BeautifulSoup(file, 'html.parser')
-    async with async_db_session() as db:
-        account_list = []
-        # 提取账户信息
-        account_info_row = soup.find('tr', align='left')
-        # 账户信息（保留部分）
-        if account_info_row:
-            account_info_columns = account_info_row.find_all('td')
-            account = account_info_columns[0].text.replace('Account:', '').strip()
-            name = account_info_columns[2].text.replace('Name:', '').strip()
-            currency = account_info_columns[4].text.replace('Currency:', '').strip()
+        # 解析HTML
+        with open(file_path, 'r', encoding=encoding) as file:
+            soup = BeautifulSoup(file, 'html.parser')
+        async with async_db_session() as db:
+            account_list = []
+            # 提取账户信息
+            account_info_row = soup.find('tr', align='left')
+            # 账户信息（保留部分）
+            if account_info_row:
+                account_info_columns = account_info_row.find_all('td')
+                account = account_info_columns[0].text.replace('Account:', '').strip()
+                name = account_info_columns[2].text.replace('Name:', '').strip()
+                currency = account_info_columns[4].text.replace('Currency:', '').strip()
 
-            leverage = '1'
-            if len(account_info_columns) > 6:
-                leverage_text = account_info_columns[6].text.replace('Leverage:', '').strip()
-                if leverage_text:
-                    leverage = leverage_text
+                leverage = '1'
+                if len(account_info_columns) > 6:
+                    leverage_text = account_info_columns[6].text.replace('Leverage:', '').strip()
+                    if leverage_text:
+                        leverage = leverage_text
 
-            datetime_value = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            if len(account_info_columns) > 12:
-                datetime_text = account_info_columns[12].text.strip()
-                if datetime_text:
-                    parsed_datetime = datetime.strptime(datetime_text, '%Y %B %d, %H:%M')
-                    datetime_value = parsed_datetime.strftime('%Y-%m-%d %H:%M:%S')
+                datetime_value = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                if len(account_info_columns) > 12:
+                    datetime_text = account_info_columns[12].text.strip()
+                    if datetime_text:
+                        parsed_datetime = datetime.strptime(datetime_text, '%Y %B %d, %H:%M')
+                        datetime_value = parsed_datetime.strftime('%Y-%m-%d %H:%M:%S')
 
-            # account_info = {
-            #     'account': account,
-            #     'name': name,
-            #     'currency': currency,
-            #     'leverage': leverage,
-            #     'createTime': datetime_value
-            # }
+            # 查询策略
+            if upload_type == "0":  # 手动上传需要判断！
+                strategy = await fetch_indicators(db, uid)
+                if not strategy:
+                    return await response_base.fail(code=400, msg=f"提交失败,未找到存在策略！", data=[])
 
-        # 查询策略
-        if upload_type == "0":  # 手动上传需要判断！
-            strategy = await fetch_indicators(db, uid)
-            if not strategy:
-                return await response_base.fail(code=400, msg=f"提交失败,未找到存在策略！", data=[])
+                closed_transactions_header = soup.find('b', string='Closed Transactions:')
+                open_transactions_header = soup.find('b', string='Open Trades:')
 
-            closed_transactions_header = soup.find('b', string='Closed Transactions:')
-            open_transactions_header = soup.find('b', string='Open Trades:')
+                closed_transactions = extract_transactions(closed_transactions_header, stop_text='Closed P/L:')
+                open_transactions = extract_transactions(open_transactions_header, stop_text='Floating P/L:')
 
-            closed_transactions = extract_transactions(closed_transactions_header, stop_text='Closed P/L:')
-            open_transactions = extract_transactions(open_transactions_header, stop_text='Floating P/L:')
+                account_list.extend(closed_transactions)
+                account_list.extend(open_transactions)
 
-            account_list.extend(closed_transactions)
-            account_list.extend(open_transactions)
-
-            # 提取报告数据
-            trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, account_list)
-
-            try:
-                # 创建策略结果记录
-                add_strategy_record = DqlStrategyTestResult(
-                    uid=generate_random_string("TR"),
-                    title=strategy.name,
-                    notes=strategy.description,
-                    strategyUid=uid,
-                    goodsId=goods,
-                    period=period,
-                    startTime=startTime,
-                    endTime=endTime,
-                    traderResult=json.dumps(
-                        {
-                            "traderResult": account_list,
-                            "traderReport": trader_report,
-                            "floatingPointValues": [],
-                            "netAssetValues": []
-                        }
-                    ),
-                    parameter=json.dumps(data_json.get("parameter", {})),
-                    isBursted=0, status=0, yieldRate=trader_report["yieldRate"],
-                    mdr=trader_report["mdr"], winRate=trader_report["winRate"],
-                    plr=trader_report["plr"], tradeCount=additional_metrics["tradeCount"],
-                    pnl=additional_metrics["pnl"], maxProfit=additional_metrics["maxProfit"],
-                    maxLoss=additional_metrics["maxLoss"], avgProfit=trader_report["avgProfit"],
-                    maxFUR=trader_report["max_fur"], score=0,
-                    is_delete=0, spread=0,
-                    leverage=leverage,
-                    calculationStatus=1,
-                    newReportTemplate=json.dumps(newReportTemplate),
-                    traderReportType=upload_type
-                )
-                db.add(add_strategy_record)
-                await db.commit()
-                log.info("手动上传交易报告入库成功：策略UID {}".format(strategy.uid))
-
-            except Exception as e:
-                info = traceback.format_exc()
-                log.info("交易报告提交失败：{}".format(info))
-                await db.rollback()  # 如果发生异常，回滚事务
-                await db.close()
-                return await response_base.fail(msg="提交失败！错误信息：{}".format(e))
-
-        else:
-            # 自动部分
-            transactions = []
-            grouped_transactions = defaultdict(list)
-
-            rows = soup.find_all('tr', align='right')
-            identifiers = []
-
-            # 遍历所有交易行，提取交易信息
-            for row in rows:
-                cols = row.find_all('td')
-                if len(cols) >= 14:  # 检查列数，确保是交易数据行
-                    transaction = {
-                        'tradeid': cols[0].text.strip() if len(cols) > 0 else 0,
-                        'timestamp': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
-                        'openTime': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
-                        'orderType': cols[2].text.strip() if len(cols) > 2 else '0',
-                        'goodsId': cols[4].text.strip() if len(cols) > 4 else None,
-                        'size': to_float(cols[3].text.strip()) if len(cols) > 3 else 0.0,
-                        'openPrice': to_float(cols[5].text.strip()) if len(cols) > 5 else 0.0,
-                        'stopLoss': to_float(cols[6].text.strip()) if len(cols) > 6 else 0.0,
-                        'takeProfit': to_float(cols[7].text.strip()) if len(cols) > 7 else 0.0,
-                        'closeTime': format_datetime(cols[8].text.strip()) if len(cols) > 8 else None,
-                        'price': to_float(cols[9].text.strip()) if len(cols) > 9 else 0.0,
-                        'commission': to_float(cols[10].text.strip()) if len(cols) > 10 else 0.0,
-                        'taxes': to_float(cols[11].text.strip()) if len(cols) > 11 else 0.0,
-                        'swap': to_float(cols[12].text.strip()) if len(cols) > 12 else 0.0,
-                        'pnl': to_float(cols[13].text.strip()) if len(cols) > 13 else 0.0,
-                    }
-                    transactions.append(transaction)
-
-                elif len(cols) == 3:  # 如果是标识符行，保存标识符
-                    identifiers.append(cols[2].text.strip())
-
-            # 一一对应交易和标识符
-            for transaction, identifier in zip(transactions, identifiers):
-                key = identifier.split('@')[0]  # 提取 @ 前面的部分
-                transaction['identifier'] = identifier
-                grouped_transactions[key].append(transaction)
-
-            if not grouped_transactions:
-                return await response_base.fail(msg="该文件不支持自动上传提交，未提取到关键信息部分")
-
-            for identifier, orders in grouped_transactions.items():
                 # 提取报告数据
-                trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, orders)
+                trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, account_list)
 
-                # 添加入库
                 try:
-                    # 自动上传，根据 trading_strategy_uid_list 进行查询交易策略表的uid
-                    trading_strategy_db = await db.execute(select(TradingStrategy).filter(
-                        TradingStrategy.tradeUid == key))
-
-                    trading_strategy_datas = trading_strategy_db.scalars().first()
-                    if not trading_strategy_datas:
-                        return await response_base.fail(msg="提交的交易策略UID未存在数据库中！")
-
-                    strategy = await fetch_indicators(db, trading_strategy_datas.strategyUid)
                     # 创建策略结果记录
                     add_strategy_record = DqlStrategyTestResult(
                         uid=generate_random_string("TR"),
                         title=strategy.name,
                         notes=strategy.description,
-                        strategyUid=trading_strategy_datas.strategyUid,
-                        goodsId=trading_strategy_datas.goods,
-                        period=trading_strategy_datas.period,
+                        strategyUid=uid,
+                        goodsId=goods,
+                        period=period,
                         startTime=startTime,
                         endTime=endTime,
                         traderResult=json.dumps(
                             {
-                                "traderResult": orders,
+                                "traderResult": account_list,
                                 "traderReport": trader_report,
                                 "floatingPointValues": [],
                                 "netAssetValues": []
                             }
                         ),
-                        parameter=trading_strategy_datas.parameter,
+                        parameter=json.dumps(data_json.get("parameter", {})),
                         isBursted=0, status=0, yieldRate=trader_report["yieldRate"],
                         mdr=trader_report["mdr"], winRate=trader_report["winRate"],
                         plr=trader_report["plr"], tradeCount=additional_metrics["tradeCount"],
@@ -1292,19 +1209,183 @@ async def submit_trader_report(request: Request):
                         leverage=leverage,
                         calculationStatus=1,
                         newReportTemplate=json.dumps(newReportTemplate),
-                        traderReportType=upload_type
-
+                        traderReportType=2
                     )
                     db.add(add_strategy_record)
                     await db.commit()
-                    log.info("自动上传交易报告入库成功：交易策略 {}".format(trading_strategy_datas.strategyUid))
+                    log.info("手动上传交易报告入库成功：策略UID {}".format(strategy.uid))
 
                 except Exception as e:
                     info = traceback.format_exc()
-                    log.info("交易报告提交失败：{}".format(info))
+                    log.error("交易报告提交失败：{}".format(info))
                     await db.rollback()  # 如果发生异常，回滚事务
                     await db.close()
                     return await response_base.fail(msg="提交失败！错误信息：{}".format(e))
 
-        return await response_base.success()
+            else:
+                # 自动解析HTML部分
+                transactions = []
+                grouped_transactions = defaultdict(list)
+                rows = soup.find_all('tr', align='right')
 
+                identifiers = []
+                # 遍历所有交易行，提取交易信息
+                for row in rows:
+                    cols = row.find_all('td')
+                    if len(cols) >= 14:  # 检查列数，确保是交易数据行
+                        transaction = {
+                            'tradeid': cols[0].text.strip() if len(cols) > 0 else 0,
+                            'timestamp': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
+                            'openTime': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
+                            'orderType': cols[2].text.strip() if len(cols) > 2 else '0',
+                            'goodsId': cols[4].text.strip() if len(cols) > 4 else None,
+                            'size': to_float(cols[3].text.strip()) if len(cols) > 3 else 0.0,
+                            'openPrice': to_float(cols[5].text.strip()) if len(cols) > 5 else 0.0,
+                            'stopLoss': to_float(cols[6].text.strip()) if len(cols) > 6 else 0.0,
+                            'takeProfit': to_float(cols[7].text.strip()) if len(cols) > 7 else 0.0,
+                            'closeTime': format_datetime(cols[8].text.strip()) if len(cols) > 8 else None,
+                            'price': to_float(cols[9].text.strip()) if len(cols) > 9 else 0.0,
+                            'commission': to_float(cols[10].text.strip()) if len(cols) > 10 else 0.0,
+                            'taxes': to_float(cols[11].text.strip()) if len(cols) > 11 else 0.0,
+                            'swap': to_float(cols[12].text.strip()) if len(cols) > 12 else 0.0,
+                            'pnl': to_float(cols[13].text.strip()) if len(cols) > 13 else 0.0,
+                        }
+                        transactions.append(transaction)
+
+                    elif len(cols) == 3:  # 如果是标识符行，保存标识符
+                        identifiers.append(cols[2].text.strip())
+
+                # 一一对应交易和标识符
+                for transaction, identifier in zip(transactions, identifiers):
+                    key = identifier.split('@')[0]  # 提取 @ 前面的部分 例如: NTROILM5S0001@1737024960@
+                    transaction['identifier'] = identifier
+                    grouped_transactions[key].append(transaction)
+
+                if not grouped_transactions:
+                    return await response_base.fail(msg="该文件不支持自动上传提交，未提取到关键信息部分")
+
+                async with db.begin():  # 开启事务
+                    for identifier, orders in grouped_transactions.items():
+                        print("orders:{}".format(orders))
+
+                        # 提取报告数据
+                        trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, orders)
+                        # 添加入库
+                        try:
+                            # 自动上传，根据 trading_strategy_uid_list 进行查询交易策略表的uid
+                            trading_strategy_db = await db.execute(select(TradingStrategy).filter(
+                                TradingStrategy.tradeUid == identifier))
+
+                            trading_strategy_datas = trading_strategy_db.scalars().first()
+                            if not trading_strategy_datas:
+                                return await response_base.fail(msg="提交的交易策略UID未存在数据库中！")
+                            try:
+                                # 计算回测指标
+                                # ------回测指标部分--------
+                                # 查询策略
+                                strategys = await fetch_indicators(db, trading_strategy_datas.strategyUid)
+                                # 查询范围数据
+                                trading_data = await fetch_trading_data(
+                                    db, trading_strategy_datas.goods,trading_strategy_datas.period,model_classes,
+                                    begin_time=startTime,end_time=endTime, class_name=json.loads(strategys.className))
+                                if not trading_data:
+                                    continue
+
+                                # 创建backtrader大脑实例
+                                cerebro = bt.Cerebro()
+                                # 数据源处理
+                                df = pd.DataFrame(trading_data)
+                                df['datetime'] = pd.to_datetime(df['datetime'])
+                                df.set_index('datetime', inplace=True)
+                                data = PandasData(dataname=df)
+
+                                # 添加数据源
+                                cerebro.adddata(data)
+
+                                Indicators_subType = None
+                                # 指标数据
+                                indicator_params = {}
+                                if indicator_classes.get(strategys.indicatorsClassName):
+                                    query = await db.execute(select(DqlIndicators).where(
+                                        DqlIndicators.className == strategys.indicatorsClassName))
+
+                                    DqlIndicators_result = query.scalars().first()
+                                    Indicators_subType = DqlIndicators_result.subType
+
+                                    cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),
+                                                        indicator_params, indicator_name=None, comments=None,
+                                                        begin_time=startTime)
+
+                                print("indicator_classes.get(strategys.indicatorsClassName):{}".format(indicator_classes.get(strategys.indicatorsClassName)))
+                                # 综合分析器
+                                cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')
+                                # 添加最大回撤分析器
+                                cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
+
+                                # 运行backtrack
+                                result = cerebro.run(stdstats=True, tradehistory=True)
+
+                                # 指标回测数据
+                                indicator_result_data = result[0].get_analysis()
+                                indicator_data_dict = {
+                                    "startPoint": indicator_result_data[1],
+                                    "endPoint": indicator_result_data[2],
+                                    "buyselldata": indicator_result_data[3] if len(
+                                        indicator_result_data[3:4]) > 0 else {},
+                                    "data": indicator_result_data[0],
+                                    "subType": Indicators_subType
+                                }
+                            except Exception as e:
+                                info = traceback.format_exc()
+                                log.error("计算指标错误：{} 指标className:{}".format(
+                                    info, indicator_classes.get(strategys.indicatorsClassName)))
+                                indicator_data_dict = {}
+
+                            # -------创建策略结果记录-------
+                            add_strategy_record = DqlStrategyTestResult(
+                                uid=generate_random_string("TR"),
+                                title=strategys.name,
+                                notes=strategys.description,
+                                strategyUid=trading_strategy_datas.strategyUid,
+                                goodsId=trading_strategy_datas.goods,
+                                period=trading_strategy_datas.period,
+                                startTime=startTime,
+                                endTime=endTime,
+                                traderResult=json.dumps(
+                                    {
+                                        "traderResult": orders,
+                                        "traderReport": trader_report,
+                                        "floatingPointValues": [],
+                                        "netAssetValues": []
+                                    }
+                                ),
+                                indicatorResult=json.dumps(indicator_data_dict),
+                                parameter=trading_strategy_datas.parameter,
+                                isBursted=0, status=0, yieldRate=trader_report["yieldRate"],
+                                mdr=trader_report["mdr"], winRate=trader_report["winRate"],
+                                plr=trader_report["plr"], tradeCount=additional_metrics["tradeCount"],
+                                pnl=additional_metrics["pnl"], maxProfit=additional_metrics["maxProfit"],
+                                maxLoss=additional_metrics["maxLoss"], avgProfit=trader_report["avgProfit"],
+                                maxFUR=trader_report["max_fur"], score=0,
+                                is_delete=0, spread=0,
+                                leverage=leverage,
+                                calculationStatus=1,
+                                newReportTemplate=json.dumps(newReportTemplate),
+                                traderReportType=1
+
+                            )
+                            db.add(add_strategy_record)
+                        except Exception as e:
+                            info = traceback.format_exc()
+                            log.error("交易报告提交失败：{}".format(info))
+                            await db.rollback()  # 如果发生异常，回滚事务
+                            await db.close()
+                            return await response_base.fail(msg="提交失败！错误信息：{}".format(e))
+
+            log.info("自动上传交易报告入库成功")
+            return await response_base.success()
+
+    except Exception as e:
+        info = traceback.format_exc()
+        log.error("提交交易报告入库数据库失败信息：{}".format(info))
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")

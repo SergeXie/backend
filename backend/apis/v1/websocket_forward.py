@@ -87,7 +87,7 @@ async def generate_request(data):
     query_string = urllib.parse.urlencode(query_params)
 
     # 内网服务器的IP地址和端口
-    INTERNAL_SERVER_IP = "192.168.0.120"
+    INTERNAL_SERVER_IP = "192.168.0.73"
     INTERNAL_SERVER_PORT = "8081"
 
     # 构建完整的URL

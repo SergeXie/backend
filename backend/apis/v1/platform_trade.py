@@ -72,7 +72,7 @@ async def trade_strategy_create(request: Request):
 
     except Exception as e:
         info = traceback.format_exc()
-        log.info("交易策略生成入库数据库失败信息：{}".format(info))
+        log.error("交易策略生成入库数据库失败信息：{}".format(info))
         return await response_base.fail(msg=f"An error occurred: {str(e)}")
 
 
@@ -224,7 +224,7 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
 
     except Exception as e:
         info = traceback.format_exc()
-        log.info("策略结果插入数据库失败：{}".format(info))
+        log.error("策略结果插入数据库失败：{}".format(info))
         await db.rollback()  # 如果发生异常，回滚事务
         await db.close()
         return None
