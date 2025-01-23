@@ -458,7 +458,7 @@ class CommonStrategy(bt.Strategy):
 
         except Exception as e:
             info = traceback.format_exc()
-            log.info("策略计算结果出错！：{}".format(info))
+            log.error("策略计算结果出错！：{}".format(info))
 
     def stop(self):
 
@@ -595,7 +595,7 @@ class CommonStrategy(bt.Strategy):
 
         except Exception as e:
             info = traceback.format_exc()
-            log.info("策略计算结果出错！：{}".format(info))
+            log.error("策略计算结果出错！：{}".format(info))
 
 
 

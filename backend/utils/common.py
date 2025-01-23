@@ -439,7 +439,6 @@ async def fetch_trading_data(db, goods, period, model_classes,
             if class_name is None:
                 class_name = ['None']
             if class_name[0] in need_begintime_class:
-            # if class_name in ["atr_strategy.ATRStrategy"] or class_name in ["atr_strategyv1.ATRStrategy"]:
                 print('提前时间检测')
                 # backtrader ATR回测特定查询，从起始时间再剪一天
                 start_time = datetime.datetime.strptime(begin_time, '%Y-%m-%d %H:%M:%S')

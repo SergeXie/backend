@@ -343,9 +343,6 @@ def generate_trader_report(soup, account_list):
     """
     生成交易报告
     """
-
-    print("account_list:{}".format(account_list))
-
     # 提取报告数据
     trader_report = {
 
