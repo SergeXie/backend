@@ -475,3 +475,30 @@ def generate_trader_report(soup, account_list):
                                                                     "")) if maximal_consecutive_loss_value else 0
 
     return trader_report, additional_metrics, newReportTemplate
+
+
+def data_filters(account_list, startTime, endTime):
+    """
+    根据起始和结束时间过滤 account_list 订单数据，只包含起始和结束时间的订单
+    """
+
+    """
+       根据起始和结束时间过滤 account_list 订单数据，只包含起始和结束时间范围内的订单。
+
+       :param account_list: 订单列表，每个订单包含 timestamp 时间字段
+       :param startTime: 过滤起始时间，字符串格式 "YYYY-MM-DD HH:MM:SS"
+       :param endTime: 过滤结束时间，字符串格式 "YYYY-MM-DD HH:MM:SS"
+       :return: 过滤后的订单列表
+       """
+    # 转换时间为 datetime 对象
+    start_dt = datetime.strptime(startTime, "%Y-%m-%d %H:%M:%S")
+    end_dt = datetime.strptime(endTime, "%Y-%m-%d %H:%M:%S")
+
+    # 过滤数据
+    filtered_list = [
+        order for order in account_list
+        if order.get("timestamp")  # 确保 timestamp 不是 None 或空
+           and start_dt <= datetime.strptime(order["timestamp"], "%Y-%m-%d %H:%M:%S") <= end_dt
+    ]
+
+    return filtered_list
