@@ -29,7 +29,7 @@ from utils.common import fetch_trading_data, PandasData, get_entities_list, gene
 from utils.public_strategy import ComprehensiveAnalyzer
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
-from utils.trader_report_calculate import extract_transactions, generate_trader_report, normalize_to_float
+from utils.trader_report_calculate import extract_transactions, generate_trader_report, normalize_to_float, data_filters
 
 router = APIRouter()
 
@@ -167,6 +167,9 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
 
         # 创建backtrader大脑实例
         cerebro = bt.Cerebro()
+
+        # 启用 cheat-on-close 让市价单在当前K线收盘执行
+        cerebro.broker.set_coc(True)  # 允许市价单在当前K线收盘价执行
 
         # 数据源处理
         df = pd.DataFrame(trading_data)
@@ -1176,8 +1179,10 @@ async def submit_trader_report(request: Request):
                 account_list.extend(closed_transactions)
                 account_list.extend(open_transactions)
 
+                filtered_result = data_filters(account_list, startTime, endTime)
+
                 # 提取报告数据
-                trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, account_list)
+                trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, filtered_result)
 
                 try:
                     # 创建策略结果记录
@@ -1192,7 +1197,7 @@ async def submit_trader_report(request: Request):
                         endTime=endTime,
                         traderResult=json.dumps(
                             {
-                                "traderResult": account_list,
+                                "traderResult": filtered_result,
                                 "traderReport": trader_report,
                                 "floatingPointValues": [],
                                 "netAssetValues": []
