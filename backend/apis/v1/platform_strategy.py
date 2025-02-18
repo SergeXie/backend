@@ -1271,10 +1271,10 @@ async def submit_trader_report(request: Request):
 
                 async with db.begin():  # 开启事务
                     for identifier, orders in grouped_transactions.items():
-                        print("orders:{}".format(orders))
+                        filtered_result = data_filters(orders, startTime, endTime)
 
                         # 提取报告数据
-                        trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, orders)
+                        trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, filtered_result)
                         # 添加入库
                         try:
                             # 自动上传，根据 trading_strategy_uid_list 进行查询交易策略表的uid
@@ -1358,7 +1358,7 @@ async def submit_trader_report(request: Request):
                                 endTime=endTime,
                                 traderResult=json.dumps(
                                     {
-                                        "traderResult": orders,
+                                        "traderResult": filtered_result,
                                         "traderReport": trader_report,
                                         "floatingPointValues": [],
                                         "netAssetValues": []
