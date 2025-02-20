@@ -1,6 +1,6 @@
-import re
-from collections import defaultdict
 from datetime import datetime
+from dateutil import parser
+
 
 from utils.common import format_datetime, to_float, match_filter_data, match_ratio
 
@@ -484,15 +484,14 @@ def data_filters(account_list, startTime, endTime):
 
     """
        根据起始和结束时间过滤 account_list 订单数据，只包含起始和结束时间范围内的订单。
-
        :param account_list: 订单列表，每个订单包含 timestamp 时间字段
        :param startTime: 过滤起始时间，字符串格式 "YYYY-MM-DD HH:MM:SS"
        :param endTime: 过滤结束时间，字符串格式 "YYYY-MM-DD HH:MM:SS"
        :return: 过滤后的订单列表
        """
     # 转换时间为 datetime 对象
-    start_dt = datetime.strptime(startTime, "%Y-%m-%d %H:%M:%S")
-    end_dt = datetime.strptime(endTime, "%Y-%m-%d %H:%M:%S")
+    start_dt = parser.parse(startTime)
+    end_dt = parser.parse(endTime)
 
     # 过滤数据
     filtered_list = [
