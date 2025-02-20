@@ -1274,8 +1274,6 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
                     return await response_base.fail(msg="该文件不支持自动上传提交，未提取到关键信息部分")
 
                 async with db.begin():  # 开启事务
-                    print(f"grouped_transactions:{grouped_transactions}")
-
                     for identifier, orders in grouped_transactions.items():
                         filtered_result = data_filters(orders, startTime, endTime)
 
