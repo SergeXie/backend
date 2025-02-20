@@ -31,9 +31,10 @@ from utils.indicators.bollinger import ResponseBollingerData
 from utils.indicators.ema import ResponseEMAData
 from utils.indicators.btatr import ResponseATRData
 from utils.indicators.rsi import ResponseRSIData
-
 from pypinyin import lazy_pinyin, Style
 from utils.timezone import timezone
+from dateutil import parser
+
 
 # 创建一个带有过期时间的缓存，设置每个缓存条目的过期时间为 60 秒
 cache = TTLCache(maxsize=10000, ttl=3600)
@@ -441,7 +442,8 @@ async def fetch_trading_data(db, goods, period, model_classes,
             if class_name[0] in need_begintime_class:
                 print('提前时间检测')
                 # backtrader ATR回测特定查询，从起始时间再剪一天
-                start_time = datetime.datetime.strptime(begin_time, '%Y-%m-%d %H:%M:%S')
+                start_time = parser.parse(begin_time)
+                end_time = parser.parse(end_time)
 
                 # 减去一个工作日
                 previous_working_day = (pd.Timestamp(start_time) - pd.offsets.BDay()).to_pydatetime()

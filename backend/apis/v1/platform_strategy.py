@@ -12,7 +12,7 @@ import backtrader as bt
 import pandas as pd
 from datetime import datetime
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, Query, HTTPException, UploadFile, File
+from fastapi import APIRouter, Query, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy import select, desc, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
@@ -30,6 +30,7 @@ from utils.public_strategy import ComprehensiveAnalyzer
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
 from utils.trader_report_calculate import extract_transactions, generate_trader_report, normalize_to_float, data_filters
+from dateutil import parser
 
 router = APIRouter()
 
@@ -1113,11 +1114,12 @@ async def trader_report_upload(file: UploadFile = File(...)):
 
 
 @router.post("/submitTraderReport", name="提交交易报告")
-async def submit_trader_report(request: Request):
+async def submit_trader_report(request: Request, background_tasks: BackgroundTasks):
     """
     :param request:
     :return:
     """
+
     try:
         data_json = await request.json()
         file_path = data_json.get("file_path", None)  # 文件名
@@ -1126,6 +1128,9 @@ async def submit_trader_report(request: Request):
         period = data_json.get("period", None)  # 周期
         startTime = data_json.get("startTime", None)  # 开始时间
         endTime = data_json.get("endTime", None)  # 结束时间
+        startTime = parser.parse(startTime).strftime('%Y-%m-%d %H:%M:%S')
+        endTime = parser.parse(endTime).strftime('%Y-%m-%d %H:%M:%S')
+
         upload_type = data_json.get("uploadType", "0")  # 上传类型
 
         # 检查文件是否存在
