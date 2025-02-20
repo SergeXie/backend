@@ -1236,30 +1236,32 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
                 transactions = []
                 grouped_transactions = defaultdict(list)
                 rows = soup.find_all('tr', align='right')
-
                 identifiers = []
                 # 遍历所有交易行，提取交易信息
                 for row in rows:
                     cols = row.find_all('td')
-                    if len(cols) >= 14:  # 检查列数，确保是交易数据行
-                        transaction = {
-                            'tradeid': cols[0].text.strip() if len(cols) > 0 else 0,
-                            'timestamp': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
-                            'openTime': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
-                            'orderType': cols[2].text.strip() if len(cols) > 2 else '0',
-                            'goodsId': cols[4].text.strip() if len(cols) > 4 else None,
-                            'size': to_float(cols[3].text.strip()) if len(cols) > 3 else 0.0,
-                            'openPrice': to_float(cols[5].text.strip()) if len(cols) > 5 else 0.0,
-                            'stopLoss': to_float(cols[6].text.strip()) if len(cols) > 6 else 0.0,
-                            'takeProfit': to_float(cols[7].text.strip()) if len(cols) > 7 else 0.0,
-                            'closeTime': format_datetime(cols[8].text.strip()) if len(cols) > 8 else None,
-                            'price': to_float(cols[9].text.strip()) if len(cols) > 9 else 0.0,
-                            'commission': to_float(cols[10].text.strip()) if len(cols) > 10 else 0.0,
-                            'taxes': to_float(cols[11].text.strip()) if len(cols) > 11 else 0.0,
-                            'swap': to_float(cols[12].text.strip()) if len(cols) > 12 else 0.0,
-                            'pnl': to_float(cols[13].text.strip()) if len(cols) > 13 else 0.0,
-                        }
-                        transactions.append(transaction)
+                    order_type = cols[2].text.strip().lower() if len(cols) > 2 else ''
+                    if len(cols) >= 14 and order_type in ['buy', 'sell']:  # 检查列数，确保是交易数据行
+                        if 'title' in cols[0].attrs:
+                            transaction = {
+                                'tradeid': cols[0].text.strip() if len(cols) > 0 else 0,
+                                'timestamp': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
+                                'openTime': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
+                                'orderType': cols[2].text.strip() if len(cols) > 2 else '0',
+                                'goodsId': cols[4].text.strip() if len(cols) > 4 else None,
+                                'size': to_float(cols[3].text.strip()) if len(cols) > 3 else 0.0,
+                                'openPrice': to_float(cols[5].text.strip()) if len(cols) > 5 else 0.0,
+                                'stopLoss': to_float(cols[6].text.strip()) if len(cols) > 6 else 0.0,
+                                'takeProfit': to_float(cols[7].text.strip()) if len(cols) > 7 else 0.0,
+                                'closeTime': format_datetime(cols[8].text.strip()) if len(cols) > 8 else None,
+                                'price': to_float(cols[9].text.strip()) if len(cols) > 9 else 0.0,
+                                'commission': to_float(cols[10].text.strip()) if len(cols) > 10 else 0.0,
+                                'taxes': to_float(cols[11].text.strip()) if len(cols) > 11 else 0.0,
+                                'swap': to_float(cols[12].text.strip()) if len(cols) > 12 else 0.0,
+                                'pnl': to_float(cols[13].text.strip()) if len(cols) > 13 else 0.0,
+                                "keyid": cols[2].text.strip()
+                            }
+                            transactions.append(transaction)
 
                     elif len(cols) == 3:  # 如果是标识符行，保存标识符
                         identifiers.append(cols[2].text.strip())
@@ -1274,6 +1276,7 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
                     return await response_base.fail(msg="该文件不支持自动上传提交，未提取到关键信息部分")
 
                 async with db.begin():  # 开启事务
+                    # print("grouped_transactions:{}".format(grouped_transactions))
                     for identifier, orders in grouped_transactions.items():
                         filtered_result = data_filters(orders, startTime, endTime)
 
@@ -1295,7 +1298,7 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
                                 strategys = await fetch_indicators(db, trading_strategy_datas.strategyUid)
                                 # 查询范围数据
                                 trading_data = await fetch_trading_data(
-                                    db, trading_strategy_datas.goods,trading_strategy_datas.period,model_classes,
+                                    db, trading_strategy_datas.goods,trading_strategy_datas.period, model_classes,
                                     begin_time=startTime,end_time=endTime, class_name=json.loads(strategys.className))
                                 if not trading_data:
                                     continue
