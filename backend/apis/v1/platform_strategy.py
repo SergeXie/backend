@@ -1119,7 +1119,6 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
     :param request:
     :return:
     """
-
     try:
         data_json = await request.json()
         file_path = data_json.get("file_path", None)  # 文件名
@@ -1288,7 +1287,7 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
 
                             trading_strategy_datas = trading_strategy_db.scalars().first()
                             if not trading_strategy_datas:
-                                return await response_base.fail(msg="提交的交易策略UID未存在数据库中！")
+                                continue
                             try:
                                 # 计算回测指标
                                 # ------回测指标部分--------
