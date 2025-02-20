@@ -1,0 +1,20 @@
+2025-02-20 13:53:49.411 | SUCCESS  | database.db_mysql:create_engine_and_session:30 - 数据库连接成功
+2025-02-20 13:53:59.333 | INFO     | __main__:<module>:8 - 启动
+2025-02-20 13:54:35.772 | SUCCESS  | database.db_mysql:create_engine_and_session:30 - 数据库连接成功
+2025-02-20 13:54:42.381 | INFO     | __main__:<module>:8 - 启动
+2025-02-20 14:00:23.229 | SUCCESS  | database.db_mysql:create_engine_and_session:30 - 数据库连接成功
+2025-02-20 14:00:29.832 | INFO     | __main__:<module>:8 - 启动
+2025-02-20 14:11:32.344 | SUCCESS  | database.db_mysql:create_engine_and_session:30 - 数据库连接成功
+2025-02-20 14:11:38.946 | INFO     | __main__:<module>:8 - 启动
+2025-02-20 14:12:40.873 | SUCCESS  | database.db_mysql:create_engine_and_session:30 - 数据库连接成功
+2025-02-20 14:12:48.296 | INFO     | __main__:<module>:8 - 启动
+2025-02-20 14:16:01.573 | SUCCESS  | database.db_mysql:create_engine_and_session:30 - 数据库连接成功
+2025-02-20 14:20:28.009 | SUCCESS  | database.db_mysql:create_engine_and_session:30 - 数据库连接成功
+2025-02-20 14:20:35.092 | INFO     | __main__:<module>:8 - 启动
+2025-02-20 14:21:28.523 | SUCCESS  | database.db_mysql:create_engine_and_session:30 - 数据库连接成功
+2025-02-20 14:21:35.322 | INFO     | __main__:<module>:8 - 启动
+2025-02-20 14:23:57.341 | INFO     | apis.v1.platform_strategy:submit_trader_report:1221 - 手动上传交易报告入库成功：策略UID CSrft3yrmqUEk3
+2025-02-20 14:23:57.342 | INFO     | apis.v1.platform_strategy:submit_trader_report:1390 - 自动上传交易报告入库成功
+2025-02-20 14:24:42.748 | INFO     | apis.v1.platform_strategy:submit_trader_report:1221 - 手动上传交易报告入库成功：策略UID CSrft3yrmqUEk3
+2025-02-20 14:24:42.748 | INFO     | apis.v1.platform_strategy:submit_trader_report:1390 - 自动上传交易报告入库成功
+2025-02-20 14:25:46.149 | INFO     | apis.v1.platform_strategy:submit_trader_report:1390 - 自动上传交易报告入库成功

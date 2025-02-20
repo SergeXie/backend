@@ -40,7 +40,7 @@ class DeepATRStrategy(CommonStrategy):
         new_model_path = '_'.join(str(i) for i in self.distribution + [kline_goods] + [kline_period])
         print(old_model_path, new_model_path)
 
-        self.model = train_model(self, self.distribution, old_model_path, new_model_path)  # 数据  y的分布  模型路径和名称
+        self.model = train_model(self, self.distribution, old_model_path, new_model_path, from_strategy=True)  # 数据  y的分布  模型路径和名称
         # 编译模型
         self.scaler = joblib.load('scalar02')
 

@@ -2,6 +2,7 @@ import traceback
 import backtrader as bt
 import datetime
 from common.log import log
+from utils.OrderPoint import OrderPoint
 
 
 class ComprehensiveAnalyzer(bt.Analyzer):
@@ -190,6 +191,7 @@ class CommonStrategy(bt.Strategy):
         self.consecutive_wins_list = []
         self.consecutive_losses_list = []
         self.order_point = []
+        self.orderpoint = OrderPoint()
 
         self.trade_ref_dict = {}
 
@@ -597,14 +599,87 @@ class CommonStrategy(bt.Strategy):
             info = traceback.format_exc()
             log.error("策略计算结果出错！：{}".format(info))
 
+    def sell(self, data=None,
+             size=None, price=None, plimit=None,
+             exectype=None, valid=None, tradeid=0, oco=None,
+             trailamount=None, trailpercent=None,
+             parent=None, transmit=True, from_close=False, orderId=None,
+             **kwargs):
+        super().sell()
+        if from_close:
+            # print("close")
+            self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+                                order_type='close',
+                                size=1 if size is None else size,
+                                price=self.data.close[0],
+                                orderId=orderId,
+                                )
+        else:
+            self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+                                order_type='sell',
+                                size=1 if size is None else size,
+                                price=self.data.close[0],
+                                orderId=str(int(self.datas[0].datetime.datetime().timestamp())) if orderId is None else orderId,
+                                )
+            # print("sell")
 
+
+    def buy(self, data=None,
+            size=None, price=None, plimit=None,
+            exectype=None, valid=None, tradeid=0, oco=None,
+            trailamount=None, trailpercent=None,
+            parent=None, transmit=True, from_close=False, orderId=None,
+            **kwargs):
+        super().buy()
+        if from_close:
+            # print("close")
+            self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+                                order_type='close',
+                                size=1 if size is None else size,
+                                price=self.data.close[0],
+                                orderId=orderId,
+                                )
+        else:
+            # print("buy", self.datas[0].datetime.datetime())
+            self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+                                order_type='buy',
+                                size=1 if size is None else size,
+                                price=self.data.close[0],
+                                orderId=str(int(self.datas[0].datetime.datetime().timestamp())) if orderId is None else orderId,
+                                )
+
+    def close(self, data=None, size=None, orderId=None,**kwargs):
+        """
+        增加了参数from_close
+        """
+        if isinstance(data, str):  # 重写部分
+            data = self.getdatabyname(data)
+        elif data is None:
+            data = self.data
+
+        possize = self.getposition(data, self.broker).size
+        size = abs(size if size is not None else possize)
+
+        if orderId is None:
+            orderId = self.orderpoint.orderpoint_list[-1].get('orderId')
+
+        if possize > 0:
+            return self.sell(data=data, size=size, from_close=True, orderId=orderId, **kwargs)  # 重写部分
+        elif possize < 0:
+            return self.buy(data=data, size=size, from_close=True, orderId=orderId, **kwargs)  # 重写部分
+
+        return None
+
+    def get_orderpoint(self):
+        return self.orderpoint.orderpoint_list
 
     def get_analysis(self):
 
         trader_return = {
             'trader_result': self.trader_result,
             'trader_report': self.trader_report,
-            'order_point': self.order_point,
+            # 'order_point': self.order_point,
+            'order_point': self.orderpoint.orderpoint_list,
             'floating_point_values': self.floatingPointValues,
             'net_asset_values': self.netAssetValues,
         }
