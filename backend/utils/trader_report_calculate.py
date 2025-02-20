@@ -58,7 +58,11 @@ def calculate_plr(account_list):
     avg_profit = sum(positive_pnl) / len(positive_pnl) if positive_pnl else 0
     avg_loss = abs(sum(negative_pnl) / len(negative_pnl)) if negative_pnl else 0
 
-    plr = avg_profit / avg_loss if avg_loss > 0 else 0
+    # 如果 avg_profit 或 avg_loss 为0，则替换为1
+    avg_profit = avg_profit if avg_profit != 0 else 1
+    avg_loss = avg_loss if avg_loss != 0 else 1
+
+    plr = avg_profit / avg_loss
 
     return round(plr, 3)
 
