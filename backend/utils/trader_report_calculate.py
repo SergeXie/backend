@@ -44,9 +44,9 @@ def calculate_trade_metrics(account_list, initial_cash):
     avg_profit = total_profit / total_trades if total_trades > 0 else 0
 
     return {
-        'yieldRate': round(yield_rate, 2),
-        'winRate': round(win_rate, 2),
-        'avgProfit': round(avg_profit, 2)
+        'yieldRate': round(yield_rate, 3),
+        'winRate': round(win_rate, 3),
+        'avgProfit': round(avg_profit, 3)
     }
 
 
@@ -60,7 +60,7 @@ def calculate_plr(account_list):
 
     plr = avg_profit / avg_loss if avg_loss > 0 else 0
 
-    return round(plr, 2)
+    return round(plr, 3)
 
 
 # 计算最大回撤率 (mdr)
@@ -73,7 +73,7 @@ def calculate_mdr(account_list, initial_cash):
             drawdown = (peak_value - (initial_cash + trade['pnl'])) / peak_value
             max_drawdown = max(max_drawdown, drawdown)
 
-    return round(max_drawdown, 2)
+    return round(max_drawdown, 3)
 
 
 # 计算最大资金使用率 (maxFUR)
@@ -85,7 +85,7 @@ def calculate_max_fur(account_list):
             margin_used = abs(trade['size'] * (trade['openPrice'] - trade['price']))
             max_fur = max(max_fur, margin_used)
 
-    return round(max_fur, 2)
+    return round(max_fur, 3)
 
 
 def calculate_additional_metrics(account_list):
@@ -350,7 +350,6 @@ def generate_trader_report(soup, account_list):
     """
     # 提取报告数据
     trader_report = {
-
         "startingCash": soup.find(string="Balance:").find_next().text,
         "FreeMargin": soup.find(string="Free Margin:").find_next().text,
         "totalNetProfit": soup.find(string="Total Net Profit:").find_next().text,
