@@ -1129,9 +1129,10 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
         endTime = data_json.get("endTime", None)  # 结束时间
         startTime = parser.parse(startTime).strftime('%Y-%m-%d %H:%M:%S')
         endTime = parser.parse(endTime).strftime('%Y-%m-%d %H:%M:%S')
-
         upload_type = data_json.get("uploadType", "0")  # 上传类型
 
+        print("startTime:{}".format(startTime))
+        print("endTime:{}".format(endTime))
         # 检查文件是否存在
         if not os.path.exists(file_path):
             return await response_base.fail(msg="文件路径不存在")
@@ -1279,120 +1280,119 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
                     # print("grouped_transactions:{}".format(grouped_transactions))
                     for identifier, orders in grouped_transactions.items():
                         filtered_result = data_filters(orders, startTime, endTime)
-
                         # 提取报告数据
                         trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, filtered_result)
-                        # 添加入库
-                        try:
-                            # 自动上传，根据 trading_strategy_uid_list 进行查询交易策略表的uid
-                            trading_strategy_db = await db.execute(select(TradingStrategy).filter(
-                                TradingStrategy.tradeUid == identifier))
-
-                            trading_strategy_datas = trading_strategy_db.scalars().first()
-                            if not trading_strategy_datas:
-                                continue
-                            try:
-                                # 计算回测指标
-                                # ------回测指标部分--------
-                                # 查询策略
-                                strategys = await fetch_indicators(db, trading_strategy_datas.strategyUid)
-                                # 查询范围数据
-                                trading_data = await fetch_trading_data(
-                                    db, trading_strategy_datas.goods,trading_strategy_datas.period, model_classes,
-                                    begin_time=startTime,end_time=endTime, class_name=json.loads(strategys.className))
-                                if not trading_data:
-                                    continue
-
-                                # 创建backtrader大脑实例
-                                cerebro = bt.Cerebro()
-                                # 数据源处理
-                                df = pd.DataFrame(trading_data)
-                                df['datetime'] = pd.to_datetime(df['datetime'])
-                                df.set_index('datetime', inplace=True)
-                                data = PandasData(dataname=df)
-
-                                # 添加数据源
-                                cerebro.adddata(data)
-
-                                Indicators_subType = None
-                                # 指标数据
-                                indicator_params = {}
-                                if indicator_classes.get(strategys.indicatorsClassName):
-                                    query = await db.execute(select(DqlIndicators).where(
-                                        DqlIndicators.className == strategys.indicatorsClassName))
-
-                                    DqlIndicators_result = query.scalars().first()
-                                    Indicators_subType = DqlIndicators_result.subType
-
-                                    cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),
-                                                        indicator_params, indicator_name=None, comments=None,
-                                                        begin_time=startTime)
-
-                                print("indicator_classes.get(strategys.indicatorsClassName):{}".format(indicator_classes.get(strategys.indicatorsClassName)))
-                                # 综合分析器
-                                cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')
-                                # 添加最大回撤分析器
-                                cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
-
-                                # 运行backtrack
-                                result = cerebro.run(stdstats=True, tradehistory=True)
-
-                                # 指标回测数据
-                                indicator_result_data = result[0].get_analysis()
-                                indicator_data_dict = {
-                                    "startPoint": indicator_result_data[1],
-                                    "endPoint": indicator_result_data[2],
-                                    "buyselldata": indicator_result_data[3] if len(
-                                        indicator_result_data[3:4]) > 0 else {},
-                                    "data": indicator_result_data[0],
-                                    "subType": Indicators_subType
-                                }
-                            except Exception as e:
-                                info = traceback.format_exc()
-                                log.error("计算指标错误：{} 指标className:{}".format(
-                                    info, indicator_classes.get(strategys.indicatorsClassName)))
-                                indicator_data_dict = {}
-
-                            # -------创建策略结果记录-------
-                            add_strategy_record = DqlStrategyTestResult(
-                                uid=generate_random_string("TR"),
-                                title=strategys.name,
-                                notes=strategys.description,
-                                strategyUid=trading_strategy_datas.strategyUid,
-                                goodsId=trading_strategy_datas.goods,
-                                period=trading_strategy_datas.period,
-                                startTime=startTime,
-                                endTime=endTime,
-                                traderResult=json.dumps(
-                                    {
-                                        "traderResult": filtered_result,
-                                        "traderReport": trader_report,
-                                        "floatingPointValues": [],
-                                        "netAssetValues": []
-                                    }
-                                ),
-                                indicatorResult=json.dumps(indicator_data_dict),
-                                parameter=trading_strategy_datas.parameter,
-                                isBursted=0, status=0, yieldRate=trader_report["yieldRate"],
-                                mdr=trader_report["mdr"], winRate=trader_report["winRate"],
-                                plr=trader_report["plr"], tradeCount=additional_metrics["tradeCount"],
-                                pnl=additional_metrics["pnl"], maxProfit=additional_metrics["maxProfit"],
-                                maxLoss=additional_metrics["maxLoss"], avgProfit=trader_report["avgProfit"],
-                                maxFUR=trader_report["max_fur"], score=0,
-                                is_delete=0, spread=0,
-                                leverage=leverage,
-                                calculationStatus=1,
-                                newReportTemplate=json.dumps(newReportTemplate),
-                                traderReportType=1
-
-                            )
-                            db.add(add_strategy_record)
-                        except Exception as e:
-                            info = traceback.format_exc()
-                            log.error("交易报告提交失败：{}".format(info))
-                            await db.rollback()  # 如果发生异常，回滚事务
-                            await db.close()
-                            return await response_base.fail(msg="提交失败！错误信息：{}".format(e))
+                #         # 添加入库
+                #         try:
+                #             # 自动上传，根据 trading_strategy_uid_list 进行查询交易策略表的uid
+                #             trading_strategy_db = await db.execute(select(TradingStrategy).filter(
+                #                 TradingStrategy.tradeUid == identifier))
+                #
+                #             trading_strategy_datas = trading_strategy_db.scalars().first()
+                #             if not trading_strategy_datas:
+                #                 continue
+                #             try:
+                #                 # 计算回测指标
+                #                 # ------回测指标部分--------
+                #                 # 查询策略
+                #                 strategys = await fetch_indicators(db, trading_strategy_datas.strategyUid)
+                #                 # 查询范围数据
+                #                 trading_data = await fetch_trading_data(
+                #                     db, trading_strategy_datas.goods,trading_strategy_datas.period, model_classes,
+                #                     begin_time=startTime,end_time=endTime, class_name=json.loads(strategys.className))
+                #                 if not trading_data:
+                #                     continue
+                #
+                #                 # 创建backtrader大脑实例
+                #                 cerebro = bt.Cerebro()
+                #                 # 数据源处理
+                #                 df = pd.DataFrame(trading_data)
+                #                 df['datetime'] = pd.to_datetime(df['datetime'])
+                #                 df.set_index('datetime', inplace=True)
+                #                 data = PandasData(dataname=df)
+                #
+                #                 # 添加数据源
+                #                 cerebro.adddata(data)
+                #
+                #                 Indicators_subType = None
+                #                 # 指标数据
+                #                 indicator_params = {}
+                #                 if indicator_classes.get(strategys.indicatorsClassName):
+                #                     query = await db.execute(select(DqlIndicators).where(
+                #                         DqlIndicators.className == strategys.indicatorsClassName))
+                #
+                #                     DqlIndicators_result = query.scalars().first()
+                #                     Indicators_subType = DqlIndicators_result.subType
+                #
+                #                     cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),
+                #                                         indicator_params, indicator_name=None, comments=None,
+                #                                         begin_time=startTime)
+                #
+                #                 print("indicator_classes.get(strategys.indicatorsClassName):{}".format(indicator_classes.get(strategys.indicatorsClassName)))
+                #                 # 综合分析器
+                #                 cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')
+                #                 # 添加最大回撤分析器
+                #                 cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
+                #
+                #                 # 运行backtrack
+                #                 result = cerebro.run(stdstats=True, tradehistory=True)
+                #
+                #                 # 指标回测数据
+                #                 indicator_result_data = result[0].get_analysis()
+                #                 indicator_data_dict = {
+                #                     "startPoint": indicator_result_data[1],
+                #                     "endPoint": indicator_result_data[2],
+                #                     "buyselldata": indicator_result_data[3] if len(
+                #                         indicator_result_data[3:4]) > 0 else {},
+                #                     "data": indicator_result_data[0],
+                #                     "subType": Indicators_subType
+                #                 }
+                #             except Exception as e:
+                #                 info = traceback.format_exc()
+                #                 log.error("计算指标错误：{} 指标className:{}".format(
+                #                     info, indicator_classes.get(strategys.indicatorsClassName)))
+                #                 indicator_data_dict = {}
+                #
+                #             # -------创建策略结果记录-------
+                #             add_strategy_record = DqlStrategyTestResult(
+                #                 uid=generate_random_string("TR"),
+                #                 title=strategys.name,
+                #                 notes=strategys.description,
+                #                 strategyUid=trading_strategy_datas.strategyUid,
+                #                 goodsId=trading_strategy_datas.goods,
+                #                 period=trading_strategy_datas.period,
+                #                 startTime=startTime,
+                #                 endTime=endTime,
+                #                 traderResult=json.dumps(
+                #                     {
+                #                         "traderResult": filtered_result,
+                #                         "traderReport": trader_report,
+                #                         "floatingPointValues": [],
+                #                         "netAssetValues": []
+                #                     }
+                #                 ),
+                #                 indicatorResult=json.dumps(indicator_data_dict),
+                #                 parameter=trading_strategy_datas.parameter,
+                #                 isBursted=0, status=0, yieldRate=trader_report["yieldRate"],
+                #                 mdr=trader_report["mdr"], winRate=trader_report["winRate"],
+                #                 plr=trader_report["plr"], tradeCount=additional_metrics["tradeCount"],
+                #                 pnl=additional_metrics["pnl"], maxProfit=additional_metrics["maxProfit"],
+                #                 maxLoss=additional_metrics["maxLoss"], avgProfit=trader_report["avgProfit"],
+                #                 maxFUR=trader_report["max_fur"], score=0,
+                #                 is_delete=0, spread=0,
+                #                 leverage=leverage,
+                #                 calculationStatus=1,
+                #                 newReportTemplate=json.dumps(newReportTemplate),
+                #                 traderReportType=1
+                #
+                #             )
+                #             db.add(add_strategy_record)
+                #         except Exception as e:
+                #             info = traceback.format_exc()
+                #             log.error("交易报告提交失败：{}".format(info))
+                #             await db.rollback()  # 如果发生异常，回滚事务
+                #             await db.close()
+                #             return await response_base.fail(msg="提交失败！错误信息：{}".format(e))
 
             log.info("自动上传交易报告入库成功")
             return await response_base.success()
