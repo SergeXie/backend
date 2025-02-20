@@ -1119,7 +1119,6 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
     :param request:
     :return:
     """
-
     try:
         data_json = await request.json()
         file_path = data_json.get("file_path", None)  # 文件名
@@ -1275,6 +1274,8 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
                     return await response_base.fail(msg="该文件不支持自动上传提交，未提取到关键信息部分")
 
                 async with db.begin():  # 开启事务
+                    print(f"grouped_transactions:{grouped_transactions}")
+
                     for identifier, orders in grouped_transactions.items():
                         filtered_result = data_filters(orders, startTime, endTime)
 
@@ -1288,7 +1289,7 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
 
                             trading_strategy_datas = trading_strategy_db.scalars().first()
                             if not trading_strategy_datas:
-                                return await response_base.fail(msg="提交的交易策略UID未存在数据库中！")
+                                continue
                             try:
                                 # 计算回测指标
                                 # ------回测指标部分--------
