@@ -16,7 +16,7 @@ from starlette.requests import Request
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import TradingStrategy, DqlStrategy
+from models.dql_platform import TradingStrategy, DqlStrategy, DplGoodsTest
 from utils.common import generate_random_string
 from fastapi import APIRouter, Query
 from urllib.parse import parse_qs
@@ -120,17 +120,6 @@ strategy_clientid_dict = dict()  # 策略与订阅者的对应字典
 # 更新订阅者
 
 diaoqucishu = 500
-# period_Conversion_Seconds_dict = {
-#     'M1': 60,
-#     'M5': 300,
-#     'M15': 900,
-#     'M30': 1800,
-#     'H1': 3600,
-#     'H4': 14400,
-#     'D1': 86400,
-#     'W1': 604800,
-#     'MN': 2592000
-# }
 period_Conversion_Seconds_dict = {
     'M1': 60,
     'M5': 60,
@@ -142,7 +131,7 @@ period_Conversion_Seconds_dict = {
     'W1': 60480,
     'MN': 259200
 }
-async def run_backtest(db: AsyncSession, indicator_data_request, strategys, tester_uid, task_name=None, ismoni=False):
+async def run_backtest(db: AsyncSession, indicator_data_request, strategys, tester_uid, goods_data, task_name=None, ismoni=False):
     """
     :param db: 会话
     :param indicator_data_request: 请求参数
@@ -183,13 +172,12 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
             # 加载策略goodsId
             cerebro.addstrategy(strategy_classes.get(class_name), indicator_params,
                                 goodsId=indicator_data_request.get("goods", None),
-                                begin_time=indicator_data_request.get("startTime", None))
-        # cerebro.addstrategy(strategy_classes.get(strategys.className), indicator_params,
-        #                     goodsId=None,
-        #                     begin_time=None)
+                                begin_time=indicator_data_request.get("startTime", None),
+                                baseLots=goods_data.baseLots)
+
+
         cerebro.broker.set_cash(indicator_data_request.get("initialCash", 10000))
         result = cerebro.run(stdstats=True, tradehistory=True)
-        # cerebro.plot(style='candlestick', fmt_x_data='%Y-%m-%d %H:%M:%S')
 
         # traderResult, traderReport = result[0].get_analysis()
         trader_return = result[0].get_analysis()
@@ -230,14 +218,6 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
         return None
 
 
-async def background_task_function():
-    try:
-        while keep_running:
-            print("后台任务正在运行...")
-            await asyncio.sleep(60)
-
-    except asyncio.CancelledError:
-        print("后台任务被取消")
 
 def inverse(original_dict):
     # 转换后的字典
@@ -252,16 +232,6 @@ def inverse(original_dict):
             else:
                 converted_dict[obj] = [class_label]
     return converted_dict
-
-
-@router.post("/stop-background-task")
-async def stop_background_task():
-    global keep_running
-    keep_running = False  # 设置全局变量为False，以停止后台任务
-    global original_dict
-    original_dict = {}
-    print('停止后台任务')
-    return {"message": "后台任务停止信号已发送"}
 
 
 def generate_unique_12_digit_number():
@@ -462,11 +432,15 @@ async def send_forex_updates(data):
             moni = False
         while keep_running:
             async with async_db_session() as db:
+                # 根据品种或者品种表的手数和盈亏倍率
+                dp_goods_data = await db.execute(select(DplGoodsTest).where(
+                    DplGoodsTest.goods == goods))
+                goods_data = dp_goods_data.scalars().first()
                 # 根据uid寻找策略
                 strategy = await fetch_indicators(db, strategyUid)
                 print('strategys.className',strategy.className)
                 # 计算策略结果
-                backtest_result = await run_backtest(db, new_data, strategy, 0, task_name="sync", ismoni=moni)
+                backtest_result = await run_backtest(db, new_data, strategy, 0, goods_data, task_name="sync", ismoni=moni)
                 order_point = backtest_result.get('order_point', [])  # 获取买卖点的字典
                 latest_Kline_datetime = str(backtest_result.get('last_datetime', []))  # 最新k线时间
                 latest_Kline_datetime = datetime.strptime(latest_Kline_datetime, '%Y-%m-%d %H:%M:%S')

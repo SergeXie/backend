@@ -43,12 +43,57 @@ class ResponseDL2Data(bt.Strategy):
         self.Id_TS_dict = {}
         self.BarState = []
 
+        self.X_test = []
+        self.result_data_pre = []
+
 
 
     def next(self):
         self.Id_TS_dict[int(self.data.klineId[0])] = self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')
 
-        pass
+        # 整理出测试数据的格式，保证长度为100
+        self.X_test.append(self.data.close[0])
+        if len(self.X_test) < 100:
+            return
+        elif len(self.X_test) > 100:
+            self.X_test.pop(0)
+        X_test = self.X_test.copy()
+        # print(X_test[-1])
+
+        # 进行归一化
+        X_test = np.array(X_test).reshape(-1, 1)
+        ss = joblib.load('scalar02')
+        X_test = ss.fit_transform(X_test)
+        # 调整输入数据的维度
+        X_test = np.reshape(X_test, (X_test.shape[1], X_test.shape[0], 1))
+        predicted_prices = self.model.predict(X_test)
+        predicted_prices = predicted_prices * 100
+        # predicted_prices = self.scaler.inverse_transform(predicted_prices)
+        # [-30, -20, -10, -5, -3][30, 20, 10, 5, 3]
+        predicted_prices = np.round(predicted_prices[0], 2)
+        # predicted_prices = [str(i) for i in predicted_prices]
+
+
+        # 获取最大值的索引
+        max_index = np.argmax(predicted_prices)
+        diff = self.distribution[max_index]
+
+
+        # self.data.buflen()
+        current_kline_id = int(self.data.klineId[0])
+
+        try:
+            # 将数据添加到结果列表
+            self.result_data_pre.append({
+                "kLineId": int(self.data.klineId[1]),
+                "timestamp": self.datas[0].datetime.datetime(1).strftime('%Y-%m-%d %H:%M:%S'),
+                "price":  self.data.close[0] + diff,
+            })
+            # print(self.data.close[0]+diff)
+            # print(diff, self.distribution)
+        except IndexError as e:
+            pass
+
 
 
     def stop(self):
@@ -71,16 +116,6 @@ class ResponseDL2Data(bt.Strategy):
         print(predicted_prices)
 
         for i in self.distribution:
-            # self.BarState.append([
-            #     {
-            #         "kLineId": self.data.klineId[0],
-            #         "price": self.data.close[0] + i,
-            #     },
-            #     {
-            #         "kLineId": self.data.klineId[-10],
-            #         "price": self.data.close[0] + i,
-            #     }
-            # ])
             self.BarState.append([
                 {
                     "kLineId": self.data.klineId[0],
@@ -119,13 +154,19 @@ class ResponseDL2Data(bt.Strategy):
                 "distance": 10,
                 "data": i
             })
+        self.result_data_dict["lines"].append({
+            "type": "line",
+            "color": self.indicator_params.get("TrendmidColor", "#00FF00"),
+            "data": self.result_data_pre
+        })
+
 
         return [self.result_data_dict["lines"],
                 None,
                 None
                 ]  # 结束时间
 
-def train_model(self, distribution, old_model_path, new_model_path):
+def train_model(self, distribution, old_model_path, new_model_path, from_strategy = False):
     train_prices = self.close_data.reshape(-1, 1)
     # 数据归一化
     train_scaled = train_prices
@@ -141,20 +182,25 @@ def train_model(self, distribution, old_model_path, new_model_path):
     for i in range(timesteps + timesteps2 + 1, len(train_scaled)):
         X_train.append(train_scaled[i - timesteps - timesteps2 - 1: i - timesteps2 - 1, 0])  # 归一化
         y = change_y(train_prices[i - timesteps2 - 1], train_prices[i - timesteps2: i, 0], Probability=distribution)
-        print(y)
+        # print(y)
         y_train.append(y)
 
     X_train, y_train = np.array(X_train), np.array(y_train)
     X_test = X_train[-1]
-    print(X_train[-1])
-    print(y_train[-1])
+    # print(X_train[-1])
+    # print(y_train[-1])
 
     # 调整输入数据的维度
     X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
     print(X_train.shape, y_train.shape)
+    epochs = 100
+    if from_strategy:
+        X_train = X_train[:200,:]
+        y_train = y_train[:200,:]
+        epochs = 30
 
     # 查看是否有模型了
-    if os.path.exists(f'deeplearn_model/FineTuningModel/{new_model_path}.h5'):
+    if os.path.exists(f'deeplearn_model/FineTuningModel/{new_model_path}.h5') and not from_strategy:
         model = tf.keras.models.load_model(f'deeplearn_model/FineTuningModel/{new_model_path}.h5')
         print('存在微调模型')
     else:
@@ -171,7 +217,7 @@ def train_model(self, distribution, old_model_path, new_model_path):
         model.compile(loss='binary_crossentropy', optimizer=Adam(learning_rate=0.001), metrics=['accuracy', AUC(multi_label=True)])
 
         # 拟合模型
-        model.fit(X_train, y_train, epochs=100, batch_size=64)
+        model.fit(X_train, y_train, epochs=epochs, batch_size=64)
         model.save(f'deeplearn_model/FineTuningModel/{new_model_path}.h5')
 
     return model
