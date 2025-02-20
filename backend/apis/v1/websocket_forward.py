@@ -127,7 +127,7 @@ async def send_request(method, url, headers=None, params=None, data=None):
 
 # 全局标志变量，确保 startup 事件只执行一次
 _startup_completed = False
-# @router.on_event("startup")
+@router.on_event("startup")
 async def startup_event():
     global _startup_completed
     if not _startup_completed:
