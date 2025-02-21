@@ -57,6 +57,7 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
     """
     # 当前时间（假设需要 +2 小时）
     now = datetime.datetime.utcnow() + datetime.timedelta(hours=2)
+    # now = datetime.datetime.utcnow()
 
     # 解析周期（以分钟为单位）
     period_map = {
@@ -90,6 +91,12 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
         start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)  # 月初
         _, last_day = calendar.monthrange(now.year, now.month)  # 获取本月最后一天
         end_time = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)  # 月底
+
+    elif period == "H4":
+        # H4处理
+        now = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
+        start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
+        end_time = start_time + datetime.timedelta(minutes=interval_minutes)
 
     else:
         # 其他周期处理
@@ -225,7 +232,6 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
 
         return await response_base.success(data={"goods": goods, "period": period, "utc": 2, "is_final": is_final,
                                                  "lineData": lineData})
-
 
 
 @router.get("/selectFrontKline", name="获取K线历史数据")
