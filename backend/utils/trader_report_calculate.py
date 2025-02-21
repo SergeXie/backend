@@ -1,6 +1,15 @@
+import json
+import traceback
 from datetime import datetime
+import backtrader as bt
+import pandas as pd
 from dateutil import parser
-from utils.common import format_datetime, to_float, match_filter_data, match_ratio
+from sqlalchemy import select
+from common.log import log
+from models.dql_platform import DqlStrategyTestResult, TradingStrategy, DqlIndicators
+from utils.common import format_datetime, to_float, match_filter_data, match_ratio, generate_random_string, \
+    fetch_trading_data, PandasData, indicator_classes, model_classes, fetch_indicators
+from utils.public_strategy import ComprehensiveAnalyzer
 
 
 def calculate_consecutive_win_loss(account_list):
@@ -352,130 +361,136 @@ def generate_trader_report(soup, account_list):
     """
     生成交易报告
     """
-    # 提取报告数据
-    trader_report = {
-        "startingCash": soup.find(string="Balance:").find_next().text,
-        "FreeMargin": soup.find(string="Free Margin:").find_next().text,
-        "totalNetProfit": soup.find(string="Total Net Profit:").find_next().text,
-        "totalLoss": soup.find(string="Gross Profit:").find_next().text,
-        "ProfitFactor": soup.find(string="Profit Factor:").find_next().text,
-        "expectedPayoff": soup.find(string="Expected Payoff:").find_next().text,
-        "absoluteDrawdown": soup.find(string="Absolute Drawdown:").find_next().text,
-        "maximalDrawdown": match_filter_data(soup.find(string="Maximal Drawdown:").find_next().text),
-        "relativeLosses": match_filter_data(soup.find(string="Relative Drawdown:").find_next().text),
-        "totalTrades": soup.find(string="Total Trades:").find_next().text,
-        "shortPositions": match_filter_data(soup.find(string="Short Positions (won %):").find_next().text),
-        "shortPositionsRatio": match_ratio(soup.find(string="Short Positions (won %):").find_next().text),
-        "longPositions": match_filter_data(soup.find(string="Long Positions (won %):").find_next().text),
-        "longPositionsRatio": match_ratio(soup.find(string="Long Positions (won %):").find_next().text),
-        "profitTrades": match_filter_data(soup.find(string="Profit Trades (% of total):").find_next().text),
-        "profitTradesRatio": match_ratio(soup.find(string="Profit Trades (% of total):").find_next().text),
-        "lossTrades": match_filter_data(soup.find(string="Loss trades (% of total):").find_next().text),
-        "lossTradesRatio": match_ratio(soup.find(string="Loss trades (% of total):").find_next().text),
-        "largestProfit": 0,
-        "largestLoss": 0,
-        "averageProfitTrade": 0,
-        "averageLossTrade": 0,
-        "maximalConsecutiveProfit": 0,
-        "maximalConsecutiveLoss": 0,
-        "maximumConsecutiveWins": 0,
-        "maximumConsecutiveLosses": 0,
-        "averageConsecutiveWins": 0,
-        "averageConsecutiveLosses": 0,
-        "yieldRate": 0,
-        "winRate": 0,
-        "plr": 0,
-        "avgProfit": 0,
-        "mdr": 0,
-        "isBursted": 0,
-        "maxFUR": 0,
-        "score": 0,
-    }
-    # 计算所需的指标
-    initial_cleaned = trader_report["startingCash"].replace(' ', '')
-    initial_cash = float(initial_cleaned)
-    consecutive_metrics = calculate_consecutive_win_loss(account_list)
-    trade_metrics = calculate_trade_metrics(account_list, initial_cash)
-    plr = calculate_plr(account_list)
-    mdr = calculate_mdr(account_list, initial_cash)
-    max_fur = calculate_max_fur(account_list)
-    additional_metrics = calculate_additional_metrics(account_list)
+    try:
+        # 提取报告数据
+        trader_report = {
+            "startingCash": soup.find(string="Balance:").find_next().text,
+            "FreeMargin": soup.find(string="Free Margin:").find_next().text,
+            "totalNetProfit": soup.find(string="Total Net Profit:").find_next().text,
+            "totalLoss": soup.find(string="Gross Profit:").find_next().text,
+            "ProfitFactor": soup.find(string="Profit Factor:").find_next().text,
+            "expectedPayoff": soup.find(string="Expected Payoff:").find_next().text,
+            "absoluteDrawdown": soup.find(string="Absolute Drawdown:").find_next().text,
+            "maximalDrawdown": match_filter_data(soup.find(string="Maximal Drawdown:").find_next().text),
+            "relativeLosses": match_filter_data(soup.find(string="Relative Drawdown:").find_next().text),
+            "totalTrades": soup.find(string="Total Trades:").find_next().text,
+            "shortPositions": match_filter_data(soup.find(string="Short Positions (won %):").find_next().text),
+            "shortPositionsRatio": match_ratio(soup.find(string="Short Positions (won %):").find_next().text),
+            "longPositions": match_filter_data(soup.find(string="Long Positions (won %):").find_next().text),
+            "longPositionsRatio": match_ratio(soup.find(string="Long Positions (won %):").find_next().text),
+            "profitTrades": match_filter_data(soup.find(string="Profit Trades (% of total):").find_next().text),
+            "profitTradesRatio": match_ratio(soup.find(string="Profit Trades (% of total):").find_next().text),
+            "lossTrades": match_filter_data(soup.find(string="Loss trades (% of total):").find_next().text),
+            "lossTradesRatio": match_ratio(soup.find(string="Loss trades (% of total):").find_next().text),
+            "largestProfit": 0,
+            "largestLoss": 0,
+            "averageProfitTrade": 0,
+            "averageLossTrade": 0,
+            "maximalConsecutiveProfit": 0,
+            "maximalConsecutiveLoss": 0,
+            "maximumConsecutiveWins": 0,
+            "maximumConsecutiveLosses": 0,
+            "averageConsecutiveWins": 0,
+            "averageConsecutiveLosses": 0,
+            "yieldRate": 0,
+            "winRate": 0,
+            "plr": 0,
+            "avgProfit": 0,
+            "mdr": 0,
+            "isBursted": 0,
+            "maxFUR": 0,
+            "score": 0,
+        }
+        # 计算所需的指标
+        initial_cleaned = trader_report["startingCash"].replace(' ', '')
+        initial_cash = float(initial_cleaned)
+        consecutive_metrics = calculate_consecutive_win_loss(account_list)
+        trade_metrics = calculate_trade_metrics(account_list, initial_cash)
+        plr = calculate_plr(account_list)
+        mdr = calculate_mdr(account_list, initial_cash)
+        max_fur = calculate_max_fur(account_list)
+        additional_metrics = calculate_additional_metrics(account_list)
 
-    trader_report["startingCash"] = initial_cash
-    trader_report["averageConsecutiveWins"] = consecutive_metrics["averageConsecutiveWins"]
-    trader_report["averageConsecutiveLosses"] = consecutive_metrics["averageConsecutiveLosses"]
-    trader_report["yieldRate"] = trade_metrics["yieldRate"]
-    trader_report["winRate"] = trade_metrics["winRate"]
-    trader_report["avgProfit"] = trade_metrics["avgProfit"]
-    trader_report["plr"] = plr
-    trader_report["mdr"] = mdr
-    trader_report["max_fur"] = max_fur
-    trader_report["totalTrades"] = additional_metrics["tradeCount"]
-    newReportTemplate = calculate_metrics(account_list)
+        trader_report["startingCash"] = initial_cash
+        trader_report["averageConsecutiveWins"] = consecutive_metrics["averageConsecutiveWins"]
+        trader_report["averageConsecutiveLosses"] = consecutive_metrics["averageConsecutiveLosses"]
+        trader_report["yieldRate"] = trade_metrics["yieldRate"]
+        trader_report["winRate"] = trade_metrics["winRate"]
+        trader_report["avgProfit"] = trade_metrics["avgProfit"]
+        trader_report["plr"] = plr
+        trader_report["mdr"] = mdr
+        trader_report["max_fur"] = max_fur
+        trader_report["totalTrades"] = additional_metrics["tradeCount"]
+        newReportTemplate = calculate_metrics(account_list)
 
-    # Largest Profit Trade 和 Loss Trade
-    largest_row = soup.find('td', string='Largest')
-    if largest_row:
-        # 提取 Largest profit 和 loss 数据
-        largest_profit = largest_row.find_next('td', class_='mspt').text.strip()
-        largest_loss = largest_row.find_next('td', class_='mspt').find_next('td', class_='mspt').text.strip()
+        # Largest Profit Trade 和 Loss Trade
+        largest_row = soup.find('td', string='Largest')
+        if largest_row:
+            # 提取 Largest profit 和 loss 数据
+            largest_profit = largest_row.find_next('td', class_='mspt').text.strip()
+            largest_loss = largest_row.find_next('td', class_='mspt').find_next('td', class_='mspt').text.strip()
 
-        # 去除空格并转换为浮动数值
-        trader_report["largestProfit"] = float(
-            largest_profit.replace(" ", "").replace(",", "")) if largest_profit else 0
-        trader_report["largestLoss"] = float(largest_loss.replace(" ", "").replace(",", "")) if largest_loss else 0
+            # 去除空格并转换为浮动数值
+            trader_report["largestProfit"] = float(
+                largest_profit.replace(" ", "").replace(",", "")) if largest_profit else 0
+            trader_report["largestLoss"] = float(largest_loss.replace(" ", "").replace(",", "")) if largest_loss else 0
 
-    # Average Profit Trade 和 Loss Trade
-    average_row = soup.find('td', string='Average')
-    if average_row:
-        # 提取 Average profit 和 loss 数据
-        average_profit = average_row.find_next('td', class_='mspt').text.strip()
-        average_loss = average_row.find_next('td', class_='mspt').find_next('td', class_='mspt').text.strip()
+        # Average Profit Trade 和 Loss Trade
+        average_row = soup.find('td', string='Average')
+        if average_row:
+            # 提取 Average profit 和 loss 数据
+            average_profit = average_row.find_next('td', class_='mspt').text.strip()
+            average_loss = average_row.find_next('td', class_='mspt').find_next('td', class_='mspt').text.strip()
 
-        # 去除空格并转换为浮动数值
-        trader_report["averageProfitTrade"] = float(
-            average_profit.replace(" ", "").replace(",", "")) if average_profit else 0
-        trader_report["averageLossTrade"] = float(
-            average_loss.replace(" ", "").replace(",", "")) if average_loss else 0
+            # 去除空格并转换为浮动数值
+            trader_report["averageProfitTrade"] = float(
+                average_profit.replace(" ", "").replace(",", "")) if average_profit else 0
+            trader_report["averageLossTrade"] = float(
+                average_loss.replace(" ", "").replace(",", "")) if average_loss else 0
 
-    # Maximum Consecutive Wins 和 Consecutive Losses
-    maximum_row = soup.find('td', string='Maximum')
-    if maximum_row:
-        # 提取 Maximum consecutive wins 和 consecutive losses 数据
-        max_consecutive_wins = maximum_row.find_next('td', class_='mspt').text.strip()
-        max_consecutive_losses = maximum_row.find_next('td', class_='mspt').find_next('td',
-                                                                                      class_='mspt').text.strip()
+        # Maximum Consecutive Wins 和 Consecutive Losses
+        maximum_row = soup.find('td', string='Maximum')
+        if maximum_row:
+            # 提取 Maximum consecutive wins 和 consecutive losses 数据
+            max_consecutive_wins = maximum_row.find_next('td', class_='mspt').text.strip()
+            max_consecutive_losses = maximum_row.find_next('td', class_='mspt').find_next('td',
+                                                                                          class_='mspt').text.strip()
 
-        # 处理数据
-        max_consecutive_wins_value = max_consecutive_wins.split('(')[1].split(')')[0]  # 提取括号内的数字
-        max_consecutive_losses_value = max_consecutive_losses.split('(')[1].split(')')[0]  # 提取括号内的数字
+            # 处理数据
+            max_consecutive_wins_value = max_consecutive_wins.split('(')[1].split(')')[0]  # 提取括号内的数字
+            max_consecutive_losses_value = max_consecutive_losses.split('(')[1].split(')')[0]  # 提取括号内的数字
 
-        trader_report["maximumConsecutiveWins"] = float(
-            max_consecutive_wins_value.replace(' ', '')) if max_consecutive_wins_value else 0
-        trader_report["maximumConsecutiveLosses"] = float(
-            max_consecutive_losses_value.replace(' ', '')) if max_consecutive_losses_value else 0
+            trader_report["maximumConsecutiveWins"] = float(
+                max_consecutive_wins_value.replace(' ', '')) if max_consecutive_wins_value else 0
+            trader_report["maximumConsecutiveLosses"] = float(
+                max_consecutive_losses_value.replace(' ', '')) if max_consecutive_losses_value else 0
 
-    # Maximal Consecutive Profit 和 Loss
-    maximal_row = soup.find('td', string='Maximal')
-    if maximal_row:
-        # 提取 Maximal consecutive profit 和 loss 数据
-        maximal_consecutive_profit = maximal_row.find_next('td', class_='mspt').text.strip()
-        maximal_consecutive_loss = maximal_row.find_next('td', class_='mspt').find_next('td',
-                                                                                        class_='mspt').text.strip()
-        # 处理数据，提取括号内的数字
-        maximal_consecutive_profit_value = maximal_consecutive_profit.split('(')[0].strip()  # 提取括号外的数字
-        maximal_consecutive_loss_value = maximal_consecutive_loss.split('(')[0].strip()  # 提取括号外的数字
+        # Maximal Consecutive Profit 和 Loss
+        maximal_row = soup.find('td', string='Maximal')
+        if maximal_row:
+            # 提取 Maximal consecutive profit 和 loss 数据
+            maximal_consecutive_profit = maximal_row.find_next('td', class_='mspt').text.strip()
+            maximal_consecutive_loss = maximal_row.find_next('td', class_='mspt').find_next('td',
+                                                                                            class_='mspt').text.strip()
+            # 处理数据，提取括号内的数字
+            maximal_consecutive_profit_value = maximal_consecutive_profit.split('(')[0].strip()  # 提取括号外的数字
+            maximal_consecutive_loss_value = maximal_consecutive_loss.split('(')[0].strip()  # 提取括号外的数字
 
-        # 更新数据
-        trader_report["maximalConsecutiveProfit"] = float(
-            maximal_consecutive_profit_value.replace(" ", "").replace(",",
-                                                                      "")) if maximal_consecutive_profit_value else 0
-        trader_report["maximalConsecutiveLoss"] = float(
-            maximal_consecutive_loss_value.replace(" ", "").replace(",",
+            # 更新数据
+            trader_report["maximalConsecutiveProfit"] = float(
+                maximal_consecutive_profit_value.replace(" ", "").replace(",",
+                                                                          "")) if maximal_consecutive_profit_value else 0
+            trader_report["maximalConsecutiveLoss"] = float(
+                maximal_consecutive_loss_value.replace(" ", "").replace(",",
 
-                                                                    "")) if maximal_consecutive_loss_value else 0
+                                                                        "")) if maximal_consecutive_loss_value else 0
 
-    return trader_report, additional_metrics, newReportTemplate
+        return trader_report, additional_metrics, newReportTemplate
+
+    except Exception as e:
+        info = traceback.format_exc()
+        log.error(f"解析报告出错：{info}")
+
 
 
 def data_filters(account_list, startTime, endTime):
@@ -504,4 +519,183 @@ def data_filters(account_list, startTime, endTime):
     return filtered_list
 
 
+async def process_manual_upload(soup, data_json, strategy,
+                                startTime, endTime, uid, goods, period, db):
+    account_list = []
+    # 手动上传的逻辑：如策略查询、交易数据处理等
+    closed_transactions_header = soup.find('b', string='Closed Transactions:')
+    open_transactions_header = soup.find('b', string='Open Trades:')
 
+    closed_transactions = extract_transactions(closed_transactions_header, stop_text='Closed P/L:')
+    open_transactions = extract_transactions(open_transactions_header, stop_text='Floating P/L:')
+
+    account_list.extend(closed_transactions)
+    account_list.extend(open_transactions)
+
+    filtered_result = data_filters(account_list, startTime, endTime)
+
+    # 提取报告数据
+    trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, filtered_result)
+
+    try:
+        # 创建策略结果记录
+        add_strategy_record = DqlStrategyTestResult(
+            uid=generate_random_string("TR"),
+            title=strategy.name,
+            notes=strategy.description,
+            strategyUid=uid,
+            goodsId=goods,
+            period=period,
+            startTime=startTime,
+            endTime=endTime,
+            traderResult=json.dumps(
+                {
+                    "traderResult": filtered_result,
+                    "traderReport": trader_report,
+                    "floatingPointValues": [],
+                    "netAssetValues": []
+                }
+            ),
+            parameter=strategy.parameters if strategy.parameters else json.dumps({}),
+            isBursted=0, status=0, yieldRate=trader_report["yieldRate"],
+            mdr=trader_report["mdr"], winRate=trader_report["winRate"],
+            plr=trader_report["plr"], tradeCount=additional_metrics["tradeCount"],
+            pnl=additional_metrics["pnl"], maxProfit=additional_metrics["maxProfit"],
+            maxLoss=additional_metrics["maxLoss"], avgProfit=trader_report["avgProfit"],
+            maxFUR=trader_report["max_fur"], score=0,
+            is_delete=0, spread=0,
+            leverage=500,
+            calculationStatus=1,
+            newReportTemplate=json.dumps(newReportTemplate),
+            traderReportType=2
+        )
+        db.add(add_strategy_record)
+        await db.commit()
+        log.info("手动上传交易报告入库成功：策略UID {}".format(strategy.uid))
+
+    except Exception as e:
+        info = traceback.format_exc()
+        log.error("交易报告提交失败：{}".format(info))
+        await db.rollback()  # 如果发生异常，回滚事务
+        await db.close()
+
+
+async def process_auto_upload(soup,db, grouped_transactions, startTime, endTime):
+    # 自动上传的逻辑：例如交易数据的解析，策略计算等
+    async with db.begin():  # 开启事务
+        # print("grouped_transactions:{}".format(grouped_transactions))
+        for identifier, orders in grouped_transactions.items():
+            filtered_result = data_filters(orders, startTime, endTime)
+            # 提取报告数据
+            trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, filtered_result)
+            # 添加入库
+            try:
+                # 自动上传，根据 trading_strategy_uid_list 进行查询交易策略表的uid
+                trading_strategy_db = await db.execute(select(TradingStrategy).filter(
+                    TradingStrategy.tradeUid == identifier))
+
+                trading_strategy_datas = trading_strategy_db.scalars().first()
+                if not trading_strategy_datas:
+                    continue
+                try:
+                    # 计算回测指标
+                    # ------回测指标部分--------
+                    # 查询策略
+                    strategys = await fetch_indicators(db, trading_strategy_datas.strategyUid)
+                    # 查询范围数据
+                    trading_data = await fetch_trading_data(
+                        db, trading_strategy_datas.goods, trading_strategy_datas.period, model_classes,
+                        begin_time=startTime, end_time=endTime, class_name=json.loads(strategys.className))
+                    if not trading_data:
+                        continue
+
+                    # 创建backtrader大脑实例
+                    cerebro = bt.Cerebro()
+                    # 数据源处理
+                    df = pd.DataFrame(trading_data)
+                    df['datetime'] = pd.to_datetime(df['datetime'])
+                    df.set_index('datetime', inplace=True)
+                    data = PandasData(dataname=df)
+
+                    # 添加数据源
+                    cerebro.adddata(data)
+
+                    Indicators_subType = None
+                    # 指标数据
+                    indicator_params = {}
+                    if indicator_classes.get(strategys.indicatorsClassName):
+                        query = await db.execute(select(DqlIndicators).where(
+                            DqlIndicators.className == strategys.indicatorsClassName))
+
+                        DqlIndicators_result = query.scalars().first()
+                        Indicators_subType = DqlIndicators_result.subType
+
+                        cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),
+                                            indicator_params, indicator_name=None, comments=None,
+                                            begin_time=startTime)
+
+                    print("indicator_classes.get(strategys.indicatorsClassName):{}".format(
+                        indicator_classes.get(strategys.indicatorsClassName)))
+                    # 综合分析器
+                    cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')
+                    # 添加最大回撤分析器
+                    cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
+
+                    # 运行backtrack
+                    result = cerebro.run(stdstats=True, tradehistory=True)
+
+                    # 指标回测数据
+                    indicator_result_data = result[0].get_analysis()
+                    indicator_data_dict = {
+                        "startPoint": indicator_result_data[1],
+                        "endPoint": indicator_result_data[2],
+                        "buyselldata": indicator_result_data[3] if len(
+                            indicator_result_data[3:4]) > 0 else {},
+                        "data": indicator_result_data[0],
+                        "subType": Indicators_subType
+                    }
+                except Exception as e:
+                    info = traceback.format_exc()
+                    log.error("计算指标错误：{} 指标className:{}".format(
+                        info, indicator_classes.get(strategys.indicatorsClassName)))
+                    indicator_data_dict = {}
+
+                # -------创建策略结果记录-------
+                add_strategy_record = DqlStrategyTestResult(
+                    uid=generate_random_string("TR"),
+                    title=strategys.name,
+                    notes=strategys.description,
+                    strategyUid=trading_strategy_datas.strategyUid,
+                    goodsId=trading_strategy_datas.goods,
+                    period=trading_strategy_datas.period,
+                    startTime=startTime,
+                    endTime=endTime,
+                    traderResult=json.dumps(
+                        {
+                            "traderResult": filtered_result,
+                            "traderReport": trader_report,
+                            "floatingPointValues": [],
+                            "netAssetValues": []
+                        }
+                    ),
+                    indicatorResult=json.dumps(indicator_data_dict),
+                    parameter=trading_strategy_datas.parameter,
+                    isBursted=0, status=0, yieldRate=trader_report["yieldRate"],
+                    mdr=trader_report["mdr"], winRate=trader_report["winRate"],
+                    plr=trader_report["plr"], tradeCount=additional_metrics["tradeCount"],
+                    pnl=additional_metrics["pnl"], maxProfit=additional_metrics["maxProfit"],
+                    maxLoss=additional_metrics["maxLoss"], avgProfit=trader_report["avgProfit"],
+                    maxFUR=trader_report["max_fur"], score=0,
+                    is_delete=0, spread=0,
+                    leverage=500,
+                    calculationStatus=1,
+                    newReportTemplate=json.dumps(newReportTemplate),
+                    traderReportType=1
+
+                )
+                db.add(add_strategy_record)
+            except Exception as e:
+                info = traceback.format_exc()
+                log.error("交易报告提交失败：{}".format(info))
+                await db.rollback()  # 如果发生异常，回滚事务
+                await db.close()
