@@ -9,12 +9,13 @@ import traceback
 import pandas as pd
 from cachetools import TTLCache
 from sqlalchemy import select, and_, desc
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
 from models.dql_platform import DplGoodsTest, DqlIndicators, TradingFPG, TradingBRC5, TradingOnda, TradingFXTM5, \
-    TradingIndex, TradingIndex2, TradingFPG2
+    TradingIndex, TradingIndex2, TradingFPG2, DqlStrategy
 from utils.indicators import *
 # from utils.indicators.atr_kmeans import ResponseATRKmeansData
 from utils.indicators.deeplearn_v2 import ResponseDL2Data
@@ -677,3 +678,9 @@ async def get_indicator_data(request, data_type, name):
         log.error(f"获取技术指标K线{data_type}数据错误：{info}")
         print(f"获取技术指标K线{data_type}数据错误信息：{info}")
         return Response(status_code=500, content="系统错误!")
+
+
+async def fetch_indicators(db: AsyncSession, uid: int):
+    select_indicators = await db.execute(select(DqlStrategy).where(
+        DqlStrategy.uid == uid, DqlStrategy.is_delete == 0))
+    return select_indicators.scalars().first()
