@@ -176,7 +176,7 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
                                 baseLots=goods_data.baseLots)
 
 
-        cerebro.broker.set_cash(indicator_data_request.get("initialCash", 10000))
+        cerebro.broker.set_cash(indicator_data_request.get("initialCash", 10000000))
         result = cerebro.run(stdstats=True, tradehistory=True)
 
         # traderResult, traderReport = result[0].get_analysis()
