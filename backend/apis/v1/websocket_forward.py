@@ -5,7 +5,8 @@ from fastapi import APIRouter
 import urllib.parse
 import json
 import httpx
-
+from core.UrlParameter import UrlParameter
+urlparameter = UrlParameter()
 import requests
 from concurrent.futures import ThreadPoolExecutor
 router = APIRouter()
@@ -40,7 +41,7 @@ async def websocket_message_processing(websocket: WebSocket, message: str):
 
 
 async def websocket_background_task():
-    # uri = "ws://192.168.0.120:8000/api/v1/platform/wss"
+    # uri = "ws://192.168.0.120:8888/api/v1/platform/wss"
     uri = "ws://8.138.95.62:8000/api/v1/platform/wss"
     print("发起请求")
     while True:
@@ -93,7 +94,10 @@ async def generate_request(data):
     # 构建完整的URL
     url = f"http://{INTERNAL_SERVER_IP}:{INTERNAL_SERVER_PORT}/{path}"
     method = data['method']
-    print('method', data, method)
+
+    for i in urlparameter.get_url_keys():
+        if i in path:
+            url = urlparameter.get_url_map(i)
     print('####' * 3)
 
     if method == 'GET':
