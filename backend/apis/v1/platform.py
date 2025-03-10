@@ -55,8 +55,9 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
     :param goods:
     :return:
     """
+    print("执行动态K0")
     # 当前时间（假设需要 +2 小时）
-    now = datetime.datetime.utcnow() + datetime.timedelta(hours=2)
+    now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
     # now = datetime.datetime.utcnow()
 
     # 解析周期（以分钟为单位）
@@ -94,7 +95,6 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
 
     elif period == "H4":
         # H4处理
-        now = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
         start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
         end_time = start_time + datetime.timedelta(minutes=interval_minutes)
 
@@ -229,6 +229,9 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
                 }
             else:
                 lineData = None
+
+        print("lineData")
+        print(lineData)
 
         return await response_base.success(data={"goods": goods, "period": period, "utc": 2, "is_final": is_final,
                                                  "lineData": lineData})
@@ -674,6 +677,7 @@ async def clear_goods_echo():
 
     return "OK"
 
+
 @router.post("/indicatorDifferenceData", name="对比不同版本的指标数据")
 async def indicator_goods_kline(request: Request):
     """
@@ -713,7 +717,6 @@ async def indicator_goods_kline(request: Request):
                         diff += tmp
 
     result['data'] = diff
-    # print('result', result)
     return await response_base.success(data=result)
 
 
