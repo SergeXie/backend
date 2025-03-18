@@ -251,7 +251,7 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
         return None
 
 
-@router.get("/list", name="获取所有策略列表")  # 已改
+@router.get("/list", name="获取所有策略列表")
 async def strategy_list(pageNo: int = Query(1), pageSize: int = Query(100),
                         orderBy: int = Query(0), keyWord: str = Query('%')):
 
@@ -266,7 +266,7 @@ async def strategy_list(pageNo: int = Query(1), pageSize: int = Query(100),
     return await get_entities_list(DqlStrategy, pageNo, pageSize, orderBy, keyWord)
 
 
-@router.get("/viewCode", name="查看源代码")  # 已改
+@router.get("/viewCode", name="查看源代码")
 async def view_strategy_code(uid: str):
     """
     :param uid: 策略uid
@@ -313,7 +313,7 @@ async def view_strategy_code(uid: str):
         return Response(status_code=500, content="系统错误")
 
 
-@router.post("/custom/upload", name="自定义策略文件上传")  # 已改
+@router.post("/custom/upload", name="自定义策略文件上传")
 async def upload_file(file: UploadFile = File(...)):
     """
     :param file:
@@ -355,7 +355,7 @@ async def upload_file(file: UploadFile = File(...)):
         return Response(status_code=500, content="系统错误")
 
 
-@router.post("/custom/update", name="自定义策略更新")  # 已改
+@router.post("/custom/update", name="自定义策略更新")
 async def upload_file_update(request: Request):
     """
     :param request:
@@ -429,7 +429,7 @@ async def upload_file_update(request: Request):
         return Response(status_code=500, content="系统错误")
 
 
-@router.post("/testResultList", name="历史回测列表") # 已改
+@router.post("/testResultList", name="历史回测列表")
 async def test_result_list(params: TestResultRequest):
     """
     :param pageNo:
@@ -578,7 +578,7 @@ async def test_result_list(params: TestResultRequest):
         }
 
 
-@router.post("/fetchTesterResult", name="获取回测结果")  # 已改
+@router.post("/fetchTesterResult", name="获取回测结果")
 async def fetch_tester_result(request: Request):
     """
     :param request:
@@ -640,7 +640,7 @@ async def fetch_tester_result(request: Request):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 
-@router.post("/fetchFloatingProfit", name="获取回测时间范围内浮动盈亏")  # 已改
+@router.post("/fetchFloatingProfit", name="获取回测时间范围内浮动盈亏")
 async def fetch_floating_profit(request: Request):
 
     try:
@@ -756,7 +756,7 @@ async def fetch_floating_profit(request: Request):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 
-@router.post("/syncBatchTest", name="策略批量回测(同步)")  # TODO 未改
+@router.post("/syncBatchTest", name="策略批量回测(同步)")
 async def indicator_sync_batch_test(request: Request):
     strategy_data_requests = await request.json()
 
@@ -839,7 +839,7 @@ async def indicator_sync_batch_test(request: Request):
         return await response_base.success(data=result_data)
 
 
-@router.post("/asyncBatchTest", name="策略批量回测(异步)")  # TODO 未改
+@router.post("/asyncBatchTest", name="策略批量回测(异步)")
 async def indicator_async_batch_test(request: Request):
     strategy_data_requests = await request.json()
 
@@ -866,7 +866,7 @@ async def indicator_async_batch_test(request: Request):
         return await response_base.success(data=result_data)
 
 
-@router.get("/delete", name="策略删除")   # 已改
+@router.get("/delete", name="策略删除")
 async def strategy_delete(uid: str):
     """
     :param uid:  策略uid
@@ -891,7 +891,7 @@ async def strategy_delete(uid: str):
         return await response_base.success(msg="策略删除成功")
 
 
-@router.get("/deleteTestResult", name="策略结果删除")  # 已改
+@router.get("/deleteTestResult", name="策略结果删除")
 async def strategy_delete(uid: str):
     """
     :param uid:  策略uid
@@ -915,7 +915,7 @@ async def strategy_delete(uid: str):
         return await response_base.success(msg="策略删除成功")
 
 
-@router.post("/saveTestResult", name="策略结果入库")  # 已改
+@router.post("/saveTestResult", name="策略结果入库")
 async def save_test_result(request: Request):
     """
     返回：
@@ -998,7 +998,7 @@ async def save_test_result(request: Request):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 
-@router.post("/saveAllTestResult", name="策略结果全部入库")  # 已改
+@router.post("/saveAllTestResult", name="策略结果全部入库")
 async def save_all_test_result(request: Request):
     """
     接收策略结果ID列表和更新的权重信息，批量更新策略结果。
@@ -1039,7 +1039,7 @@ async def save_all_test_result(request: Request):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 
-@router.post("/directlySaveTestResult", name="策略结果直接入库")  # 已改
+@router.post("/directlySaveTestResult", name="策略结果直接入库")
 async def directly_test_result(request: Request):
     """
     返回：
@@ -1071,13 +1071,13 @@ async def directly_test_result(request: Request):
         return {"code": 200, "msg": "Success", "uid": str(uid)}
 
 
-@router.post("/combineTestResult", name="策略合并")  # 已改
+@router.post("/combineTestResult", name="策略合并")
 async def combine_test_result(request: Request):
 
     return await response_base.success()
 
 
-@router.post("/traderReportUpload", name="策略交易报告上传")  # 已改
+@router.post("/traderReportUpload", name="策略交易报告上传")
 async def trader_report_upload(file: UploadFile = File(...)):
     """
     策略交易报告上传
@@ -1108,7 +1108,7 @@ async def trader_report_upload(file: UploadFile = File(...)):
     return await response_base.success(data={"path": file_path})
 
 
-@router.post("/submitTraderReport", name="提交交易报告")  # TODO 未改
+@router.post("/submitTraderReport", name="提交交易报告")
 async def submit_trader_report(request: Request, background_tasks: BackgroundTasks):
     """
     提交交易报告，快速响应并在后台处理剩余任务。
