@@ -1071,13 +1071,13 @@ async def directly_test_result(request: Request):
         return {"code": 200, "msg": "Success", "uid": str(uid)}
 
 
-@router.post("/combineTestResult", name="策略合并")  # TODO 未改
+@router.post("/combineTestResult", name="策略合并")  # 已改
 async def combine_test_result(request: Request):
 
     return await response_base.success()
 
 
-@router.post("/traderReportUpload", name="策略交易报告上传")  # TODO 未改
+@router.post("/traderReportUpload", name="策略交易报告上传")  # 已改
 async def trader_report_upload(file: UploadFile = File(...)):
     """
     策略交易报告上传
@@ -1182,7 +1182,7 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
                     elif len(cols) == 3:  # 如果是标识符行，保存标识符
                         identifiers.append(cols[2].text.strip())
 
-                # 一一对应交易和标识符
+                # # 一一对应交易和标识符
                 for transaction, identifier in zip(transactions, identifiers):
                     key = identifier.split('@')[0]  # 提取 @ 前面的部分 例如: NTROILM5S0001@1737024960@
                     transaction['identifier'] = identifier
