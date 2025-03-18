@@ -100,8 +100,13 @@ def match_filter_data(data):
 
 def to_float(value):
     try:
-        return float(value.replace(',', ''))
+        # 移除常见的千位分隔符：空格和逗号
+        cleaned_value = value.replace(' ', '').replace(',', '')
+        # 尝试转换为浮点数
+        return float(cleaned_value)
     except ValueError:
+        # 如果转换失败，返回默认值 0
+        print(f"无法将 '{value}' 转换为浮点数。")
         return 0
 
 def datetimesp(dt_float):

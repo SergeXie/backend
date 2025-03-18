@@ -1182,7 +1182,7 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
                     elif len(cols) == 3:  # 如果是标识符行，保存标识符
                         identifiers.append(cols[2].text.strip())
 
-                # 一一对应交易和标识符
+                # # 一一对应交易和标识符
                 for transaction, identifier in zip(transactions, identifiers):
                     key = identifier.split('@')[0]  # 提取 @ 前面的部分 例如: NTROILM5S0001@1737024960@
                     transaction['identifier'] = identifier
