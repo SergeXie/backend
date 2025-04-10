@@ -534,7 +534,8 @@ async def data_filters(db, account_list, startTime, endTime):
         trading_strategy_datas = trading_strategy_db.scalars().first()
         # 分割字符串
         platform, goods = trading_strategy_datas.goods.split('-')
-        select_model_class, result = await select_goods_common(db, trading_strategy_datas.goods, model_classes)
+
+        select_model_class, goods_ = await select_goods_common(db, trading_strategy_datas.goods, model_classes)
         # 查K线
         select_k_time = select(select_model_class).where(
             select_model_class.platform == platform,
@@ -551,10 +552,10 @@ async def data_filters(db, account_list, startTime, endTime):
             open_order["price"] = kline_data.closed
             if open_order["orderType"] == "sell":
                 # 做空 PnL = (开仓价格−平仓价格（现价 K线M1的收盘价）)×交易手数×杠杆−隔夜利息
-                open_order["pnl"] = round((open_order["openPrice"] - kline_data.closed) * (open_order["size"] * 100), 3)
+                open_order["pnl"] = round((open_order["openPrice"] - kline_data.closed) * (open_order["size"] * goods_.profitRatio), 3)
             else:
                 # 做多 PnL=(平仓价格（现价 K线M1的收盘价）− 开仓价格)×交易手数×杠杆−隔夜利息
-                open_order["pnl"] = round((kline_data.closed - open_order["openPrice"]) * (open_order["size"] * 100), 3)
+                open_order["pnl"] = round((kline_data.closed - open_order["openPrice"]) * (open_order["size"] * goods_.profitRatio), 3)
 
             print("closed")
             print(end_dt)
