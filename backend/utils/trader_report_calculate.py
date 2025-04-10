@@ -410,7 +410,7 @@ def calculate_trading_indicator_statistics(soup, account_list):
     total_net_profit = df["netProfit"].sum()
     total_profit = df[df["netProfit"] > 0]["netProfit"].sum()
     total_loss = -df[df["netProfit"] < 0]["netProfit"].sum()
-    profit_factor = total_profit / total_loss if total_loss != 0 else float("inf")
+    profit_factor = total_profit / total_loss if total_loss != 0 else 0
     expected_payoff = total_net_profit / len(df)
     absolute_drawdown = starting_cash - df["netProfit"].cumsum().min()
     maximal_drawdown = df["netProfit"].cumsum().cummax() - df["netProfit"].cumsum()
