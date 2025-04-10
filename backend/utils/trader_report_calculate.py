@@ -484,6 +484,7 @@ def generate_trader_report(soup, account_list):
         trader_report["winRate"] = trade_metrics["winRate"]
         trader_report["avgProfit"] = trade_metrics["avgProfit"]
         trader_report["plr"] = plr
+        trader_report["ProfitFactor"] = plr
         trader_report["mdr"] = mdr
         trader_report["max_fur"] = max_fur
         trader_report["totalTrades"] = additional_metrics["tradeCount"]
