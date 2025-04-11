@@ -401,7 +401,7 @@ def calculate_trading_indicator_statistics(soup, account_list):
             consec_loss = 0
 
     # 统计值
-    starting_cash_str = soup.find(string="Equity:").find_next().text
+    starting_cash_str = soup.find(string="Balance:").find_next().text
     # 去掉空格
     starting_cash = starting_cash_str.replace(' ', '')
     # 转换为浮点数
