@@ -754,3 +754,4 @@ async def process_auto_upload(soup, db, grouped_transactions, startTime, endTime
                 log.error("交易报告提交失败：{}".format(info))
                 await db.rollback()  # 如果发生异常，回滚事务
                 await db.close()
+
