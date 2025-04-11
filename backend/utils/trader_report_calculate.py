@@ -744,6 +744,7 @@ async def process_auto_upload(soup, db, grouped_transactions, startTime, endTime
 
                 )
                 db.add(add_strategy_record)
+                log.info("交易报告提交成功")
             except Exception as e:
                 info = traceback.format_exc()
                 log.error("交易报告提交失败：{}".format(info))
