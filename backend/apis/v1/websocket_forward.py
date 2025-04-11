@@ -16,6 +16,7 @@ async def websocket_message_processing(websocket: WebSocket, message: str):
     # if message != "ping":
     if 'method' in message:
         # print(message)
+        print('接到请求')
         message_data = json.loads(message)  # 转为字典
         response = await generate_request(message_data)  ###############################################问题所在
         if response.status_code == 200:
@@ -30,11 +31,12 @@ async def websocket_message_processing(websocket: WebSocket, message: str):
             # print('json_response', json_response)
             await websocket.send(json_response)
         else:
+            # print('有response', response.status_code)
             response_dict = {"status_code": response.status_code,
                              "text": response.text,
                              "json_data": message,
                              "Error": response.text}
-            # print('response_dict有问题', response_dict)
+            print('response_dict有问题', response_dict)
             json_response = json.dumps(response_dict, ensure_ascii=False)  # 转为字符串
             await websocket.send(json_response)
 
@@ -43,7 +45,7 @@ async def websocket_message_processing(websocket: WebSocket, message: str):
 async def websocket_background_task():
     # uri = "ws://192.168.0.120:8888/api/v1/platform/wss"
     uri = "ws://8.138.95.62:8000/api/v1/platform/wss"
-    print("发起请求")
+    print("api发起请求")
     while True:
         try:
             async with websockets.connect(uri) as ws:
@@ -76,6 +78,35 @@ async def websocket_background_task():
         #     await asyncio.sleep(5)
 
 
+async def websocket_background_task2():
+    # uri = "ws://192.168.0.120:8000/texas/wss"
+    uri = "ws://8.138.95.62:8000/texas/wss"
+    print("texas发起请求")
+    while True:
+        try:
+            async with websockets.connect(uri) as ws2:
+                print(f"Connected to {uri}")
+                # 这里可以添加逻辑来处理从服务器接收的消息
+                while True:
+                    message = await ws2.recv()
+                    print(f"Received message from server: {message}")
+                    await websocket_message_processing(ws2, message)
+
+        except WebSocketDisconnect as e:
+            print(f'发生WebSocketDisconnect错误: {e}')
+            await asyncio.sleep(5)
+            # await websocket_background_task()
+        except websockets.ConnectionClosed as e:
+            print(f'发生ConnectionClosed: {e}')
+            await asyncio.sleep(5)
+            # await websocket_background_task()
+        except ConnectionRefusedError:
+            # 当连接被拒绝时执行的代码
+            print("连接被拒绝，5秒后重试。")
+            await asyncio.sleep(5)
+            # await websocket_background_task()
+
+
 # 整理长连接收到的字符串，并获取请求所需的url和参数
 async def generate_request(data):
 
@@ -99,6 +130,8 @@ async def generate_request(data):
         if i in path:
             url = urlparameter.get_url_map(i)
     print('####' * 3)
+
+
 
     if method == 'GET':
         response = await send_request('GET', url, headers=data['headers'], params=data['query_params'])
@@ -137,6 +170,7 @@ async def startup_event():
     if not _startup_completed:
         print("启动事件执行")
         asyncio.create_task(websocket_background_task())
+        asyncio.create_task(websocket_background_task2())
         _startup_completed = True
     else:
         print("启动事件已执行，跳过")
