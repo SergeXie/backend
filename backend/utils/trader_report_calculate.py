@@ -401,7 +401,7 @@ def calculate_trading_indicator_statistics(soup, account_list):
             consec_loss = 0
 
     # 统计值
-    starting_cash_str = soup.find(string="Balance:").find_next().text
+    starting_cash_str = soup.find(string="Equity:").find_next().text
     # 去掉空格
     starting_cash = starting_cash_str.replace(' ', '')
     # 转换为浮点数
@@ -416,11 +416,6 @@ def calculate_trading_indicator_statistics(soup, account_list):
     maximal_drawdown = df["netProfit"].cumsum().cummax() - df["netProfit"].cumsum()
     max_drawdown = maximal_drawdown.max()
     relative_loss = max_drawdown / starting_cash
-
-    # 最大回撤 = max(历史净值高点 - 当前净值)
-    equity_curve = df["netProfit"].cumsum()
-    drawdown = equity_curve.cummax() - equity_curve
-    maximum_draw_down = drawdown.max()
 
     trader_report = {
         "startingCash": starting_cash,
@@ -455,7 +450,6 @@ def calculate_trading_indicator_statistics(soup, account_list):
         "plr": 0,
         "avgProfit": 0,
         "mdr": 0,
-        "maximumDrawdown": maximum_draw_down,
         "isBursted": 0,
         "maxFUR": 0,
         "score": 0,
@@ -498,6 +492,7 @@ def generate_trader_report(soup, account_list):
 
         # print(json.dumps(trader_report, indent=4, ensure_ascii=False))
         # print(json.dumps(account_list, indent=4, ensure_ascii=False))
+
         return trader_report, additional_metrics, newReportTemplate
 
     except Exception as e:
