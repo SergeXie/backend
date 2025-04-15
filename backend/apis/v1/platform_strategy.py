@@ -1142,7 +1142,7 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
 
                 # 仅获取基础信息并快速响应
                 background_tasks.add_task(process_manual_upload,soup, data_json, strategy,
-                                          startTime, endTime, uid, goods, period, db)
+                                          startTime, endTime, uid, goods, period, db, upload_type)
 
             else:
                 # 自动解析HTML部分
