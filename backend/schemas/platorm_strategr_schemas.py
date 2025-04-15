@@ -18,4 +18,4 @@ class TestResultRequest(BaseModel):
     order_by: int = Field(0, alias="orderBy")
     status: int = Field(1, alias="status")  # 1 = 有效, 0 = 无效
     screens: List[ScreenFilter] = Field(default=[], alias="screens")
-    trader_report_type: Optional[int] = Field(default=3, alias="traderReportType")  # 1 自动  2手动  3系统
+    trader_report_type: Optional[int] = Field(default=None, alias="traderReportType")  # 1 自动  2手动  3系统
