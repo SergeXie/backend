@@ -488,10 +488,7 @@ async def test_result_list(params: TestResultRequest):
         )
 
         if params.trader_report_type:
-            if params.trader_report_type == 3:  # 系统
-                query = query.where(DqlStrategyTestResult.traderReportType == None)
-            else:
-                query = query.where(DqlStrategyTestResult.traderReportType == params.trader_report_type)
+            query = query.where(DqlStrategyTestResult.traderReportType == params.trader_report_type)
         if params.goods != '%':
             query = query.where(DqlStrategyTestResult.goodsId.like(params.goods))
 
