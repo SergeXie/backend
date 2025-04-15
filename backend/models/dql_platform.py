@@ -191,8 +191,8 @@ class DqlStrategyTestResult(Base):
                                                    comment='计算回测结果状态 1 计算完成 0 未计算完成')
     newReportTemplate: Mapped[str] = mapped_column(LONGTEXT, nullable=False, comment='新报告模板')
 
-    traderReportType: Mapped[int] = mapped_column(Integer, nullable=False, index=True,
-                                                  comment='交易报告上传类型  2 手动上传  1 自动上传  其他为系统报告')
+    traderReportType: Mapped[int] = mapped_column(Integer, default=3, nullable=False, index=True,
+                                                  comment='交易报告上传类型  2 手动上传  1 自动上传  3 系统报告')
 
     createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
                                                  server_default='CURRENT_TIMESTAMP', comment='创建时间')
