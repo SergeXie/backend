@@ -26,7 +26,7 @@ from schemas.platorm_strategr_schemas import TestResultRequest
 from utils.common import fetch_trading_data, PandasData, get_entities_list, generate_random_string, \
     generate_lazy_pinyin, indicator_classes, \
     to_float, format_datetime, select_goods_common, select_kline_data, fetch_indicators
-from utils.public_strategy import ComprehensiveAnalyzer
+from utils.public_strategy import ComprehensiveAnalyzer, adjust_unpaired_trades
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
 from utils.trader_report_calculate import extract_transactions, generate_trader_report, normalize_to_float, \
@@ -789,6 +789,9 @@ async def indicator_sync_batch_test(request: Request):
             strategy_data_requests["indicatorResult"] = backtest_result["indicatorResult"]
             strategy_data_requests["newReportTemplate"] = backtest_result["newReportTemplate"]
 
+            # 对交易订单 traderResult还在持仓的，进行盈利结算
+            traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("endTime"), traderResult)
+            print("traderResult:{}".format(traderResult))
             try:
                 tester_uid = await create_strategy_record(db, strategy_data_requests, strategy)
 
