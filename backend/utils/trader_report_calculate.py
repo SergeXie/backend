@@ -585,6 +585,7 @@ async def process_manual_upload(soup, data_json, strategy,
 
     filtered_result = await data_filters(db, account_list, startTime, endTime)
 
+
     # 提取报告数据
     trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, filtered_result)
 
