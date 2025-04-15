@@ -732,6 +732,8 @@ async def adjust_unpaired_trades(db, end_dt, trader_result):
                     # 做多 PnL=(平仓价格（现价 K线M1的收盘价）− 开仓价格)×交易手数×杠杆−隔夜利息
                     item["pnl"] = round((kline_data.closed - item["openPrice"]) * (item["size"] * goods_.profitRatio), 3)
 
+                item["initialCash"] += item["pnl"]
+
     return trader_result
 
 
