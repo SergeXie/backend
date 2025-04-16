@@ -37,6 +37,7 @@ from typing import List, Dict, Optional
 from datetime import datetime, timedelta, time
 from utils.strategys import reload_strategies
 from fastapi import BackgroundTasks, WebSocket, WebSocketDisconnect
+from sqlalchemy.exc import OperationalError
 from apis.v1.platform_strategy import fetch_indicators, create_strategy_record
 router = APIRouter()
 
@@ -404,8 +405,6 @@ def get_strategy_str(tradeUid, new_order_point, new_data, CMD=None):
         return base + 'Code=200'
 
 
-
-
 # 买卖点轮询计算
 async def send_forex_updates(data):
     try:
@@ -431,72 +430,74 @@ async def send_forex_updates(data):
         else:
             moni = False
         while keep_running:
-            async with async_db_session() as db:
-                # 根据品种或者品种表的手数和盈亏倍率
-                dp_goods_data = await db.execute(select(DplGoodsTest).where(
-                    DplGoodsTest.goods == goods))
-                goods_data = dp_goods_data.scalars().first()
-                # 根据uid寻找策略
-                strategy = await fetch_indicators(db, strategyUid)
-                print('strategys.className',strategy.className)
-                # 计算策略结果
-                backtest_result = await run_backtest(db, new_data, strategy, 0, goods_data, task_name="sync", ismoni=moni)
-                order_point = backtest_result.get('order_point', [])  # 获取买卖点的字典
-                latest_Kline_datetime = str(backtest_result.get('last_datetime', []))  # 最新k线时间
-                latest_Kline_datetime = datetime.strptime(latest_Kline_datetime, '%Y-%m-%d %H:%M:%S')
+            try:
+                async with async_db_session() as db:
+                    # 根据品种或者品种表的手数和盈亏倍率
+                    dp_goods_data = await db.execute(select(DplGoodsTest).where(
+                        DplGoodsTest.goods == goods))
+                    goods_data = dp_goods_data.scalars().first()
+                    # 根据uid寻找策略
+                    strategy = await fetch_indicators(db, strategyUid)
+                    print('strategys.className',strategy.className)
+                    # 计算策略结果
+                    backtest_result = await run_backtest(db, new_data, strategy, 0, goods_data, task_name="sync", ismoni=moni)
+                    order_point = backtest_result.get('order_point', [])  # 获取买卖点的字典
+                    latest_Kline_datetime = str(backtest_result.get('last_datetime', []))  # 最新k线时间
+                    latest_Kline_datetime = datetime.strptime(latest_Kline_datetime, '%Y-%m-%d %H:%M:%S')
 
-            # print('@@@@@@', last_order_point)
-            # print('@@@@@@', order_point)
-            # print(order_point)
-            strategy_hold_order(tradeUid, order_point, goods)
-            # 判断有没有买卖点
-            if last_order_point != [] and last_order_point[-1]['datatime'] != order_point[-1]['datatime']:
-                index = find_last_index(order_point, last_order_point)
-                # index = order_point.index(last_order_point[-1])
-                new_order_points = order_point[index+1:]
-                # 保存出现的买卖点
-                strategy_history_order(tradeUid, order_point)
-                for new_order_point in new_order_points:
-                    # print('*'*5,new_order_point)
-                    if new_order_point.get('order_type') != 'close': # 开仓
-                        tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Open')
-                        # print('开仓',tmp)
-                        await send_tradeUid(tradeUid, tmp)
+                # print('@@@@@@', last_order_point)
+                # print('@@@@@@', order_point)
+                # print(order_point)
+                strategy_hold_order(tradeUid, order_point, goods)
+                # 判断有没有买卖点
+                if last_order_point != [] and last_order_point[-1]['datatime'] != order_point[-1]['datatime']:
+                    index = find_last_index(order_point, last_order_point)
+                    # index = order_point.index(last_order_point[-1])
+                    new_order_points = order_point[index+1:]
+                    # 保存出现的买卖点
+                    strategy_history_order(tradeUid, order_point)
+                    for new_order_point in new_order_points:
+                        # print('*'*5,new_order_point)
+                        if new_order_point.get('order_type') != 'close': # 开仓
+                            tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Open')
+                            # print('开仓',tmp)
+                            await send_tradeUid(tradeUid, tmp)
 
-                    else:  # 关仓
-                        tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Close')
-                        # print('关仓', tmp)
-                        await send_tradeUid(tradeUid, tmp)
+                        else:  # 关仓
+                            tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Close')
+                            # print('关仓', tmp)
+                            await send_tradeUid(tradeUid, tmp)
 
-                    print('产生买卖点')
-                    # 持单的保存
+                        print('产生买卖点')
+                        # 持单的保存
 
 
-            sleep_seconds = period_Conversion_Seconds_dict.get(period)  # 通过周期获取休眠时间
-            # 判断数据有没有更新
-            if last_latest_Kline_datetime != '':
+                sleep_seconds = period_Conversion_Seconds_dict.get(period)  # 通过周期获取休眠时间
+                # 判断数据有没有更新
+                if last_latest_Kline_datetime != '':
 
-                dt_object = latest_Kline_datetime + timedelta(seconds=sleep_seconds)  # 用于判断当前时间的下一个k线是不是节假日
-                # 检查是否周末
-                is_weekend = dt_object.weekday() >= 5
-                # 检查是否假日(美国)
-                is_holiday = dt_object in holidays.US()
-                # 检查是否休市
-                start_time = time(0, 0, 0)  # 00:00:00
-                end_time = time(1, 0, 0)  # 01:00:00
-                is_close = start_time <= dt_object.time() < end_time
+                    dt_object = latest_Kline_datetime + timedelta(seconds=sleep_seconds)  # 用于判断当前时间的下一个k线是不是节假日
+                    # 检查是否周末
+                    is_weekend = dt_object.weekday() >= 5
+                    # 检查是否假日(美国)
+                    is_holiday = dt_object in holidays.US()
+                    # 检查是否休市
+                    start_time = time(0, 0, 0)  # 00:00:00
+                    end_time = time(1, 0, 0)  # 01:00:00
+                    is_close = start_time <= dt_object.time() < end_time
 
-                # 如果不是节假日 且 两次最后k线的相同
-                if latest_Kline_datetime == last_latest_Kline_datetime and not any([is_weekend, is_holiday, is_close]):
-                    # await send_tradeUid(tradeUid, "数据未更新")
-                    print("数据未更新")
+                    # 如果不是节假日 且 两次最后k线的相同
+                    if latest_Kline_datetime == last_latest_Kline_datetime and not any([is_weekend, is_holiday, is_close]):
+                        # await send_tradeUid(tradeUid, "数据未更新")
+                        print("数据未更新")
 
-            # 记录上一个买卖点 和 上一个策略计算种的最后一根K线
-            last_order_point = order_point
-            last_latest_Kline_datetime = latest_Kline_datetime
+                # 记录上一个买卖点 和 上一个策略计算种的最后一根K线
+                last_order_point = order_point
+                last_latest_Kline_datetime = latest_Kline_datetime
+            except OperationalError as e:
+                log.error(f"数据库断开，捕获到 OperationalError: {e}")
 
-            # await asyncio.sleep(sleep_seconds)
-            # await asyncio.sleep(1)
+            # 设置轮询间隔
             if tradeUid == 'NTRXAUM1S0002':
                 for i in order_point:
                     if i.get('order_type') != 'close': # 开仓
@@ -518,6 +519,8 @@ async def send_forex_updates(data):
         log.error("策略轮询出错：{}".format(info))
         print("错误信息：{}".format(info))
         return Response(status_code=500, content="系统错误!")
+
+
 
 
 @router.websocket("/wss")
@@ -599,6 +602,10 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"WebSocket disconnected with code: {e.code}")
         await manager.disconnect(websocket, "all")
         # await websocket.close()  # 关闭 WebSocket 连接
+    except OperationalError as e:
+        log.error(f"捕获到 OperationalError: {e}")
+    except Exception as e:
+        log.error(f"捕获到异常: {e}")
 
 
 #-------------------------------- 毒属于该文件的函数-------------------------------#
