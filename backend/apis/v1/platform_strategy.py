@@ -628,7 +628,6 @@ async def fetch_tester_result(request: Request):
                 data_dict["traderReportType"] = data.traderReportType
 
                 result_data.append(data_dict)
-
             return await response_base.success(data=result_data)
 
     except Exception as e:

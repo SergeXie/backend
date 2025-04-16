@@ -367,11 +367,10 @@ def calculate_trading_indicator_statistics(soup, account_list):
     df["isLoss"] = df["netProfit"] < 0
     df["orderType"] = df["orderType"].str.lower()
 
-    # 计算连续额外和连续亏损
+    # 计算连续盈利和连续亏损
     profits = df["netProfit"].tolist()
     consecutive_profits = []
     consecutive_losses = []
-
     current_profit = 0
     current_loss = 0
     consec_win = 0
@@ -400,26 +399,31 @@ def calculate_trading_indicator_statistics(soup, account_list):
             consec_win = 0
             consec_loss = 0
 
-    # 统计值
+    # 提取起始资金
     starting_cash_str = soup.find(string="Balance:").find_next().text
-    # 去掉空格
-    starting_cash = starting_cash_str.replace(' ', '')
-    # 转换为浮点数
-    starting_cash = float(starting_cash)
+    starting_cash = float(starting_cash_str.replace(' ', ''))
 
+    # 统计计算
     total_net_profit = df["netProfit"].sum()
     total_profit = df[df["netProfit"] > 0]["netProfit"].sum()
     total_loss = -df[df["netProfit"] < 0]["netProfit"].sum()
-    profit_factor = total_profit / total_loss if total_loss != 0 else 0
-    expected_payoff = total_net_profit / len(df)
     absolute_drawdown = df["netProfit"].cumsum().min()
     maximal_drawdown = df["netProfit"].cumsum().cummax() - df["netProfit"].cumsum()
     max_drawdown = maximal_drawdown.max()
-    relative_loss = max_drawdown / starting_cash
+
+    profit_trades = df[df["isProfit"]]
+    loss_trades = df[df["isLoss"]]
+    average_profit_trade = round(profit_trades["netProfit"].mean(), 2) if not profit_trades.empty else 0
+    average_loss_trade = round(loss_trades["netProfit"].mean(), 2) if not loss_trades.empty else 0
+    largest_profit = round(df["netProfit"].max(), 2) if not df.empty else 0
+    largest_loss = round(df["netProfit"].min(), 2) if not df.empty else 0
+    profit_factor = total_profit / total_loss if total_loss != 0 else 0
+    expected_payoff = total_net_profit / len(df) if len(df) > 0 else 0
+    relative_loss = max_drawdown / starting_cash if starting_cash != 0 else 0
 
     trader_report = {
         "startingCash": starting_cash,
-        "FreeMargin": starting_cash + total_net_profit,
+        "FreeMargin": round(starting_cash + total_net_profit, 2),
         "totalNetProfit": round(total_net_profit, 2),
         "totalProfit": round(total_profit, 2),
         "totalLoss": round(total_loss, 2),
@@ -430,29 +434,29 @@ def calculate_trading_indicator_statistics(soup, account_list):
         "relativeLosses": round(relative_loss, 4),
         "totalTrades": len(df),
         "shortPositions": int((df["orderType"] == "sell").sum()),
-        "shortPositionsRatio": round((df["orderType"] == "sell").mean() * 100, 2),
+        "shortPositionsRatio": round((df["orderType"] == "sell").mean() * 100, 2) if not df.empty else 0,
         "longPositions": int((df["orderType"] == "buy").sum()),
-        "longPositionsRatio": round((df["orderType"] == "buy").mean() * 100, 2),
+        "longPositionsRatio": round((df["orderType"] == "buy").mean() * 100, 2) if not df.empty else 0,
         "profitTrades": int(df["isProfit"].sum()),
-        "profitTradesRatio": round(df["isProfit"].mean() * 100, 2),
+        "profitTradesRatio": round(df["isProfit"].mean() * 100, 2) if not df.empty else 0,
         "lossTrades": int(df["isLoss"].sum()),
-        "lossTradesRatio": round(df["isLoss"].mean() * 100, 2),
-        "largestProfit": round(df["netProfit"].max(), 2),
-        "largestLoss": round(df["netProfit"].min(), 2),
-        "averageProfitTrade": round(df[df["isProfit"]]["netProfit"].mean(), 2),
-        "averageLossTrade": round(df[df["isLoss"]]["netProfit"].mean(), 2),
+        "lossTradesRatio": round(df["isLoss"].mean() * 100, 2) if not df.empty else 0,
+        "largestProfit": largest_profit,
+        "largestLoss": largest_loss,
+        "averageProfitTrade": average_profit_trade,
+        "averageLossTrade": average_loss_trade,
         "maximalConsecutiveProfit": round(max(consecutive_profits or [0]), 2),
         "maximalConsecutiveLoss": round(min(consecutive_losses or [0]), 2),
         "maximumConsecutiveWins": max_consec_win,
         "maximumConsecutiveLosses": max_consec_loss,
-        "yieldRate": 0,
-        "winRate": 0,
-        "plr": 0,
-        "avgProfit": 0,
-        "mdr": 0,
+        "yieldRate": 0.0,
+        "winRate": 0.0,
+        "plr": 0.0,
+        "avgProfit": 0.0,
+        "mdr": 0.0,
         "isBursted": 0,
-        "maxFUR": 0,
-        "score": 0,
+        "maxFUR": 0.0,
+        "score": 0.0,
     }
 
     return trader_report
