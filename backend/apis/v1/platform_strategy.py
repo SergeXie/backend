@@ -794,8 +794,8 @@ async def indicator_sync_batch_test(request: Request):
             strategy_data_requests["newReportTemplate"] = backtest_result["newReportTemplate"]
 
             # 对交易订单 traderResult还在持仓的，进行盈利结算
-            traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("endTime"), traderResult, traderReport)
-            print("traderResult:{}".format(traderResult))
+            # traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("endTime"), traderResult, traderReport)
+            # print("traderResult:{}".format(traderResult))
             try:
                 tester_uid = await create_strategy_record(db, strategy_data_requests, strategy)
 
