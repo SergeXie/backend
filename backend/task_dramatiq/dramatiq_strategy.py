@@ -127,7 +127,7 @@ async def task_run_backtest(strategy_data_requests, tester_uid, task_name=None):
         traderReport["maxFUR"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         traderReport["mdr"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         # 对交易订单 traderResult还在持仓的，进行盈利结算
-        traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("endTime"), traderResult)
+        traderResult_ = await adjust_unpaired_trades(db, strategy_data_requests.get("endTime"), traderResult)
 
         # 事务2：更新策略测试结果，带重试机制
         for attempt in range(3):
@@ -136,7 +136,7 @@ async def task_run_backtest(strategy_data_requests, tester_uid, task_name=None):
                     await db.execute(
                         update(DqlStrategyTestResult).where(DqlStrategyTestResult.uid == tester_uid).values(
                             traderResult=json.dumps({
-                                "traderResult": traderResult,
+                                "traderResult": traderResult_,
                                 "traderReport": traderReport,
                                 "floatingPointValues": floatingPointValues,
                                 "netAssetValues": netAssetValues
