@@ -895,16 +895,18 @@ async def strategy_delete(uid: str):
         return await response_base.success(msg="策略删除成功")
 
 
-@router.get("/deleteTestResult", name="策略结果删除")
-async def strategy_delete(uid: List[str]):
+@router.post("/deleteTestResult", name="策略结果删除")
+async def strategy_delete(request: Request):
     """
     :param uid:  List of strategy uids
     :return:
     """
+    data = await request.json()
 
+    uids = data["uids"]
     async with async_db_session() as db:
         # 查询策略表
-        for uid_ in uid:
+        for uid_ in uids:
             # Query the strategy table for each uid
             strategy_result_query = await db.execute(select(
                 DqlStrategyTestResult).where(DqlStrategyTestResult.uid == uid_,
