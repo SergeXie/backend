@@ -692,7 +692,7 @@ class CommonStrategy(bt.Strategy):
         return trader_return
 
 
-async def adjust_unpaired_trades(db, end_dt, trader_result):
+async def adjust_unpaired_trades(db, end_dt, trader_result, traderReport=None):
     """
     查找未配对的 tradeid 并修改其 pnl 值，返回更新后的 trader_result 列表
     :param end_dt: 数据库对象
@@ -733,6 +733,10 @@ async def adjust_unpaired_trades(db, end_dt, trader_result):
                     item["pnl"] = round((kline_data.closed - item["openPrice"]) * (item["size"] * goods_.profitRatio), 3)
 
                 item["initialCash"] += item["pnl"]
+
+                # traderReport["totalNetProfit"] += item["pnl"]
+                # traderReport["totalProfit"] += item["pnl"]
+                # traderReport["totalLoss"] += item["pnl"]
 
     return trader_result
 
