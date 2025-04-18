@@ -7,6 +7,8 @@ import sys
 import traceback
 import shutil
 from collections import defaultdict, namedtuple
+from typing import List
+
 import chardet
 import backtrader as bt
 import pandas as pd
@@ -599,6 +601,7 @@ async def fetch_tester_result(request: Request):
 
             for data in dql_strategy_test_result_all:
                 trader_result = json.loads(data.traderResult)
+                print(trader_result)
                 data_dict = dict()
                 data_dict["testerUids"] = data.uid
                 data_dict["name"] = data.title
@@ -628,6 +631,8 @@ async def fetch_tester_result(request: Request):
                 data_dict["traderReportType"] = data.traderReportType
 
                 result_data.append(data_dict)
+
+
             return await response_base.success(data=result_data)
 
     except Exception as e:
@@ -789,7 +794,7 @@ async def indicator_sync_batch_test(request: Request):
             strategy_data_requests["newReportTemplate"] = backtest_result["newReportTemplate"]
 
             # 对交易订单 traderResult还在持仓的，进行盈利结算
-            traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("endTime"), traderResult)
+            traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("endTime"), traderResult, traderReport)
             print("traderResult:{}".format(traderResult))
             try:
                 tester_uid = await create_strategy_record(db, strategy_data_requests, strategy)
@@ -891,28 +896,29 @@ async def strategy_delete(uid: str):
 
 
 @router.get("/deleteTestResult", name="策略结果删除")
-async def strategy_delete(uid: str):
+async def strategy_delete(uid: List[str]):
     """
-    :param uid:  策略uid
+    :param uid:  List of strategy uids
     :return:
     """
 
     async with async_db_session() as db:
         # 查询策略表
-        strategy_result_query = await db.execute(select(
-            DqlStrategyTestResult).where(DqlStrategyTestResult.uid == uid,
-                                         DqlStrategyTestResult.is_delete == 0))
+        for uid_ in uid:
+            # Query the strategy table for each uid
+            strategy_result_query = await db.execute(select(
+                DqlStrategyTestResult).where(DqlStrategyTestResult.uid == uid_,
+                                             DqlStrategyTestResult.is_delete == 0))
 
-        result = strategy_result_query.scalars().first()
+            result = strategy_result_query.scalars().first()
 
-        if result is None:
-            return await response_base.fail(msg="策略结果不存在")
+            if result is None:
+                return await response_base.fail(msg=f"策略结果不存在: {uid_}")
 
-        result.is_delete = 1
-        await db.commit()
+            result.is_delete = 1
+            await db.commit()
 
         return await response_base.success(msg="策略删除成功")
-
 
 @router.post("/saveTestResult", name="策略结果入库")
 async def save_test_result(request: Request):
