@@ -1,3 +1,4 @@
+import numpy as np
 import pytz
 import backtrader as bt
 from utils.public_strategy import CommonStrategy
@@ -102,23 +103,64 @@ class ZuoShi15Strategy(CommonStrategy):
 
                 self.execute_trade(bt.Order.Sell, self.cur_high)
 
+    # def execute_trade(self, order_type, reference_price):
+    #     """计算止损和止盈价格并执行订单"""
+    #     stop_loss = reference_price - 2 if order_type == bt.Order.Buy else reference_price + 2
+    #
+    #     # 将收益金额加到当前价格上（对于买入订单）或减去收益金额（对于卖出订单），得到止盈价 通过风险/收益比率控制止盈点
+    #     take_profit = self.data.close[0] + (self.data.close[0] - stop_loss) * self.params.risk_reward_ratio
+    #
+    #     # 修正：确保止盈价是基于订单类型正确计算的
+    #     if order_type == bt.Order.Sell:
+    #         take_profit = self.data.close[0] - (stop_loss - self.data.close[0]) * self.params.risk_reward_ratio
+    #
+    #     order_func = self.buy_bracket if order_type == bt.Order.Buy else self.sell_bracket
+    #     print("🟡 准备下单")
+    #     print(f"lots={self.baseLots}, price={self.data.close[0]}, stop={stop_loss}, tp={take_profit}")
+    #     print(f"[DEBUG] 当前close价格: {self.data.close[0]}")
+    #
+    #     self.order = order_func(
+    #         price=self.data.close[0],
+    #         stopprice=stop_loss,
+    #         limitprice=take_profit,
+    #         size=self.baseLots
+    #         # **self.data_dict(stop_loss, take_profit)
+    #     )
+
     def execute_trade(self, order_type, reference_price):
-        """计算止损和止盈价格并执行订单"""
+        current_price = self.data.close[0]
+
+        if np.isnan(current_price):
+            print("❌ 当前收盘价为 NaN，取消下单")
+            return
+
         stop_loss = reference_price - 2 if order_type == bt.Order.Buy else reference_price + 2
 
-        # 将收益金额加到当前价格上（对于买入订单）或减去收益金额（对于卖出订单），得到止盈价 通过风险/收益比率控制止盈点
-        take_profit = self.data.close[0] + (self.data.close[0] - stop_loss) * self.params.risk_reward_ratio
-
-        # 修正：确保止盈价是基于订单类型正确计算的
-        if order_type == bt.Order.Sell:
-            take_profit = self.data.close[0] - (stop_loss - self.data.close[0]) * self.params.risk_reward_ratio
+        if order_type == bt.Order.Buy:
+            take_profit = current_price + (current_price - stop_loss) * self.params.risk_reward_ratio
+        else:
+            take_profit = current_price - (stop_loss - current_price) * self.params.risk_reward_ratio
 
         order_func = self.buy_bracket if order_type == bt.Order.Buy else self.sell_bracket
 
-        self.order = order_func(
-            price=self.data.close[0],
-            stopprice=stop_loss,
-            limitprice=take_profit,
-            size=self.baseLots,
-            **self.data_dict(stop_loss, take_profit)
-        )
+        try:
+            print("🟡 准备下单")
+            print(f"lots={self.baseLots}, price={self.data.close[0]}, stop={stop_loss}, tp={take_profit}")
+            print(f"[DEBUG] 当前close价格: {self.data.close[0]}")
+
+            orders = order_func(
+                data=self.data,
+                price=current_price,
+                stopprice=stop_loss,
+                limitprice=take_profit,
+                size=self.baseLots
+            )
+        except Exception as e:
+            print(f"❌ 下单函数内部报错: {e}")
+            return
+
+        if orders is None or orders[0] is None:
+            print("❌ 下单失败：主单未能创建")
+        else:
+            self.order_main, self.order_stop, self.order_limit = orders
+            print("✅ 下单成功")
