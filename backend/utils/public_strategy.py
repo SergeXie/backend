@@ -265,6 +265,24 @@ class CommonStrategy(bt.Strategy):
                      f'当前关仓价：{self.datas[0].close[0]}, 数量：{order.executed.size}, 当前资金：{cash}, 订单类型：{order.ordtype}')
 
     def notify_trade(self, trade):
+        # super().notify_trade(trade)
+        # print('notify_trade触发',self.datas[0].datetime.datetime(), trade.justopened, trade.isclosed, trade.size)
+        if trade.isclosed:
+            orderId = self.orderpoint.orderpoint_list[-1].get('orderId')
+            self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+                                order_type='close',
+                                size=1 if trade.size is None else trade.size,
+                                price=self.data.close[0],
+                                orderId=orderId,
+                                )
+        else:
+            self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+                                order_type='sell' if trade.size < 0 else 'buy',
+                                size=1 if trade.size is None else trade.size,
+                                price=self.data.close[0],
+                                orderId=str(int(self.datas[0].datetime.datetime().timestamp())),
+                                )
+
         """
         ref: 交易的引用编号，通常是一个唯一的标识符。
         data: 与交易相关的市场数据对象，可能包含价格、成交量等信息。
@@ -605,15 +623,12 @@ class CommonStrategy(bt.Strategy):
             info = traceback.format_exc()
             log.error("策略计算结果出错！：{}".format(info))
 
-    def sell(self, data=None,
-             size=None, price=None, plimit=None,
-             exectype=None, valid=None, tradeid=0, oco=None,
-             trailamount=None, trailpercent=None,
-             parent=None, transmit=True, from_close=False, orderId=None,
+
+    def private_sell(self, data=None,
+             size=None, price=None, from_close=False, orderId=None,
              **kwargs):
-        super().sell()
         if from_close:
-            # print("close")
+            print("有close")
             self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
                                 order_type='close',
                                 size=1 if size is None else size,
@@ -627,26 +642,22 @@ class CommonStrategy(bt.Strategy):
                                 price=self.data.close[0],
                                 orderId=str(int(self.datas[0].datetime.datetime().timestamp())) if orderId is None else orderId,
                                 )
-            # print("sell")
 
+            print("无closesell")
 
-    def buy(self, data=None,
-            size=None, price=None, plimit=None,
-            exectype=None, valid=None, tradeid=0, oco=None,
-            trailamount=None, trailpercent=None,
-            parent=None, transmit=True, from_close=False, orderId=None,
+    def private_buy(self, data=None,
+            size=None, price=None, from_close=False, orderId=None,
             **kwargs):
-        super().buy()
         if from_close:
-            # print("close")
             self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
                                 order_type='close',
                                 size=1 if size is None else size,
                                 price=self.data.close[0],
                                 orderId=orderId,
                                 )
+            print("有close")
         else:
-            # print("buy", self.datas[0].datetime.datetime())
+            print("无closebuy")
             self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
                                 order_type='buy',
                                 size=1 if size is None else size,
@@ -654,30 +665,139 @@ class CommonStrategy(bt.Strategy):
                                 orderId=str(int(self.datas[0].datetime.datetime().timestamp())) if orderId is None else orderId,
                                 )
 
-    def close(self, data=None, size=None, orderId=None,**kwargs):
-        """
-        增加了参数from_close
-        """
-        if isinstance(data, str):  # 重写部分
-            data = self.getdatabyname(data)
-        elif data is None:
-            data = self.data
+    def private_buy_limit(self, data=None, order_type=None, size=None, limit_price=None, orderId=None,
+              **kwargs):
+        self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+                            order_type='buy_limit',
+                            size=1 if size is None else size,
+                            price=limit_price,
+                            orderId=str(int(self.datas[0].datetime.datetime().timestamp())),
+                            )
 
-        possize = self.getposition(data, self.broker).size
-        size = abs(size if size is not None else possize)
+    def private_sell_limit(self, data=None, order_type=None, size=None, limit_price=None, orderId=None,
+              **kwargs):
+        self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+                            order_type='sell_limit',
+                            size=1 if size is None else size,
+                            price=limit_price,
+                            orderId=str(int(self.datas[0].datetime.datetime().timestamp())),
+                            )
 
-        if orderId is None:
+    def private_modify(self, data=None, order_type=None, size=None, orderId=None, limit_price=None,
+              **kwargs):
+
+        if self.orderpoint.orderpoint_list[-1].get('order_type') in ['buy_limit', 'sell_limit', 'modify']:
             orderId = self.orderpoint.orderpoint_list[-1].get('orderId')
+            self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+                                order_type='modify',
+                                size=10 if size is None else size,
+                                price=limit_price,
+                                orderId=orderId,
+                                )
+        # else:
+        #     print('无可修改的单')
 
-        if possize > 0:
-            return self.sell(data=data, size=size, from_close=True, orderId=orderId, **kwargs)  # 重写部分
-        elif possize < 0:
-            return self.buy(data=data, size=size, from_close=True, orderId=orderId, **kwargs)  # 重写部分
 
-        return None
+    # def private_close(self, data=None, order_type=None, size=None, orderId=None,
+    #           **kwargs):
+    #     print('close')
+    #
+    #     # possize = self.orderpoint.orderpoint_list[-1].get('size')
+    #     #
+    #     # if orderId is None:
+    #     #     orderId = self.orderpoint.orderpoint_list[-1].get('orderId')
+    #     #
+    #     # if possize > 0:
+    #     #     return self.private_sell(data=data, size=size, from_close=True, orderId=orderId, **kwargs)  # 重写部分
+    #     # elif possize < 0:
+    #     #     return self.private_buy(data=data, size=size, from_close=True, orderId=orderId, **kwargs)  # 重写部分
+    #     #
+    #     # return None
+
+    #
+    # def sell(self, data=None,
+    #          size=None, price=None, plimit=None,
+    #          exectype=None, valid=None, tradeid=0, oco=None,
+    #          trailamount=None, trailpercent=None,
+    #          parent=None, transmit=True, from_close=False, orderId=None,
+    #          **kwargs):
+    #     super().sell()
+    #     print('sell',self.datas[0].datetime.datetime(),from_close,'持仓:',self.position.size)
+    #     if from_close:
+    #         # print("close")
+    #         self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+    #                             order_type='close',
+    #                             size=1 if size is None else size,
+    #                             price=self.data.close[0],
+    #                             orderId=orderId,
+    #                             )
+    #     else:
+    #         self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+    #                             order_type='sell',
+    #                             size=1 if size is None else size,
+    #                             price=self.data.close[0],
+    #                             orderId=str(int(self.datas[0].datetime.datetime().timestamp())) if orderId is None else orderId,
+    #                             )
+    #         # print("sell")
+    #
+    # def buy(self, data=None,
+    #         size=None, price=None, plimit=None,
+    #         exectype=None, valid=None, tradeid=0, oco=None,
+    #         trailamount=None, trailpercent=None,
+    #         parent=None, transmit=True, from_close=False, orderId=None,
+    #         **kwargs):
+    #     super().buy()
+    #     print('buy', self.datas[0].datetime.datetime(), from_close,'持仓:',self.position.size)
+    #     if from_close:
+    #         # print("close")
+    #         self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+    #                             order_type='close',
+    #                             size=1 if size is None else size,
+    #                             price=self.data.close[0],
+    #                             orderId=orderId,
+    #                             )
+    #     else:
+    #         # print("buy", self.datas[0].datetime.datetime())
+    #         self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+    #                             order_type='buy',
+    #                             size=1 if size is None else size,
+    #                             price=self.data.close[0],
+    #                             orderId=str(int(self.datas[0].datetime.datetime().timestamp())) if orderId is None else orderId,
+    #                             )
+    #
+    # def close(self, data=None, size=None, orderId=None,**kwargs):
+    #     """
+    #     增加了参数from_close
+    #     """
+    #     if isinstance(data, str):  # 重写部分
+    #         data = self.getdatabyname(data)
+    #     elif data is None:
+    #         data = self.data
+    #
+    #     possize = self.getposition(data, self.broker).size
+    #     size = abs(size if size is not None else possize)
+    #
+    #     if orderId is None:
+    #         orderId = self.orderpoint.orderpoint_list[-1].get('orderId')
+    #
+    #     if possize > 0:
+    #         return self.sell(data=data, size=size, from_close=True, orderId=orderId, **kwargs)  # 重写部分
+    #     elif possize < 0:
+    #         return self.buy(data=data, size=size, from_close=True, orderId=orderId, **kwargs)  # 重写部分
+    #
+    #     return None
 
     def get_orderpoint(self):
         return self.orderpoint.orderpoint_list
+
+    def get_last_buy_sell_order(self):
+        # 从后向前遍历列表
+        orderpoint_list = self.orderpoint.orderpoint_list
+        for order in reversed(orderpoint_list):
+            # 检查 order_type 是否为 'buy' 或 'sell'
+            if order['order_type'] in ('buy', 'sell'):
+                return order  # 找到后立即返回该记录
+        return None  # 如果没有找到任何匹配的记录，返回 None
 
     def get_analysis(self):
 
