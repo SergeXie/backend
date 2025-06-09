@@ -406,14 +406,13 @@ def get_strategy_str(tradeUid, new_order_point, new_data, CMD=None):
 
     #CMD 目前包含Connect、Opne、Close、TradingOrders
     if CMD == 'Open':
-        print('new_order_point',new_order_point)
-        return base + data + ','.join(str(i) for i in [orderId, symbol, type, price, lots, sl, tp, exp, mc, opentime]) + 'a'
+        return base + data + ','.join(str(i) for i in [orderId, symbol, type, price, lots, sl, tp, exp, mc, opentime])
     elif CMD == 'Close':
-        return base + data + ','.join(str(i) for i in [orderId, symbol, 'Close', price, opentime])+'b'
+        return base + data + ','.join(str(i) for i in [orderId, symbol, 'Close', price, opentime])
     elif CMD == 'Modify':
-        return base + data + ','.join(str(i) for i in [orderId, symbol, type ,price, sl, tp, exp, opentime])+'c'
+        return base + data + ','.join(str(i) for i in [orderId, symbol, type, price, sl, tp, exp, opentime])
     elif CMD == 'HeartBeat':
-        return base + data + ','.join(str(i) for i in [orderId, symbol, type, price, lots, sl, tp, exp, mc, opentime])+'d'
+        return base + data + ','.join(str(i) for i in [orderId, symbol, type, price, lots, sl, tp, exp, mc, opentime])
     elif CMD == 'Connect':
         return base + 'Code=200'
 
@@ -522,16 +521,23 @@ async def send_forex_updates(data):
                 log.error(f"数据库断开，捕获到 OperationalError: {e}")
 
             # 设置轮询间隔
-            if tradeUid == 'NTRXAUM1S0002':
+            if tradeUid in ['NTRXAUM1S0002', 'NTRXAUM5S0004']:
+                # print('进行模拟输出',order_point_judge(last_order_point, order_point))
+                # print(order_point)
                 for i in order_point:
-                    if i.get('order_type') != 'close': # 开仓
+                    if i.get('order_type') == 'buy' or i.get('order_type') == 'sell':  # 开仓
                         tmp = get_strategy_str(tradeUid, i, new_data, CMD='Open')
                         await send_tradeUid(tradeUid, tmp)
-                    else:  # 关仓
+                    elif i.get('order_type') == 'close':  # 关仓
                         tmp = get_strategy_str(tradeUid, i, new_data, CMD='Close')
-
                         await send_tradeUid(tradeUid, tmp)
-                    await asyncio.sleep(15)
+                    elif i.get('order_type') == 'buy_limit' or i.get('order_type') == 'sell_limit':  # 关仓
+                        tmp = get_strategy_str(tradeUid, i, new_data, CMD='Open')
+                        await send_tradeUid(tradeUid, tmp)
+                    elif i.get('order_type') == 'modify_buy' or i.get('order_type') == 'modify_sell':  # 关仓
+                        tmp = get_strategy_str(tradeUid, i, new_data, CMD='Modify')
+                        await send_tradeUid(tradeUid, tmp)
+                    await asyncio.sleep(1)
                 await asyncio.sleep(0)
             else:
                 if tradeUid == 'NTRXAUM1S000':
