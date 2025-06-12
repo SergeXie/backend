@@ -252,6 +252,7 @@ class CommonStrategy(bt.Strategy):
         self.netAssetValues.append(float(format(self.starting_cash, precision_format)))
 
     def notify_order(self, order):
+        # print('notify_order触发',self.datas[0].datetime.datetime(), order.status)
         if order.status in [order.Margin, order.Rejected, order.Expired]:
             self.log("交易被拒绝/现金不足/取消 :{}".format(order.status))
             self.isbursted = 1
@@ -265,6 +266,24 @@ class CommonStrategy(bt.Strategy):
                      f'当前关仓价：{self.datas[0].close[0]}, 数量：{order.executed.size}, 当前资金：{cash}, 订单类型：{order.ordtype}')
 
     def notify_trade(self, trade):
+        # super().notify_trade(trade)
+        # print('notify_trade触发',self.datas[0].datetime.datetime(), trade.justopened, trade.isclosed, trade.size)
+        # if trade.isclosed:
+        #     orderId = self.orderpoint.orderpoint_list[-1].get('orderId')
+        #     self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+        #                         order_type='close',
+        #                         size=1 if trade.size is None else trade.size,
+        #                         price=self.data.close[0],
+        #                         orderId=orderId,
+        #                         )
+        # else:
+        #     self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+        #                         order_type='sell' if trade.size < 0 else 'buy',
+        #                         size=1 if trade.size is None else trade.size,
+        #                         price=self.data.close[0],
+        #                         orderId=str(int(self.datas[0].datetime.datetime().timestamp())),
+        #                         )
+
         """
         ref: 交易的引用编号，通常是一个唯一的标识符。
         data: 与交易相关的市场数据对象，可能包含价格、成交量等信息。
@@ -611,7 +630,7 @@ class CommonStrategy(bt.Strategy):
              trailamount=None, trailpercent=None,
              parent=None, transmit=True, from_close=False, orderId=None,
              **kwargs):
-        super().sell()
+        # print('sell',self.datas[0].datetime.datetime(),from_close,'持仓:',self.position.size)
         if from_close:
             # print("close")
             self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
@@ -628,7 +647,10 @@ class CommonStrategy(bt.Strategy):
                                 orderId=str(int(self.datas[0].datetime.datetime().timestamp())) if orderId is None else orderId,
                                 )
             # print("sell")
-
+        return super().sell(data=data, size=size, price=price, plimit=plimit,
+                            exectype=exectype, valid=valid, tradeid=tradeid, oco=oco,
+                            trailamount=trailamount, trailpercent=trailpercent,
+                            parent=parent, transmit=transmit, **kwargs)
 
     def buy(self, data=None,
             size=None, price=None, plimit=None,
@@ -636,7 +658,7 @@ class CommonStrategy(bt.Strategy):
             trailamount=None, trailpercent=None,
             parent=None, transmit=True, from_close=False, orderId=None,
             **kwargs):
-        super().buy()
+        # print('buy', self.datas[0].datetime.datetime(), from_close,'持仓:',self.position.size)
         if from_close:
             # print("close")
             self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
@@ -653,6 +675,11 @@ class CommonStrategy(bt.Strategy):
                                 price=self.data.close[0],
                                 orderId=str(int(self.datas[0].datetime.datetime().timestamp())) if orderId is None else orderId,
                                 )
+        return super().buy(data=data, size=size, price=price, plimit=plimit,
+                           exectype=exectype, valid=valid, tradeid=tradeid, oco=oco,
+                           trailamount=trailamount, trailpercent=trailpercent,
+                           parent=parent, transmit=transmit, **kwargs)
+
 
     def close(self, data=None, size=None, orderId=None,**kwargs):
         """
@@ -674,10 +701,58 @@ class CommonStrategy(bt.Strategy):
         elif possize < 0:
             return self.buy(data=data, size=size, from_close=True, orderId=orderId, **kwargs)  # 重写部分
 
-        return None
+        return super().close(data=data, size=size, **kwargs)
+
+
+    def private_buy_limit(self, data=None, order_type=None, size=None, limit_price=None, orderId=None,
+              **kwargs):
+        self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+                            order_type='buy_limit',
+                            size=1 if size is None else size,
+                            price=limit_price,
+                            orderId=str(int(self.datas[0].datetime.datetime().timestamp())),
+                            )
+
+    def private_sell_limit(self, data=None, order_type=None, size=None, limit_price=None, orderId=None,
+              **kwargs):
+        self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+                            order_type='sell_limit',
+                            size=1 if size is None else size,
+                            price=limit_price,
+                            orderId=str(int(self.datas[0].datetime.datetime().timestamp())),
+                            )
+
+    def private_modify(self, data=None, order_type=None, size=None, orderId=None, limit_price=None,
+              **kwargs):
+
+        last_order_type = self.orderpoint.orderpoint_list[-1].get('order_type')
+        if last_order_type in ['buy_limit', 'modify_buy']:
+            order_type = 'modify_buy'
+        elif last_order_type in ['sell_limit', 'modify_sell']:
+            order_type = 'modify_sell'
+        if last_order_type in ['buy_limit', 'sell_limit', 'modify_buy', 'modify_sell']:
+            orderId = self.orderpoint.orderpoint_list[-1].get('orderId')
+            self.orderpoint.add(datatime=self.datas[0].datetime.datetime(),
+                                order_type=order_type,
+                                size=1 if size is None else size,
+                                price=limit_price,
+                                orderId=orderId,
+                                )
+        # else:
+        #     print('无可修改的单')
+
 
     def get_orderpoint(self):
         return self.orderpoint.orderpoint_list
+
+    def get_last_buy_sell_order(self):
+        # 从后向前遍历列表
+        orderpoint_list = self.orderpoint.orderpoint_list
+        for order in reversed(orderpoint_list):
+            # 检查 order_type 是否为 'buy' 或 'sell'
+            if order['order_type'] in ('buy', 'sell'):
+                return order  # 找到后立即返回该记录
+        return None  # 如果没有找到任何匹配的记录，返回 None
 
     def get_analysis(self):
 

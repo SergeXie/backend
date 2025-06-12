@@ -6,6 +6,8 @@ import traceback
 import uuid
 import pickle
 import random
+from enum import Enum
+
 import holidays
 from utils.timezone import timezone
 import asyncio
@@ -122,12 +124,12 @@ strategy_clientid_dict = dict()  # 策略与订阅者的对应字典
 
 diaoqucishu = 500
 period_Conversion_Seconds_dict = {
-    'M1': 60,
-    'M5': 60,
-    'M15': 60,
-    'M30': 60,
-    'H1': 60*5,
-    'H4': 1440,
+    'M1': 5,
+    'M5': 5,
+    'M15': 5,
+    'M30': 5,
+    'H1': 10,
+    'H4': 10,
     'D1': 8640,
     'W1': 60480,
     'MN': 259200
@@ -156,13 +158,11 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
         df = pd.DataFrame(trading_data)
         if ismoni:
             global diaoqucishu
-            if diaoqucishu < 900:
-                # df = df.iloc[diaoqucishu:diaoqucishu+2500]
-                df = df.iloc[:-diaoqucishu]
-                diaoqucishu -= 2
-                print('diaoqucishu', diaoqucishu)
-            elif diaoqucishu == 900:
-                diaoqucishu = 0
+            df = df.iloc[0:diaoqucishu]
+            diaoqucishu += 1
+            # print('diaoqucishu', diaoqucishu)
+            print(df.tail(1)['datetime'])
+
 
         df['datetime'] = pd.to_datetime(df['datetime'])
         last_datetime = df['datetime'].iloc[-1]
@@ -372,10 +372,20 @@ def strategy_hold_order(tradeUid, order_point, goods):
     with open('static/strategy_hold_order_pickle.pkl', 'wb') as f:
         pickle.dump(strategy_hold_order_pickle, f)
 
+class OrderType(Enum):
+    buy = 'Buy'
+    sell = 'Sell'
+    buylimit = 'BuyLimit'
+    selllimit = 'SellLimit'
+
+
 # 用于管理返回的信息
 def get_strategy_str(tradeUid, new_order_point, new_data, CMD=None):
     type = new_order_point.get('order_type','')
-    replacement_rules = {"sell": "Sell", "buy": "Buy"}
+    replacement_rules = {"sell": "Sell",
+                         "buy": "Buy",
+                         "buy_limit": "BuyLimit", "sell_limit": "SellLimit",
+                         "modify_buy":'BuyLimit', "modify_sell":'SellLimit'}
     type = replacement_rules.get(type, type)
 
     base = (f"TradeUid={tradeUid}&"  # 交易策略uid
@@ -384,21 +394,23 @@ def get_strategy_str(tradeUid, new_order_point, new_data, CMD=None):
             )
     data = 'Data='
     orderId = new_order_point.get('orderId','')  # 订单id
-    opentime = new_order_point.get('datatime','')
-    exp = ''
+    opentime = new_order_point.get('datatime','')  # k线时间
+    exp = '' # 过期时间
     symbol = new_data.get("goods", '')  # 产品
     price = new_order_point.get('price','')  # 价格
     sl = 0  # 止损
     tp = 0  # 止盈
     lots = new_order_point.get('size',0)  # 手数
     lots = str(lots).replace("-", "")
-    mc = new_order_point.get('orderId','')  # 原订单id
+    mc = new_order_point.get('orderId','')  # 原订单id，备注
 
     #CMD 目前包含Connect、Opne、Close、TradingOrders
     if CMD == 'Open':
         return base + data + ','.join(str(i) for i in [orderId, symbol, type, price, lots, sl, tp, exp, mc, opentime])
     elif CMD == 'Close':
         return base + data + ','.join(str(i) for i in [orderId, symbol, 'Close', price, opentime])
+    elif CMD == 'Modify':
+        return base + data + ','.join(str(i) for i in [orderId, symbol, type, price, sl, tp, exp, opentime])
     elif CMD == 'HeartBeat':
         return base + data + ','.join(str(i) for i in [orderId, symbol, type, price, lots, sl, tp, exp, mc, opentime])
     elif CMD == 'Connect':
@@ -450,7 +462,7 @@ async def send_forex_updates(data):
                 # print(order_point)
                 strategy_hold_order(tradeUid, order_point, goods)
                 # 判断有没有买卖点
-                if last_order_point != [] and last_order_point[-1]['datatime'] != order_point[-1]['datatime']:
+                if order_point_judge(last_order_point, order_point):
                     index = find_last_index(order_point, last_order_point)
                     # index = order_point.index(last_order_point[-1])
                     new_order_points = order_point[index+1:]
@@ -458,15 +470,26 @@ async def send_forex_updates(data):
                     strategy_history_order(tradeUid, order_point)
                     for new_order_point in new_order_points:
                         # print('*'*5,new_order_point)
-                        if new_order_point.get('order_type') != 'close': # 开仓
+                        if new_order_point.get('order_type') == 'buy' or new_order_point.get('order_type') == 'sell': # 开仓
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Open')
                             # print('开仓',tmp)
                             await send_tradeUid(tradeUid, tmp)
 
-                        else:  # 关仓
+                        elif new_order_point.get('order_type') == 'close':  # 关仓
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Close')
                             # print('关仓', tmp)
                             await send_tradeUid(tradeUid, tmp)
+
+                        elif new_order_point.get('order_type') == 'buy_limit' or new_order_point.get('order_type') == 'sell_limit':  # 关仓
+                            tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Open')
+                            # print('挂单', tmp)
+                            await send_tradeUid(tradeUid, tmp)
+
+                        elif new_order_point.get('order_type') == 'modify_buy' or new_order_point.get('order_type') == 'modify_sell':  # 关仓
+                            tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Modify')
+                            # print('挂单', tmp)
+                            await send_tradeUid(tradeUid, tmp)
+
 
                         print('产生买卖点')
                         # 持单的保存
@@ -498,16 +521,23 @@ async def send_forex_updates(data):
                 log.error(f"数据库断开，捕获到 OperationalError: {e}")
 
             # 设置轮询间隔
-            if tradeUid == 'NTRXAUM1S0002':
+            if tradeUid in ['NTRXAUM1S0002', 'NTRXAUM5S0004']:
+                # print('进行模拟输出',order_point_judge(last_order_point, order_point))
+                # print(order_point)
                 for i in order_point:
-                    if i.get('order_type') != 'close': # 开仓
+                    if i.get('order_type') == 'buy' or i.get('order_type') == 'sell':  # 开仓
                         tmp = get_strategy_str(tradeUid, i, new_data, CMD='Open')
                         await send_tradeUid(tradeUid, tmp)
-                    else:  # 关仓
+                    elif i.get('order_type') == 'close':  # 关仓
                         tmp = get_strategy_str(tradeUid, i, new_data, CMD='Close')
-
                         await send_tradeUid(tradeUid, tmp)
-                    await asyncio.sleep(15)
+                    elif i.get('order_type') == 'buy_limit' or i.get('order_type') == 'sell_limit':  # 关仓
+                        tmp = get_strategy_str(tradeUid, i, new_data, CMD='Open')
+                        await send_tradeUid(tradeUid, tmp)
+                    elif i.get('order_type') == 'modify_buy' or i.get('order_type') == 'modify_sell':  # 关仓
+                        tmp = get_strategy_str(tradeUid, i, new_data, CMD='Modify')
+                        await send_tradeUid(tradeUid, tmp)
+                    await asyncio.sleep(1)
                 await asyncio.sleep(0)
             else:
                 if tradeUid == 'NTRXAUM1S000':
@@ -561,7 +591,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             # 调用计算函数
                             # 直接 await 异步函数
                             if tradeUid == 'NTRXAUM1S000':
-                                diaoqucishu = 800
+                                diaoqucishu = 3000
 
                             asyncio.create_task(send_forex_updates(data_dict))
                             # await send_forex_updates(data_dict)
@@ -762,3 +792,16 @@ def find_last_index(order_point, last_order_point):
     except:
         return -1
 
+
+def order_point_judge(last_order_point, order_point):
+    # print(last_order_point, order_point)
+    if len(last_order_point) == 0:
+        return False
+    # 条件2可以覆盖条件1的场景
+    condition1 = last_order_point[-1]['datatime'] != order_point[-1]['datatime']
+    condition2 = last_order_point[-1]['datatime'] < order_point[-1]['datatime']
+    print('条件', condition1, condition2)
+    if condition1 and condition2:
+        return True
+    else:
+        return False
