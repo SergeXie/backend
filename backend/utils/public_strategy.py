@@ -316,6 +316,9 @@ class CommonStrategy(bt.Strategy):
             # 点差
             spread = int(self.datas[0].spread[0])
 
+            # k线ID
+            klineId = int(self.datas[0].klineId[0])
+
             if trade.isclosed:
                 order_type = 'close'
                 trader_dict["openTime"] = trade.open_datetime().strftime('%Y-%m-%d %H:%M:%S')
@@ -362,7 +365,7 @@ class CommonStrategy(bt.Strategy):
             trader_dict["pnl"] = float(format(trade.pnlcomm, precision_format))
             trader_dict["spread"] = spread / 100 if spread else 0
             trader_dict["initialCash"] = float(format(self.starting_cash, precision_format))
-
+            trader_dict["klineId"] = klineId
             self.trader_result.append(trader_dict)
 
             # 交易报告

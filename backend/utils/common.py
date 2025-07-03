@@ -15,7 +15,7 @@ from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
 from models.dql_platform import DplGoodsTest, DqlIndicators, TradingFPG, TradingBRC5, TradingOnda, TradingFXTM5, \
-    TradingIndex, TradingIndex2, TradingFPG2, DqlStrategy
+    TradingIndex, TradingIndex2, TradingFPG2, DqlStrategy, DqlOrder
 from utils.indicators import *
 # from utils.indicators.atr_kmeans import ResponseATRKmeansData
 from utils.indicators.deeplearn_v2 import ResponseDL2Data
@@ -689,3 +689,37 @@ async def fetch_indicators(db: AsyncSession, uid: int):
     select_indicators = await db.execute(select(DqlStrategy).where(
         DqlStrategy.uid == uid, DqlStrategy.is_delete == 0))
     return select_indicators.scalars().first()
+
+
+async def save_trader_result(traderResult, db, strategyUid, period, tester_uid):
+    for row in traderResult:
+        order = DqlOrder(
+            tradingGoods=row.get('goodsId', ''),  # tradingGoods 和 goodsId 用同一个
+            goodsId=row.get('goodsId', ''),
+            period=period,
+            tradeId=row.get('tradeid', 0),
+            openPrice=row.get('openPrice', 0.0),
+            openTime=row.get('openTime', ''),
+            timestamp=row.get('timestamp', ''),
+            closeTime=row.get('closeTime', None),
+            orderType=row.get('orderType', ''),
+            placeType=row.get('placeType', ''),
+            size=row.get('size', 0.0),
+            price=row.get('price', 0.0),
+            stopLoss=row.get('stopLoss', 0.0),
+            takeProfit=row.get('takeProfit', 0.0),
+            taxes=row.get('taxes', 0.0),
+            swap=row.get('swap', 0.0),
+            commission=row.get('commission', 0.0),
+            pnl=row.get('pnl', 0.0),
+            spread=row.get('spread', 0.0),
+            initialCash=row.get('initialCash', 0.0),
+            klineId=row.get('klineId', 0),
+            strategyUid=strategyUid,
+            strategyTestUid=tester_uid  # 策略结果uid
+        )
+        db.add(order)
+
+    await db.commit()
+    log.info("新增订单信息成功！")
+

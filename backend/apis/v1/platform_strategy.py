@@ -27,7 +27,7 @@ from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DqlIndicator
 from schemas.platorm_strategr_schemas import TestResultRequest
 from utils.common import fetch_trading_data, PandasData, get_entities_list, generate_random_string, \
     generate_lazy_pinyin, indicator_classes, \
-    to_float, format_datetime, select_goods_common, select_kline_data, fetch_indicators
+    to_float, format_datetime, select_goods_common, select_kline_data, fetch_indicators, save_trader_result
 from utils.public_strategy import ComprehensiveAnalyzer, adjust_unpaired_trades
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
@@ -793,12 +793,18 @@ async def indicator_sync_batch_test(request: Request):
             strategy_data_requests["indicatorResult"] = backtest_result["indicatorResult"]
             strategy_data_requests["newReportTemplate"] = backtest_result["newReportTemplate"]
 
-            # 对交易订单 traderResult还在持仓的，进行盈利结算
+            # 对交易订单 traderResult还在持仓的，进行盈利结算 TODO 暂时保留
             # traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("endTime"), traderResult, traderReport)
-            # print("traderResult:{}".format(traderResult))
+
             try:
+                # TODO 保存回测所有信息保存策略结果表中
                 tester_uid = await create_strategy_record(db, strategy_data_requests, strategy)
 
+                # TODO 将traderResult 订单 存储到单独的订单中
+                await save_trader_result(traderResult, db, strategy_data_requests["uid"],
+                                         strategy_data_requests["period"], tester_uid)
+
+                # TODO 更新
                 await db.execute(
                     update(DqlStrategyTestResult).where(DqlStrategyTestResult.uid == tester_uid).values(
                         traderResult=json.dumps({"traderResult": traderResult,
