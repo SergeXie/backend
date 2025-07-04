@@ -7,10 +7,10 @@ from contextlib import asynccontextmanager
 app = register_app()
 
 
-# @app.on_event("startup")
-# async def startup_event():
-#     print("FastAPI 启动，定时任务调度器启动")
-#     scheduler.start()
+@app.on_event("startup")
+async def startup_event():
+    print("FastAPI 启动，定时任务调度器启动")
+    scheduler.start()
 
 
 if __name__ == "__main__":
