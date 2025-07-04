@@ -3,12 +3,8 @@ from collections import Counter
 
 import backtrader as bt
 import datetime
-
-from sqlalchemy import select
-
 from common.log import log
 from utils.OrderPoint import OrderPoint
-from utils.common import select_goods_common, model_classes
 
 
 class ComprehensiveAnalyzer(bt.Analyzer):

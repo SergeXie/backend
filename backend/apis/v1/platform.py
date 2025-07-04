@@ -12,7 +12,7 @@ from starlette.responses import Response
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult
+from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult, DqlOrder
 from schemas.base import ErrorModel
 from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData
 from utils.common import select_goods_common, RandomIDGenerator, select_kline_data, Trader, \
@@ -45,6 +45,37 @@ async def test_user(page_no: Optional[int] = 1, page_size: Optional[int] = 100):
                       "platform": data.platform} for data in result]
 
         return await response_base.success(data=data_list)
+
+
+@router.get("/selectKlineOrders", name="获取K线历史下单订单信息")
+async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: str, strategyUid: str):
+    """
+    :param goods: 交易品种 FPG-AUDUSD
+    :param period: 周期  M1---1分钟；M5---5分钟； M15---15分钟； M30---30分钟 “H1” 表示小时  D1 表示天  W 周 WN 月
+    :param beginTime: 开始时间
+    :param endTime: 结束时间
+    :param strategyUid: 策略uid
+    :return:
+    """
+    # 查询订单表根据筛选条件
+    async with async_db_session() as db:
+        stmt = (
+            select(DqlOrder)
+            .where(
+                and_(
+                    DqlOrder.tradingGoods == goods,
+                    DqlOrder.period == period,
+                    DqlOrder.timestamp.between(beginTime, endTime),
+                    DqlOrder.strategyUid == strategyUid,
+                )
+            )
+            .order_by(DqlOrder.timestamp.desc())
+        )
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+    # 转换为 dict 返回给前端
+    data = [row.__dict__ for row in rows]
+    return await response_base.success(data=data)
 
 
 @router.get("/dynamicKline", name="动态0号K线")

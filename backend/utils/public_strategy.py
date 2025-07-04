@@ -1,14 +1,8 @@
 import traceback
-from collections import Counter
-
 import backtrader as bt
 import datetime
-
-from sqlalchemy import select
-
 from common.log import log
 from utils.OrderPoint import OrderPoint
-from utils.common import select_goods_common, model_classes
 
 
 class ComprehensiveAnalyzer(bt.Analyzer):
@@ -316,6 +310,9 @@ class CommonStrategy(bt.Strategy):
             # 点差
             spread = int(self.datas[0].spread[0])
 
+            # k线ID
+            klineId = int(self.datas[0].klineId[0])
+
             if trade.isclosed:
                 order_type = 'close'
                 trader_dict["openTime"] = trade.open_datetime().strftime('%Y-%m-%d %H:%M:%S')
@@ -362,7 +359,7 @@ class CommonStrategy(bt.Strategy):
             trader_dict["pnl"] = float(format(trade.pnlcomm, precision_format))
             trader_dict["spread"] = spread / 100 if spread else 0
             trader_dict["initialCash"] = float(format(self.starting_cash, precision_format))
-
+            trader_dict["klineId"] = klineId
             self.trader_result.append(trader_dict)
 
             # 交易报告
@@ -767,52 +764,52 @@ class CommonStrategy(bt.Strategy):
         return trader_return
 
 
-async def adjust_unpaired_trades(db, end_dt, trader_result, traderReport=None):
-    """
-    查找未配对的 tradeid 并修改其 pnl 值，返回更新后的 trader_result 列表
-    :param end_dt: 数据库对象
-    :param end_dt: 回撤结束时间
-    :param trader_result: 原始交易列表
-    :return: 修改后的完整交易记录列表
-    """
-    # 统计 tradeid 出现次数
-    tradeid_counts = Counter(item["tradeid"] for item in trader_result)
-
-    # 找到只出现一次的 tradeid（未配对）
-    unpaired_ids = {tid for tid, count in tradeid_counts.items() if count == 1}
-
-    # 修改原列表（in-place 修改）
-    for item in trader_result:
-        if item["tradeid"] in unpaired_ids:
-            # 查K线
-            select_model_class, goods_ = await select_goods_common(db, item["goodsId"], model_classes)
-
-            select_k_time = select(select_model_class).where(
-                select_model_class.platform == goods_.platform,
-                select_model_class.tradingGoods == goods_.trading_goods,
-                select_model_class.type == "M1",
-                select_model_class.tradeDateTime <= end_dt
-            ).order_by(select_model_class.tradeDateTime.desc()).limit(1)
-
-            # 执行查询
-            result = await db.execute(select_k_time)
-            kline_data = result.scalar_one_or_none()
-
-            if kline_data:
-                item["price"] = kline_data.closed
-                if item["orderType"] == "sell":
-                    # 做空 PnL = (开仓价格−平仓价格（现价 K线M1的收盘价）)×交易手数×杠杆−隔夜利息
-                    item["pnl"] = round((item["openPrice"] - kline_data.closed) * (item["size"] * goods_.profitRatio), 3)
-                else:
-                    # 做多 PnL=(平仓价格（现价 K线M1的收盘价）− 开仓价格)×交易手数×杠杆−隔夜利息
-                    item["pnl"] = round((kline_data.closed - item["openPrice"]) * (item["size"] * goods_.profitRatio), 3)
-
-                item["initialCash"] += item["pnl"]
-
-                # traderReport["totalNetProfit"] += item["pnl"]
-                # traderReport["totalProfit"] += item["pnl"]
-                # traderReport["totalLoss"] += item["pnl"]
-
-    return trader_result
+# async def adjust_unpaired_trades(db, end_dt, trader_result, traderReport=None):
+#     """
+#     查找未配对的 tradeid 并修改其 pnl 值，返回更新后的 trader_result 列表
+#     :param end_dt: 数据库对象
+#     :param end_dt: 回撤结束时间
+#     :param trader_result: 原始交易列表
+#     :return: 修改后的完整交易记录列表
+#     """
+#     # 统计 tradeid 出现次数
+#     tradeid_counts = Counter(item["tradeid"] for item in trader_result)
+#
+#     # 找到只出现一次的 tradeid（未配对）
+#     unpaired_ids = {tid for tid, count in tradeid_counts.items() if count == 1}
+#
+#     # 修改原列表（in-place 修改）
+#     for item in trader_result:
+#         if item["tradeid"] in unpaired_ids:
+#             # 查K线
+#             select_model_class, goods_ = await select_goods_common(db, item["goodsId"], model_classes)
+#
+#             select_k_time = select(select_model_class).where(
+#                 select_model_class.platform == goods_.platform,
+#                 select_model_class.tradingGoods == goods_.trading_goods,
+#                 select_model_class.type == "M1",
+#                 select_model_class.tradeDateTime <= end_dt
+#             ).order_by(select_model_class.tradeDateTime.desc()).limit(1)
+#
+#             # 执行查询
+#             result = await db.execute(select_k_time)
+#             kline_data = result.scalar_one_or_none()
+#
+#             if kline_data:
+#                 item["price"] = kline_data.closed
+#                 if item["orderType"] == "sell":
+#                     # 做空 PnL = (开仓价格−平仓价格（现价 K线M1的收盘价）)×交易手数×杠杆−隔夜利息
+#                     item["pnl"] = round((item["openPrice"] - kline_data.closed) * (item["size"] * goods_.profitRatio), 3)
+#                 else:
+#                     # 做多 PnL=(平仓价格（现价 K线M1的收盘价）− 开仓价格)×交易手数×杠杆−隔夜利息
+#                     item["pnl"] = round((kline_data.closed - item["openPrice"]) * (item["size"] * goods_.profitRatio), 3)
+#
+#                 item["initialCash"] += item["pnl"]
+#
+#                 # traderReport["totalNetProfit"] += item["pnl"]
+#                 # traderReport["totalProfit"] += item["pnl"]
+#                 # traderReport["totalLoss"] += item["pnl"]
+#
+#     return trader_result
 
 

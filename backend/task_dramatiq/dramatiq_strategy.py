@@ -10,8 +10,9 @@ from sqlalchemy import select, update
 from common.log import log
 from database.db_mysql import async_db_session
 from models.dql_platform import DqlStrategy, DqlStrategyTestResult, DplGoodsTest
-from utils.common import fetch_trading_data, model_classes, PandasData, DynamicSpreadCommission, indicator_classes
-from utils.public_strategy import ComprehensiveAnalyzer, adjust_unpaired_trades
+from utils.common import fetch_trading_data, model_classes, PandasData, DynamicSpreadCommission, indicator_classes, \
+    save_trader_result
+from utils.public_strategy import ComprehensiveAnalyzer
 from utils.strategys import reload_strategies
 import backtrader as bt
 
