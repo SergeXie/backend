@@ -255,7 +255,6 @@ class DqlOrder(Base):
     initialCash: Mapped[float] = mapped_column(Float, nullable=False, comment='余额')
     klineId:  Mapped[int] = mapped_column(BigInteger, nullable=False, comment='K线ID')
     strategyUid: Mapped[str] = mapped_column(String(64), nullable=False, comment='回测策略uid')
-    strategyTestUid: Mapped[str] = mapped_column(String(64), nullable=False, comment='策略结果回测uid')
     createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
                                                  server_default='CURRENT_TIMESTAMP', comment='创建时间')
 

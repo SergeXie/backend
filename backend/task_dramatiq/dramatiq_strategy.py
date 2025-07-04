@@ -12,7 +12,7 @@ from database.db_mysql import async_db_session
 from models.dql_platform import DqlStrategy, DqlStrategyTestResult, DplGoodsTest
 from utils.common import fetch_trading_data, model_classes, PandasData, DynamicSpreadCommission, indicator_classes, \
     save_trader_result
-from utils.public_strategy import ComprehensiveAnalyzer, adjust_unpaired_trades
+from utils.public_strategy import ComprehensiveAnalyzer
 from utils.strategys import reload_strategies
 import backtrader as bt
 
@@ -129,10 +129,6 @@ async def task_run_backtest(strategy_data_requests, tester_uid, task_name=None):
         traderReport["mdr"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         # 对交易订单 traderResult还在持仓的，进行盈利结算
         # traderResult_ = await adjust_unpaired_trades(db, strategy_data_requests.get("endTime"), traderResult)
-
-        # TODO 将traderResult 订单 存储到单独的订单中
-        await save_trader_result(traderResult, db, strategy_data_requests["uid"],
-                                 strategy_data_requests["period"], tester_uid)
 
         # 事务2：更新策略测试结果，带重试机制
         for attempt in range(3):

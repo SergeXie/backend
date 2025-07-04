@@ -33,9 +33,11 @@ from utils.indicators.ema import ResponseEMAData
 from utils.indicators.btatr import ResponseATRData
 from utils.indicators.rsi import ResponseRSIData
 from pypinyin import lazy_pinyin, Style
+
+from utils.strategys import reload_strategies
 from utils.timezone import timezone
 from dateutil import parser
-
+from utils.public_strategy import ComprehensiveAnalyzer
 
 # 创建一个带有过期时间的缓存，设置每个缓存条目的过期时间为 60 秒
 cache = TTLCache(maxsize=10000, ttl=3600)
@@ -74,6 +76,10 @@ indicator_classes = {
     "RSI": ResponseRSIData,
     "SMCP": ResponseSMCPData,
 }
+
+
+strategy_classes = {}
+strategy_classes = reload_strategies()
 
 
 def match_ratio(data):
@@ -685,13 +691,13 @@ async def get_indicator_data(request, data_type, name):
         return Response(status_code=500, content="系统错误!")
 
 
-async def fetch_indicators(db: AsyncSession, uid: int):
+async def fetch_indicators(db: AsyncSession, uid: str):
     select_indicators = await db.execute(select(DqlStrategy).where(
         DqlStrategy.uid == uid, DqlStrategy.is_delete == 0))
     return select_indicators.scalars().first()
 
 
-async def save_trader_result(traderResult, db, strategyUid, period, tester_uid):
+async def save_trader_result(traderResult, db, strategyUid, period):
     for row in traderResult:
         order = DqlOrder(
             tradingGoods=row.get('goodsId', ''),  # tradingGoods 和 goodsId 用同一个
@@ -716,10 +722,133 @@ async def save_trader_result(traderResult, db, strategyUid, period, tester_uid):
             initialCash=row.get('initialCash', 0.0),
             klineId=row.get('klineId', 0),
             strategyUid=strategyUid,
-            strategyTestUid=tester_uid  # 策略结果uid
         )
         db.add(order)
 
     await db.commit()
     log.info("新增订单信息成功！")
+
+
+
+async def run_backtest(db: AsyncSession, indicator_data_request, strategys, tester_uid, goods_data, task_name=None):
+    """
+
+    :param db: 会话
+    :param indicator_data_request: 请求参数
+    :param strategys: 策略对象
+    :param tester_uid: 策略接口uid
+    :param task_name: 任务名称
+    :return:
+    """
+    try:
+        # 根据period参数的取值进行条件判断
+        period_dict = {"period": indicator_data_request.get("period", None),
+                       "tradingGoods": indicator_data_request.get("goods", None),
+                       "beginTime": indicator_data_request.get("startTime", None),
+                       "endTime": indicator_data_request.get("endTime", None)}
+
+        period_tuple = tuple(period_dict.items())
+
+        indicator_params = indicator_data_request.get("parameter", {})
+        # 在参数中增加k线的品种和周期
+        indicator_params['Kline_period'] = indicator_data_request.get("period", None)
+        indicator_params['Kline_goods'] = indicator_data_request.get("goods", None)
+
+        trading_data = await fetch_trading_data(db, indicator_data_request.get("goods", None),
+                                                indicator_data_request.get("period", None), model_classes,
+                                                begin_time=indicator_data_request.get("startTime", None),
+                                                end_time=indicator_data_request.get("endTime", None),
+                                                period_tuple=period_tuple, class_name=json.loads(strategys.className))
+
+        if not trading_data:
+            return
+
+        # 创建backtrader大脑实例
+        cerebro = bt.Cerebro()
+
+        # 启用 cheat-on-close 让市价单在当前K线收盘执行
+        cerebro.broker.set_coc(True)  # 允许市价单在当前K线收盘价执行
+
+        # 数据源处理
+        df = pd.DataFrame(trading_data)
+        df['datetime'] = pd.to_datetime(df['datetime'])
+        df.set_index('datetime', inplace=True)
+        data = PandasData(dataname=df)
+
+        # 添加数据源
+        cerebro.adddata(data)
+        # strategys.className 存储的是列表类型
+        for class_name in json.loads(strategys.className):
+            # 加载策略goodsId
+            cerebro.addstrategy(strategy_classes.get(class_name), indicator_params,
+                                goodsId=indicator_data_request.get("goods", None),
+                                begin_time=indicator_data_request.get("startTime", None),
+                                baseLots=goods_data.baseLots)
+
+        Indicators_subType = None
+        # 指标数据
+        if indicator_classes.get(strategys.indicatorsClassName):
+            query = await db.execute(select(DqlIndicators).where(
+                DqlIndicators.className == strategys.indicatorsClassName))
+
+            DqlIndicators_result = query.scalars().first()
+            Indicators_subType = DqlIndicators_result.subType
+            cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),
+                                indicator_params, indicator_name=None, comments=None,
+                                begin_time=indicator_data_request.get("startTime", None))
+
+        # 综合分析器
+        cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')
+        # 添加最大回撤分析器
+        cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
+
+        # 设置初始资金
+        cerebro.broker.set_cash(float(indicator_data_request.get("initialCash", 10000)))
+
+        # mult 合约单位100  leverage 杠杆
+        cerebro.broker.setcommission(
+            commission=indicator_data_request.get("commission", 0),
+            mult=goods_data.profitRatio, leverage=indicator_data_request.get("leverage", 1))
+
+        if indicator_data_request.get("spread", 0):
+            # 设置滑点/点差
+            cerebro.broker.set_slippage_fixed(fixed=indicator_data_request.get("spread", 0) / 100)
+
+        result = cerebro.run(stdstats=True, tradehistory=True)
+        # 获取最大回撤信息
+        drawdown = result[0].analyzers.drawdown.get_analysis()
+
+        # 回测结果
+        trader_return = result[0].get_analysis()
+
+        traderResult = trader_return.get('trader_result')
+        traderReport = trader_return.get('trader_report')
+        floatingPointValues = trader_return.get('floating_point_values')
+        netAssetValues = trader_return.get('net_asset_values')
+        newReportTemplate = result[0].analyzers.comprehensive.get_analysis()
+        try:
+            indicator_result_data = result[1].get_analysis()
+            indicator_data_dict = {
+                "startPoint": indicator_result_data[1],
+                "endPoint": indicator_result_data[2],
+                "buyselldata": indicator_result_data[3] if len(indicator_result_data[3:4]) > 0 else {},
+                "data": indicator_result_data[0],
+                "subType": Indicators_subType
+            }
+        except Exception as e:
+            indicator_data_dict = {}
+
+        traderReport["maxFUR"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
+        traderReport["mdr"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
+        return {"traderResult": traderResult, "traderReport": traderReport,
+                "floatingPointValues": floatingPointValues, "netAssetValues": netAssetValues,
+                "indicatorResult": indicator_data_dict,
+                "newReportTemplate": newReportTemplate}
+
+    except Exception as e:
+        info = traceback.format_exc()
+        log.error("策略结果插入数据库失败：{}".format(info))
+        await db.rollback()  # 如果发生异常，回滚事务
+        await db.close()
+        return None
 
