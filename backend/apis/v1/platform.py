@@ -1,7 +1,6 @@
 import calendar
-import datetime
+from datetime import datetime
 import json
-import time
 import traceback
 import uuid
 from typing import Optional
@@ -47,17 +46,17 @@ async def test_user(page_no: Optional[int] = 1, page_size: Optional[int] = 100):
         return await response_base.success(data=data_list)
 
 
+from datetime import datetime
+
 @router.get("/selectKlineOrders", name="获取K线历史下单订单信息")
 async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: str, strategyUid: str):
     """
     :param goods: 交易品种 FPG-AUDUSD
-    :param period: 周期  M1---1分钟；M5---5分钟； M15---15分钟； M30---30分钟 “H1” 表示小时  D1 表示天  W 周 WN 月
+    :param period: 周期
     :param beginTime: 开始时间
     :param endTime: 结束时间
     :param strategyUid: 策略uid
-    :return:
     """
-    # 查询订单表根据筛选条件
     async with async_db_session() as db:
         stmt = (
             select(DqlOrder)
@@ -69,12 +68,22 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                     DqlOrder.strategyUid == strategyUid,
                 )
             )
-            .order_by(DqlOrder.timestamp.desc())
+            .order_by(DqlOrder.timestamp.asc())
         )
         result = await db.execute(stmt)
         rows = result.scalars().all()
-    # 转换为 dict 返回给前端
-    data = [row.__dict__ for row in rows]
+
+    # 需要格式化的所有时间字段
+    time_fields = ['createTime', 'openTime', 'closeTime', 'timestamp']
+    data = []
+    for row in rows:
+        d = row.__dict__.copy()
+        d.pop('_sa_instance_state', None)
+        for field in time_fields:
+            if field in d and isinstance(d[field], datetime):
+                d[field] = d[field].strftime('%Y-%m-%d %H:%M:%S')
+        data.append(d)
+
     return await response_base.success(data=data)
 
 
