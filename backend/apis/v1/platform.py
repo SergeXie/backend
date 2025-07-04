@@ -1,5 +1,5 @@
 import calendar
-from datetime import datetime
+import datetime
 import json
 import traceback
 import uuid
@@ -46,7 +46,6 @@ async def test_user(page_no: Optional[int] = 1, page_size: Optional[int] = 100):
         return await response_base.success(data=data_list)
 
 
-from datetime import datetime
 
 @router.get("/selectKlineOrders", name="获取K线历史下单订单信息")
 async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: str, strategyUid: str):
@@ -80,7 +79,7 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
         d = row.__dict__.copy()
         d.pop('_sa_instance_state', None)
         for field in time_fields:
-            if field in d and isinstance(d[field], datetime):
+            if field in d and isinstance(d[field], datetime.datetime):
                 d[field] = d[field].strftime('%Y-%m-%d %H:%M:%S')
         data.append(d)
 
