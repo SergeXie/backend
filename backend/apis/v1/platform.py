@@ -16,7 +16,7 @@ from schemas.base import ErrorModel
 from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData
 from utils.common import select_goods_common, RandomIDGenerator, select_kline_data, Trader, \
     GoodTrader, PandasData, cache, get_indicator_data, model_classes, \
-    get_entities_list, generate_random_string
+    get_entities_list, generate_random_string, statistics_from_orders
 from utils.prod_backtrader import MyStrategy
 from utils.timezone import timezone
 import pandas as pd
@@ -70,6 +70,11 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
         )
         result = await db.execute(stmt)
         rows = result.scalars().all()
+        strategy_name = (await db.execute(select(DqlStrategy.name).where(DqlStrategy.uid == strategyUid))).scalars().first()
+
+        digits = (await db.execute(
+            select(DplGoodsTest.digits).where(DplGoodsTest.goods == goods)
+        )).scalars().first()
 
     # 需要格式化的所有时间字段
     time_fields = ['createTime', 'openTime', 'closeTime', 'timestamp']
@@ -82,7 +87,13 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                 d[field] = d[field].strftime('%Y-%m-%d %H:%M:%S')
         data.append(d)
 
-    return await response_base.success(data=data)
+    trader_report = statistics_from_orders(data)
+    result_data = [{"goods": goods, "period": period, "beginTime": beginTime, "endTime": endTime,
+                    "name": strategy_name, "initialCash": 100000, "digits": digits,
+                    "traderResult": data, "traderReport": trader_report}]
+
+    return await response_base.success(data=result_data)
+
 
 
 @router.get("/dynamicKline", name="动态0号K线")

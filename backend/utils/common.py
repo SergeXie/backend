@@ -33,7 +33,7 @@ from utils.indicators.ema import ResponseEMAData
 from utils.indicators.btatr import ResponseATRData
 from utils.indicators.rsi import ResponseRSIData
 from pypinyin import lazy_pinyin, Style
-
+from typing import List, Dict, Any
 from utils.strategys import reload_strategies
 from utils.timezone import timezone
 from dateutil import parser
@@ -851,4 +851,255 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
         await db.rollback()  # 如果发生异常，回滚事务
         await db.close()
         return None
+
+
+def calculate_consecutive_win_loss(account_list):
+    consecutive_wins = 0
+    consecutive_losses = 0
+    win_count = 0
+    loss_count = 0
+    max_consecutive_wins = 0
+    max_consecutive_losses = 0
+
+    for trade in account_list:
+        if trade["closeTime"]:
+            if trade['pnl'] > 0:
+                win_count += 1
+                consecutive_wins += 1
+                max_consecutive_wins = max(max_consecutive_wins, consecutive_wins)
+                consecutive_losses = 0  # Reset consecutive losses
+            elif trade['pnl'] < 0:
+                loss_count += 1
+                consecutive_losses += 1
+                max_consecutive_losses = max(max_consecutive_losses, consecutive_losses)
+                consecutive_wins = 0  # Reset consecutive wins
+
+    average_consecutive_wins = consecutive_wins / win_count if win_count > 0 else 0
+    average_consecutive_losses = consecutive_losses / loss_count if loss_count > 0 else 0
+
+    return {
+        'averageConsecutiveWins': round(average_consecutive_wins, 2),
+        'averageConsecutiveLosses': round(average_consecutive_losses, 2),
+    }
+
+
+# 计算 yieldRate, winRate, avgProfit
+def calculate_trade_metrics(account_list, initial_cash):
+    total_profit = sum(trade['pnl'] for trade in account_list if trade["closeTime"])
+    total_trades = len(account_list)
+    win_trades = len([trade for trade in account_list if trade['pnl'] > 0 and trade["closeTime"]])
+
+    yield_rate = (total_profit / initial_cash) * 100 if initial_cash else 0
+    win_rate = (win_trades / total_trades) * 100 if total_trades > 0 else 0
+    avg_profit = total_profit / total_trades if total_trades > 0 else 0
+
+    return {
+        'yieldRate': round(yield_rate, 3),
+        'winRate': round(win_rate, 3),
+        'avgProfit': round(avg_profit, 3)
+    }
+
+
+# 计算 plr (盈亏比)
+def calculate_plr(account_list):
+    positive_pnl = [trade['pnl'] for trade in account_list if trade['pnl'] > 0 and trade["closeTime"]]
+    negative_pnl = [trade['pnl'] for trade in account_list if trade['pnl'] < 0 and trade["closeTime"]]
+
+    avg_profit = sum(positive_pnl) / len(positive_pnl) if positive_pnl else 0
+    avg_loss = abs(sum(negative_pnl) / len(negative_pnl)) if negative_pnl else 0
+
+    # 如果 avg_profit 或 avg_loss 为0，则替换为1
+    avg_profit = avg_profit if avg_profit != 0 else 1
+    avg_loss = avg_loss if avg_loss != 0 else 1
+
+    plr = avg_profit / avg_loss
+
+    return round(plr, 3)
+
+
+# 计算最大回撤率 (mdr)
+def calculate_mdr(account_list, initial_cash):
+    max_drawdown = 0
+    peak_value = initial_cash
+    for trade in account_list:
+        if trade["closeTime"]:
+            peak_value = max(peak_value, peak_value + trade['pnl'])
+            drawdown = (peak_value - (initial_cash + trade['pnl'])) / peak_value
+            max_drawdown = max(max_drawdown, drawdown)
+
+    return round(max_drawdown, 3)
+
+
+# 计算最大资金使用率 (maxFUR)
+def calculate_max_fur(account_list):
+    max_fur = 0
+    for trade in account_list:
+        if trade["closeTime"]:
+            # 假设 'size' 表示交易量, openPrice 表示开盘价格, closePrice 表示平仓价格
+            margin_used = abs(trade['size'] * (trade['openPrice'] - trade['price']))
+            max_fur = max(max_fur, margin_used)
+
+    return round(max_fur, 3)
+
+
+def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
+    # 只取orderType为close的订单，按timestamp升序
+    orders = [x for x in data if x["orderType"] == "close"]
+    orders.sort(key=lambda x: x["timestamp"])
+    if not orders:
+        return {}
+
+    total_trades = len(orders)
+    pnls = [o["pnl"] for o in orders]
+    profits = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+
+    # 基本盈亏相关
+    total_net_profit = sum(pnls)
+    total_profit = sum(profits)
+    total_loss = abs(sum(losses))
+    expected_payoff = total_net_profit / total_trades if total_trades else 0
+    largest_profit = max(profits) if profits else 0
+    largest_loss = min(losses) if losses else 0
+    average_profit_trade = sum(profits) / len(profits) if profits else 0
+    average_loss_trade = sum(losses) / len(losses) if losses else 0
+
+    # 胜率、盈利比、盈亏比
+    profit_trades = len(profits)
+    loss_trades = len(losses)
+    win_rate = profit_trades / total_trades if total_trades else 0
+    profit_factor = total_profit / abs(total_loss) if total_loss else float('inf')
+    plr = average_profit_trade / abs(average_loss_trade) if average_loss_trade else float('inf')
+    avg_profit = total_net_profit / total_trades if total_trades else 0
+
+    # 资金曲线、最大回撤、绝对回撤
+    cash_curve = []
+    cash = starting_cash
+    min_cash = starting_cash
+    max_cash = starting_cash
+    max_drawdown = 0
+    absolute_drawdown = 0
+    peak = starting_cash
+
+    for o in orders:
+        cash += o["pnl"]
+        cash_curve.append(cash)
+        if cash > peak:
+            peak = cash
+        drawdown = peak - cash
+        if drawdown > max_drawdown:
+            max_drawdown = drawdown
+        if cash < min_cash:
+            min_cash = cash
+        if starting_cash - cash > absolute_drawdown:
+            absolute_drawdown = starting_cash - cash
+        if cash > max_cash:
+            max_cash = cash
+
+    mdr = max_drawdown / max_cash if max_cash else 0   # 最大回撤率
+    relative_losses = max_drawdown / peak if peak else 0
+
+    # 连续统计
+    cons_profit, cons_loss = 0, 0
+    max_cons_profit, max_cons_loss = 0, 0
+    max_cons_win, max_cons_loss_num = 0, 0
+    tmp_cons_win, tmp_cons_loss = 0, 0
+    cons_win_list, cons_loss_list = [], []
+    for p in pnls:
+        if p > 0:
+            cons_profit += p
+            cons_loss = 0
+            tmp_cons_win += 1
+            if tmp_cons_loss > 0:
+                cons_loss_list.append(tmp_cons_loss)
+                tmp_cons_loss = 0
+        elif p < 0:
+            cons_loss += p
+            cons_profit = 0
+            tmp_cons_loss += 1
+            if tmp_cons_win > 0:
+                cons_win_list.append(tmp_cons_win)
+                tmp_cons_win = 0
+        else:
+            cons_profit = 0
+            cons_loss = 0
+            if tmp_cons_win > 0:
+                cons_win_list.append(tmp_cons_win)
+                tmp_cons_win = 0
+            if tmp_cons_loss > 0:
+                cons_loss_list.append(tmp_cons_loss)
+                tmp_cons_loss = 0
+        if cons_profit > max_cons_profit:
+            max_cons_profit = cons_profit
+        if cons_loss < max_cons_loss:
+            max_cons_loss = cons_loss
+        if tmp_cons_win > max_cons_win:
+            max_cons_win = tmp_cons_win
+        if tmp_cons_loss > max_cons_loss_num:
+            max_cons_loss_num = tmp_cons_loss
+    # 补最后一段
+    if tmp_cons_win > 0:
+        cons_win_list.append(tmp_cons_win)
+    if tmp_cons_loss > 0:
+        cons_loss_list.append(tmp_cons_loss)
+    average_consecutive_wins = sum(cons_win_list) / len(cons_win_list) if cons_win_list else 0
+    average_consecutive_losses = sum(cons_loss_list) / len(cons_loss_list) if cons_loss_list else 0
+
+    # 多空单
+    short_positions = [o for o in orders if o["size"] < 0]
+    long_positions = [o for o in orders if o["size"] > 0]
+    short_positions_num = len(short_positions)
+    long_positions_num = len(long_positions)
+    short_positions_ratio = short_positions_num / total_trades if total_trades else 0
+    long_positions_ratio = long_positions_num / total_trades if total_trades else 0
+
+    # 获利单百分比、亏损单百分比
+    profit_trades_ratio = profit_trades / total_trades if total_trades else 0
+    loss_trades_ratio = loss_trades / total_trades if total_trades else 0
+
+    # 收益率
+    yield_rate = total_net_profit / starting_cash if starting_cash else 0
+
+    # 是否爆仓
+    is_bursted = any(c <= 0 for c in cash_curve)
+
+    trade_metrics = calculate_trade_metrics(data, starting_cash)
+    result = {
+        "startingCash": starting_cash,
+        "FreeMargin": round(starting_cash + total_net_profit, 2),
+        "totalProfit": round(total_profit, 2),
+        "totalLoss": round(total_loss, 2),
+        "expectedPayoff": round(expected_payoff, 2),
+        "absoluteDrawdown": round(absolute_drawdown, 2),
+        "maximalDrawdown": round(max_drawdown, 2),
+        "relativeLosses": round(relative_losses, 4),
+        "totalTrades": total_trades,
+        "shortPositions": short_positions_num,
+        "longPositions": long_positions_num,
+        "profitTrades": profit_trades,
+        "lossTrades": loss_trades,
+        "largestProfit": largest_profit,
+        "largestLoss": largest_loss,
+        "averageProfitTrade": average_profit_trade,
+        "averageLossTrade": average_loss_trade,
+        "maximalConsecutiveProfit": max_cons_profit,
+        "maximalConsecutiveLoss": max_cons_loss,
+        "maximumConsecutiveWins": max_cons_win,
+        "maximumConsecutiveLosses": max_cons_loss_num,
+        "averageConsecutiveWins": average_consecutive_wins,
+        "averageConsecutiveLosses": average_consecutive_losses,
+        "ProfitFactor": round(profit_factor, 2),
+        "shortPositionsRatio": round(short_positions_ratio, 2),
+        "longPositionsRatio": round(long_positions_ratio, 2),
+        "profitTradesRatio": round(profit_trades_ratio, 2),
+        "lossTradesRatio": round(loss_trades_ratio, 2),
+        "yieldRate": trade_metrics["yieldRate"],
+        "winRate": trade_metrics["winRate"],
+        "plr": calculate_plr(data),
+        "avgProfit": trade_metrics["avgProfit"],
+        "mdr": calculate_mdr(data, starting_cash),
+        "isBursted": is_bursted,
+        "maxFUR": calculate_max_fur(data),
+    }
+    return result
 
