@@ -472,12 +472,19 @@ async def fetch_tester_result(request: Request):
             dql_strategy_test_result_all = query.scalars().all()
 
             for data in dql_strategy_test_result_all:
+                # 查询品种表各个品种的精度
+                goods_digits = await db.execute(select(DplGoodsTest.digits).where(
+                    DplGoodsTest.goods == data.goodsId
+                ))
+                result_goods_digits = goods_digits.scalars().first()
+
                 trader_result = json.loads(data.traderResult)
                 print(trader_result)
                 data_dict = dict()
                 data_dict["testerUids"] = data.uid
                 data_dict["name"] = data.title
                 data_dict["goods"] = data.goodsId
+                data_dict["digits"] = result_goods_digits
                 data_dict["period"] = data.period
                 data_dict["leverage"] = 0
                 data_dict["initialCash"] = 0
