@@ -8,97 +8,9 @@ from sqlalchemy import select
 from common.log import log
 from models.dql_platform import DqlStrategyTestResult, TradingStrategy, DqlIndicators
 from utils.common import format_datetime, to_float, match_filter_data, match_ratio, generate_random_string, \
-    fetch_trading_data, PandasData, indicator_classes, model_classes, fetch_indicators, select_goods_common
+    fetch_trading_data, PandasData, indicator_classes, model_classes, fetch_indicators, select_goods_common, \
+    calculate_trade_metrics, calculate_consecutive_win_loss, calculate_plr, calculate_mdr, calculate_max_fur
 from utils.public_strategy import ComprehensiveAnalyzer
-
-
-def calculate_consecutive_win_loss(account_list):
-    consecutive_wins = 0
-    consecutive_losses = 0
-    win_count = 0
-    loss_count = 0
-    max_consecutive_wins = 0
-    max_consecutive_losses = 0
-
-    for trade in account_list:
-        if trade["closeTime"]:
-            if trade['pnl'] > 0:
-                win_count += 1
-                consecutive_wins += 1
-                max_consecutive_wins = max(max_consecutive_wins, consecutive_wins)
-                consecutive_losses = 0  # Reset consecutive losses
-            elif trade['pnl'] < 0:
-                loss_count += 1
-                consecutive_losses += 1
-                max_consecutive_losses = max(max_consecutive_losses, consecutive_losses)
-                consecutive_wins = 0  # Reset consecutive wins
-
-    average_consecutive_wins = consecutive_wins / win_count if win_count > 0 else 0
-    average_consecutive_losses = consecutive_losses / loss_count if loss_count > 0 else 0
-
-    return {
-        'averageConsecutiveWins': round(average_consecutive_wins, 2),
-        'averageConsecutiveLosses': round(average_consecutive_losses, 2),
-    }
-
-
-# 计算 yieldRate, winRate, avgProfit
-def calculate_trade_metrics(account_list, initial_cash):
-    total_profit = sum(trade['pnl'] for trade in account_list if trade["closeTime"])
-    total_trades = len(account_list)
-    win_trades = len([trade for trade in account_list if trade['pnl'] > 0 and trade["closeTime"]])
-
-    yield_rate = (total_profit / initial_cash) * 100 if initial_cash else 0
-    win_rate = (win_trades / total_trades) * 100 if total_trades > 0 else 0
-    avg_profit = total_profit / total_trades if total_trades > 0 else 0
-
-    return {
-        'yieldRate': round(yield_rate, 3),
-        'winRate': round(win_rate, 3),
-        'avgProfit': round(avg_profit, 3)
-    }
-
-
-# 计算 plr (盈亏比)
-def calculate_plr(account_list):
-    positive_pnl = [trade['pnl'] for trade in account_list if trade['pnl'] > 0 and trade["closeTime"]]
-    negative_pnl = [trade['pnl'] for trade in account_list if trade['pnl'] < 0 and trade["closeTime"]]
-
-    avg_profit = sum(positive_pnl) / len(positive_pnl) if positive_pnl else 0
-    avg_loss = abs(sum(negative_pnl) / len(negative_pnl)) if negative_pnl else 0
-
-    # 如果 avg_profit 或 avg_loss 为0，则替换为1
-    avg_profit = avg_profit if avg_profit != 0 else 1
-    avg_loss = avg_loss if avg_loss != 0 else 1
-
-    plr = avg_profit / avg_loss
-
-    return round(plr, 3)
-
-
-# 计算最大回撤率 (mdr)
-def calculate_mdr(account_list, initial_cash):
-    max_drawdown = 0
-    peak_value = initial_cash
-    for trade in account_list:
-        if trade["closeTime"]:
-            peak_value = max(peak_value, peak_value + trade['pnl'])
-            drawdown = (peak_value - (initial_cash + trade['pnl'])) / peak_value
-            max_drawdown = max(max_drawdown, drawdown)
-
-    return round(max_drawdown, 3)
-
-
-# 计算最大资金使用率 (maxFUR)
-def calculate_max_fur(account_list):
-    max_fur = 0
-    for trade in account_list:
-        if trade["closeTime"]:
-            # 假设 'size' 表示交易量, openPrice 表示开盘价格, closePrice 表示平仓价格
-            margin_used = abs(trade['size'] * (trade['openPrice'] - trade['price']))
-            max_fur = max(max_fur, margin_used)
-
-    return round(max_fur, 3)
 
 
 def calculate_additional_metrics(account_list):

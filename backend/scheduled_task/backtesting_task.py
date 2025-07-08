@@ -40,7 +40,7 @@ async def fetch_period_data(db, period, goods, strategyUid, begin_time, end_time
 
     backtesting_param = {
         "period": period, "goods": goods, "startTime": begin_time,
-        "endTime": end_time, "leverage": 500
+        "endTime": end_time, "leverage": 500, "initialCash": 100000, "spread": 0
     }
 
     log.info(f"开始回测周期：{period} 开始时间：{begin_time}  结束时间：{end_time}")
@@ -69,3 +69,4 @@ async def daily_task():
 
 scheduler = AsyncIOScheduler()
 scheduler.add_job(daily_task, "cron", hour=0, minute=0, day_of_week='mon-fri')
+# scheduler.add_job(daily_task, "interval", minutes=1)  # 真实业务用1，测试时可用10~30秒
