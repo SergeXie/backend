@@ -1080,7 +1080,7 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
         "lossTrades": loss_trades,
         "largestProfit": largest_profit,
         "largestLoss": largest_loss,
-        "averageProfitTrade": average_profit_trade,
+        "averageProfitTrade": round(average_profit_trade, 2),
         "averageLossTrade": average_loss_trade,
         "maximalConsecutiveProfit": max_cons_profit,
         "maximalConsecutiveLoss": max_cons_loss,
