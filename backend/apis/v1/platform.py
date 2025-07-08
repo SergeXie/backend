@@ -46,7 +46,6 @@ async def test_user(page_no: Optional[int] = 1, page_size: Optional[int] = 100):
         return await response_base.success(data=data_list)
 
 
-
 @router.get("/selectKlineOrders", name="获取K线历史下单订单信息")
 async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: str, strategyUid: str):
     """

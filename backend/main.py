@@ -13,10 +13,10 @@ RUN_CRON = "--with-cron" in sys.argv
 @app.on_event("startup")
 async def startup_event():
     if RUN_CRON:
-        print("FastAPI 启动，定时任务调度器启动")
+        log.info("FastAPI 启动，定时任务调度器启动")
         scheduler.start()
     else:
-        print("本实例不启动定时任务")
+        log.info("本实例不启动定时任务")
 
 
 if __name__ == "__main__":
