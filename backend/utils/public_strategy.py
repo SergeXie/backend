@@ -607,6 +607,7 @@ class CommonStrategy(bt.Strategy):
                 "winRate": float(format(self.winning_trades / self.trade_count * 100, precision_format)) if self.winning_trades else 0,
                 # 盈亏比
                 "plr": float(format(profit_ratio_1, precision_format)),
+
                 "avgProfit": float(format(total_net_profit / self.trade_count, precision_format)) if total_net_profit else 0,  # 平均每次收益
                 
                 "mdr": float(format(self.mdr, precision_format)),

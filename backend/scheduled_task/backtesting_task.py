@@ -30,7 +30,7 @@ async def get_next_trade_date(db):
 
     begin_time = datetime.combine(target_day, time(0, 0, 0)).strftime('%Y-%m-%d %H:%M:%S')
     end_time = datetime.combine(target_day, time(23, 59, 0)).strftime('%Y-%m-%d %H:%M:%S')
-    return begin_time, end_time
+    return "2025-06-23 00:00:00", "2025-07-04 23:59:59"
 
 
 async def fetch_period_data(db, period, goods, strategyUid, begin_time, end_time):
@@ -51,15 +51,15 @@ async def fetch_period_data(db, period, goods, strategyUid, begin_time, end_time
         log.info(f"订单数据：traderResult:{traderResult}")
         await save_trader_result(traderResult, db, strategyUid["趋势止损策略"], period)
     else:
-        print(f"定时任务回测数据为空，周期:{period}")
+        log.info(f"定时任务回测数据为空，周期:{period}")
 
 
 async def daily_task():
     today = datetime.now().date()
     if today.weekday() >= 5:  # 5=Saturday, 6=Sunday
-        print("今天是周末，不执行定时任务")
+        log.info("今天是周末，不执行定时任务")
         return
-    print(f"定时回测任务启动: {datetime.now()}")
+    log.info(f"定时回测任务启动: {datetime.now()}")
     async with async_db_session() as db:
         # 1. 先查最大timestamp，得到需要回测的日期区间
         begin_time, end_time = await get_next_trade_date(db)
