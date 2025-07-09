@@ -88,10 +88,11 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
         data.append(d)
 
     trader_report = statistics_from_orders(data)
-    result_data = [{"goods": goods, "period": period, "beginTime": beginTime, "endTime": endTime,
+    result_data = [{"goods": goods, "period": period, "startTime": beginTime, "endTime": endTime,
                     "name": strategy.name, "initialCash": 100000, "digits": digits, "parameter": None,
                     "paramsStrName": None, "account": None, "userName": None, "currency": "USD", "spread": 0,
-                    "parameterList": json.loads(strategy.parameters),
+                    "strategyUid": strategyUid,"testerUids": strategyUid, "traderReportType": 3,
+                    "netAssetValues": [], "parameterList": json.loads(strategy.parameters),
                     "traderResult": data, "traderReport": trader_report}]
 
     return await response_base.success(data=result_data)

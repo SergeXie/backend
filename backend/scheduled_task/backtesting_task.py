@@ -30,7 +30,7 @@ async def get_next_trade_date(db):
 
     begin_time = datetime.combine(target_day, time(0, 0, 0)).strftime('%Y-%m-%d %H:%M:%S')
     end_time = datetime.combine(target_day, time(23, 59, 0)).strftime('%Y-%m-%d %H:%M:%S')
-    return "2025-06-23 00:00:00", "2025-07-04 23:59:59"
+    return "2025-06-23 00:00:00", "2025-07-07 23:59:59"
 
 
 async def fetch_period_data(db, period, goods, strategyUid, begin_time, end_time):
