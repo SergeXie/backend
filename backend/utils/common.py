@@ -1056,8 +1056,14 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
     # 是否爆仓
     is_bursted = any(c <= 0 for c in cash_curve)
 
-
     trade_metrics = calculate_trade_metrics(data, starting_cash)
+
+    cash_curve = []
+    cash = starting_cash
+    for o in orders:
+        cash += o["pnl"]
+        cash_curve.append(cash)
+
     result = {
         "startingCash": starting_cash,
         "FreeMargin": round(starting_cash + total_net_profit, 2),
@@ -1095,6 +1101,6 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
         "mdr": calculate_mdr(data, starting_cash),
         "isBursted": is_bursted,
         "maxFUR": calculate_max_fur(data),
+        "cashCurve": cash_curve
     }
     return result
-
