@@ -1069,7 +1069,7 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
         "FreeMargin": round(starting_cash + total_net_profit, 2),
         "totalProfit": round(total_profit, 2),
         "totalNetProfit": round(total_net_profit, 2),
-        "totalLoss": round(total_loss, 2),
+        "totalLoss": -round(total_loss, 2),
         "expectedPayoff": round(expected_payoff, 2),
         "absoluteDrawdown": round(absolute_drawdown, 2),
         "maximalDrawdown": round(max_drawdown, 2),
