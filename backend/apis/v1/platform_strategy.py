@@ -11,7 +11,7 @@ import chardet
 from datetime import datetime
 from bs4 import BeautifulSoup
 from fastapi import APIRouter, Query, HTTPException, UploadFile, File, BackgroundTasks
-from sqlalchemy import select, desc, update, func
+from sqlalchemy import select, desc, update, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 from starlette.responses import Response
@@ -19,8 +19,8 @@ from apis.v1.platform import model_classes
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest
-from schemas.platorm_strategr_schemas import TestResultRequest
+from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest, DqlOrder
+from schemas.platorm_strategr_schemas import TestResultRequest, RealOrderFloatingProfitModel
 from utils.common import get_entities_list, generate_random_string, \
     generate_lazy_pinyin, \
     to_float, format_datetime, select_goods_common, select_kline_data, fetch_indicators, \
@@ -632,6 +632,119 @@ async def fetch_floating_profit(request: Request):
         info = traceback.format_exc()
         log.error(f"获取回测时间范围内浮动盈亏错误：{info}")
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+
+@router.post("/realOrderFloatingProfit", name="获取回测时间范围内实时策略历史订单浮动盈亏")
+async def real_order_floating_profit(order_object: RealOrderFloatingProfitModel):
+    async with async_db_session() as db:
+        orders = (
+            select(DqlOrder)
+            .where(
+                and_(
+                    DqlOrder.tradingGoods == order_object.goods,
+                    DqlOrder.period == order_object.period,
+                    DqlOrder.timestamp.between(order_object.beginTime, order_object.endTime),
+                    DqlOrder.strategyUid == order_object.strategyUid,
+                )
+            )
+            .order_by(DqlOrder.timestamp.asc())
+        )
+        result = await db.execute(orders)
+        rows = result.scalars().all()
+
+        # 需要格式化的所有时间字段
+        time_fields = ['createTime', 'openTime', 'closeTime', 'timestamp']
+        order_data = []
+        for row in rows:
+            d = row.__dict__.copy()
+            d.pop('_sa_instance_state', None)
+            for field in time_fields:
+                if field in d and isinstance(d[field], datetime):
+                    d[field] = d[field].strftime('%Y-%m-%d %H:%M:%S')
+            order_data.append(d)
+
+        # 拿起始时间-结束时间获取K线
+        select_model_class, goods_ = await select_goods_common(db, order_object.goods, model_classes)
+        if not select_model_class:
+            return await response_base.fail(msg="交易品种:{}未查询到".format(order_object.goods), data=[])
+
+        db_select_kline = select(select_model_class).where(
+            select_model_class.tradingGoods == goods_.trading_goods,
+            select_model_class.platform == goods_.platform,
+            select_model_class.type == order_object.period,
+            select_model_class.tradeDateTime.between(order_object.beginTime, order_object.endTime))
+
+        kline_datas = await select_kline_data(db, db_select_kline)
+
+        # === 初始化变量 ===
+        floating_pnl_list = []  # 存储浮动盈亏数据
+
+        # 查找closeTime等于null的（持仓单子）
+        new_trader_orders = [x for x in order_data if x.get("closeTime", None)]
+        # 使用集合跟踪已出现的 tradeid
+        seen_tradeids = set()
+        # 生成新列表，仅包含 closeTime 为空的记录，且 tradeid 不重复
+        unique_open_trades = []
+        for trade_id in new_trader_orders:
+            seen_tradeids.add(trade_id["tradeid"])
+
+        for trade in order_data:
+            if trade.get("closeTime", None):
+                unique_open_trades.append(trade)
+            elif not trade.get("closeTime", None) and trade.get("tradeid", None) not in seen_tradeids:
+                unique_open_trades.append(trade)
+
+        starting_cash = normalize_to_float(order_object.initialCash)
+        # === 遍历 K 线计算浮动盈亏 ===
+        for kline in kline_datas:
+            current_price = kline["close"]  # K 线收盘价
+            current_date = kline["timestamp"]  # K 线时间
+            net_value = starting_cash  # 每根 K 线初始净值
+            profit = 0  # 初始化浮动盈亏
+            # 遍历所有交易订单，按时间顺序执行
+            for trade in unique_open_trades:
+                order_type = trade["orderType"]
+                close_time = trade.get("closeTime", None)
+                open_time = trade.get("openTime", None)
+                if open_time:
+                    open_time = open_time
+                else:
+                    open_time = trade.get("timestamp", None)
+                order_size = trade.get("size", None)
+                open_price = trade.get("openPrice", None)
+
+                if close_time:
+                    # 计算浮动盈亏（持仓未平仓）
+                    if open_time < current_date and close_time > current_date:
+                        position = 1 if order_type == "buy" else -1
+                        net_value = net_value + (
+                                    current_price - open_price) * position * order_size * goods_.profitRatio
+
+                    # 计算已实现盈亏（已平仓）
+                    if close_time and close_time <= current_date:
+                        net_value += trade["pnl"]
+
+                if open_time:
+                    if open_time < current_date and not close_time:
+                        position = 1 if order_type == "buy" else -1
+                        net_value = net_value + (
+                                    current_price - open_price) * position * order_size * goods_.profitRatio
+
+            # 存储当前时间的浮动盈亏
+            floating_pnl_list.append({
+                "timestamp": current_date,
+                "pnl": round(profit, 2),
+                "netValue": round(net_value, 2)
+            })
+
+    result_list = list()
+    # === 返回最终计算结果 ===
+    result_list.append({
+        "strategyUid": order_object.strategyUid,
+        "floatingPnl": floating_pnl_list
+    })
+
+    return await response_base.success(data=result_list)
 
 
 @router.post("/syncBatchTest", name="策略批量回测(同步)")

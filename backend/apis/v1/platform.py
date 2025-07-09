@@ -92,7 +92,7 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                     "name": strategy.name, "initialCash": 100000, "digits": digits, "parameter": None,
                     "paramsStrName": None, "account": None, "userName": None, "currency": "USD", "spread": 0,
                     "strategyUid": strategyUid,"testerUids": strategyUid, "traderReportType": 3,
-                    "netAssetValues": [], "parameterList": json.loads(strategy.parameters),
+                    "netAssetValues": trader_report["cashCurve"], "parameterList": json.loads(strategy.parameters),
                     "traderResult": data, "traderReport": trader_report}]
 
     return await response_base.success(data=result_data)
