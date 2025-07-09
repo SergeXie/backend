@@ -703,7 +703,7 @@ async def save_trader_result(traderResult, db, strategyUid, period):
             tradingGoods=row.get('goodsId', ''),  # tradingGoods 和 goodsId 用同一个
             goodsId=row.get('goodsId', ''),
             period=period,
-            tradeId=row.get('tradeid', 0),
+            tradeid=row.get('tradeid', 0),
             openPrice=row.get('openPrice', 0.0),
             openTime=row.get('openTime', ''),
             timestamp=row.get('timestamp', ''),
@@ -967,10 +967,7 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
     # 胜率、盈利比、盈亏比
     profit_trades = len(profits)
     loss_trades = len(losses)
-    win_rate = profit_trades / total_trades if total_trades else 0
     profit_factor = total_profit / abs(total_loss) if total_loss else float('inf')
-    plr = average_profit_trade / abs(average_loss_trade) if average_loss_trade else float('inf')
-    avg_profit = total_net_profit / total_trades if total_trades else 0
 
     # 资金曲线、最大回撤、绝对回撤
     cash_curve = []
@@ -996,7 +993,6 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
         if cash > max_cash:
             max_cash = cash
 
-    mdr = max_drawdown / max_cash if max_cash else 0   # 最大回撤率
     relative_losses = max_drawdown / peak if peak else 0
 
     # 连续统计
@@ -1057,17 +1053,16 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
     profit_trades_ratio = profit_trades / total_trades if total_trades else 0
     loss_trades_ratio = loss_trades / total_trades if total_trades else 0
 
-    # 收益率
-    yield_rate = total_net_profit / starting_cash if starting_cash else 0
-
     # 是否爆仓
     is_bursted = any(c <= 0 for c in cash_curve)
+
 
     trade_metrics = calculate_trade_metrics(data, starting_cash)
     result = {
         "startingCash": starting_cash,
         "FreeMargin": round(starting_cash + total_net_profit, 2),
         "totalProfit": round(total_profit, 2),
+        "totalNetProfit": round(total_net_profit, 2),
         "totalLoss": round(total_loss, 2),
         "expectedPayoff": round(expected_payoff, 2),
         "absoluteDrawdown": round(absolute_drawdown, 2),
