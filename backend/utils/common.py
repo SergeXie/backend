@@ -32,6 +32,7 @@ from utils.indicators.bollinger import ResponseBollingerData
 from utils.indicators.ema import ResponseEMAData
 from utils.indicators.btatr import ResponseATRData
 from utils.indicators.rsi import ResponseRSIData
+from utils.indicators.wmPattern import ResponseWMData
 from pypinyin import lazy_pinyin, Style
 from typing import List, Dict, Any
 from utils.strategys import reload_strategies
@@ -75,6 +76,7 @@ indicator_classes = {
     "btATR": ResponseATRData,
     "RSI": ResponseRSIData,
     "SMCP": ResponseSMCPData,
+    "WM": ResponseWMData,
 }
 
 
