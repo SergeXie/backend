@@ -144,6 +144,7 @@ class DqlStrategy(Base):
     pinyinname: Mapped[str] = mapped_column(String(255), nullable=False, comment='中文指标的拼音')
     weights: Mapped[str] = mapped_column(Float, nullable=False, comment='指标权重')
     is_delete: Mapped[int] = mapped_column(Integer, nullable=False, comment='0 未删除 1 已删除')
+    isSupportBacktesting: Mapped[int] = mapped_column(Integer, default=1, nullable=False, comment='1 策略支持回测 0 策略不支持回测')
     createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
                                                 server_default='CURRENT_TIMESTAMP', comment='创建时间')
 

@@ -409,6 +409,7 @@ async def get_entities_list(entity_type, pageNo=1, pageSize=100, orderBy=0, keyW
                             "name": data.name,
                             "description": data.description,
                             "subType": data.subType if entity_type.__tablename__ == "dql_indicators" else None,
+                            "isSupportBacktesting": data.isSupportBacktesting if entity_type.__tablename__ == "dql_strategy" else None,
                             "type": data.type,
                             "owner": data.owner,
                             "parameter": json.loads(data.parameters),

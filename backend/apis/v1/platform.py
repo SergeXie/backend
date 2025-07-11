@@ -56,6 +56,10 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
     :param strategyUid: 策略uid
     """
     async with async_db_session() as db:
+        order_strategy = (await db.execute(select(DqlOrder).where(DqlOrder.strategyUid == strategyUid))).scalars().first()
+        if not order_strategy:
+            return await response_base.fail(msg="该策略不存在实时回测报告", data=[])
+
         stmt = (
             select(DqlOrder)
             .where(
@@ -70,6 +74,9 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
         )
         result = await db.execute(stmt)
         rows = result.scalars().all()
+        if not rows:
+            return await response_base.fail(msg="时间范围内不存在实时回测报告", data=[])
+
         strategy = (await db.execute(select(DqlStrategy).where(DqlStrategy.uid == strategyUid))).scalars().first()
 
         digits = (await db.execute(
