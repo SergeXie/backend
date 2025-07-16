@@ -970,7 +970,7 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
     # 胜率、盈利比、盈亏比
     profit_trades = len(profits)
     loss_trades = len(losses)
-    profit_factor = total_profit / abs(total_loss) if total_loss else float('inf')
+    profit_factor = total_profit / abs(total_loss) if total_loss else 0
 
     # 资金曲线、最大回撤、绝对回撤
     cash_curve = []

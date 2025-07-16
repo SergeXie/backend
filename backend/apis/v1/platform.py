@@ -13,7 +13,7 @@ from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
 from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult, DqlOrder
 from schemas.base import ErrorModel
-from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData
+from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData, DqlIndicatorsModel
 from utils.common import select_goods_common, RandomIDGenerator, select_kline_data, Trader, \
     GoodTrader, PandasData, cache, get_indicator_data, model_classes, \
     get_entities_list, generate_random_string, statistics_from_orders
@@ -55,6 +55,7 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
     :param endTime: 结束时间
     :param strategyUid: 策略uid
     """
+
     async with async_db_session() as db:
         order_strategy = (await db.execute(select(DqlOrder).where(DqlOrder.strategyUid == strategyUid))).scalars().first()
         if not order_strategy:
@@ -79,6 +80,13 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
 
         strategy = (await db.execute(select(DqlStrategy).where(DqlStrategy.uid == strategyUid))).scalars().first()
 
+        indicatorData = (await db.execute(select(DqlIndicators).where(
+            DqlIndicators.className == strategy.indicatorsClassName))).scalars().first()
+        if indicatorData:
+            indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
+        else:
+            indicator_dict = None
+
         digits = (await db.execute(
             select(DplGoodsTest.digits).where(DplGoodsTest.goods == goods)
         )).scalars().first()
@@ -100,7 +108,8 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                     "paramsStrName": None, "account": None, "userName": None, "currency": "USD", "spread": 0,
                     "strategyUid": strategyUid,"testerUids": strategyUid, "traderReportType": 3,
                     "netAssetValues": trader_report["cashCurve"], "parameterList": json.loads(strategy.parameters),
-                    "traderResult": data, "traderReport": trader_report}]
+                    "traderResult": data, "traderReport": trader_report,
+                    "indicatorData": [indicator_dict] if indicator_dict else []}]
 
     return await response_base.success(data=result_data)
 
