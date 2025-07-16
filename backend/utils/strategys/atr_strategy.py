@@ -29,6 +29,8 @@ class ATRStrategy(CommonStrategy):
             self.need_closr = True
         self.start_date = datetime.datetime.strptime(begin_time, '%Y-%m-%d %H:%M:%S')  # 设置开始日期
 
+        print("self.need_closr:{}".format(self.need_closr))
+
     def next(self):
         """
         next 方法是 Backtrader 策略的核心之一。它会在每个新的数据点（通常是每个新的 K 线）到达时被调用.

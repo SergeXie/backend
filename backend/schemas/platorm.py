@@ -1,8 +1,9 @@
 import datetime
+import json
 
 from fastapi.params import Path, Query
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, List, Dict, Any
 
 from schemas.base import ResponseSuccess
 
@@ -55,3 +56,31 @@ class TraderTicksGoods(BaseModel):
 class AddTraderTicksData(BaseModel):
     tradeId: str = Query(..., title="交易回测id")
     goodsTradeArray: List[TraderTicksGoods]
+
+
+class DqlIndicatorsModel(BaseModel):
+    pkId: int
+    uid: str
+    name: str
+    className: str
+    description: str
+    parameters: List[Dict[str, Any]] = Field(default=[], description='指标参数')  # 允许任意键和值
+    type: int
+    subType: int
+    owner: str
+    pinyinname: str
+    weights: int
+
+    @field_validator("parameters", mode="before")
+    @classmethod
+    def parse_params_json(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return v  # 如果不是合法 JSON，就原样返回
+        return v
+
+    class Config:
+        orm_mode = True
+        from_attributes = True
