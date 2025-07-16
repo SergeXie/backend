@@ -68,5 +68,5 @@ async def daily_task():
             await fetch_period_data(db, period, goods, strategyUid, begin_time, end_time)
 
 scheduler = AsyncIOScheduler()
-# scheduler.add_job(daily_task, "cron", hour=0, minute=0, day_of_week='mon-fri')
-scheduler.add_job(daily_task, "interval", minutes=1)  # 真实业务用1，测试时可用10~30秒
+scheduler.add_job(daily_task, "cron", hour=0, minute=0, day_of_week='mon-fri')
+# scheduler.add_job(daily_task, "interval", minutes=1)  # 真实业务用1，测试时可用10~30秒
