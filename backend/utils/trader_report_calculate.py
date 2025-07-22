@@ -8,97 +8,9 @@ from sqlalchemy import select
 from common.log import log
 from models.dql_platform import DqlStrategyTestResult, TradingStrategy, DqlIndicators
 from utils.common import format_datetime, to_float, match_filter_data, match_ratio, generate_random_string, \
-    fetch_trading_data, PandasData, indicator_classes, model_classes, fetch_indicators, select_goods_common
+    fetch_trading_data, PandasData, indicator_classes, model_classes, fetch_indicators, select_goods_common, \
+    calculate_trade_metrics, calculate_consecutive_win_loss, calculate_plr, calculate_mdr, calculate_max_fur
 from utils.public_strategy import ComprehensiveAnalyzer
-
-
-def calculate_consecutive_win_loss(account_list):
-    consecutive_wins = 0
-    consecutive_losses = 0
-    win_count = 0
-    loss_count = 0
-    max_consecutive_wins = 0
-    max_consecutive_losses = 0
-
-    for trade in account_list:
-        if trade["closeTime"]:
-            if trade['pnl'] > 0:
-                win_count += 1
-                consecutive_wins += 1
-                max_consecutive_wins = max(max_consecutive_wins, consecutive_wins)
-                consecutive_losses = 0  # Reset consecutive losses
-            elif trade['pnl'] < 0:
-                loss_count += 1
-                consecutive_losses += 1
-                max_consecutive_losses = max(max_consecutive_losses, consecutive_losses)
-                consecutive_wins = 0  # Reset consecutive wins
-
-    average_consecutive_wins = consecutive_wins / win_count if win_count > 0 else 0
-    average_consecutive_losses = consecutive_losses / loss_count if loss_count > 0 else 0
-
-    return {
-        'averageConsecutiveWins': round(average_consecutive_wins, 2),
-        'averageConsecutiveLosses': round(average_consecutive_losses, 2),
-    }
-
-
-# 计算 yieldRate, winRate, avgProfit
-def calculate_trade_metrics(account_list, initial_cash):
-    total_profit = sum(trade['pnl'] for trade in account_list if trade["closeTime"])
-    total_trades = len(account_list)
-    win_trades = len([trade for trade in account_list if trade['pnl'] > 0 and trade["closeTime"]])
-
-    yield_rate = (total_profit / initial_cash) * 100 if initial_cash else 0
-    win_rate = (win_trades / total_trades) * 100 if total_trades > 0 else 0
-    avg_profit = total_profit / total_trades if total_trades > 0 else 0
-
-    return {
-        'yieldRate': round(yield_rate, 3),
-        'winRate': round(win_rate, 3),
-        'avgProfit': round(avg_profit, 3)
-    }
-
-
-# 计算 plr (盈亏比)
-def calculate_plr(account_list):
-    positive_pnl = [trade['pnl'] for trade in account_list if trade['pnl'] > 0 and trade["closeTime"]]
-    negative_pnl = [trade['pnl'] for trade in account_list if trade['pnl'] < 0 and trade["closeTime"]]
-
-    avg_profit = sum(positive_pnl) / len(positive_pnl) if positive_pnl else 0
-    avg_loss = abs(sum(negative_pnl) / len(negative_pnl)) if negative_pnl else 0
-
-    # 如果 avg_profit 或 avg_loss 为0，则替换为1
-    avg_profit = avg_profit if avg_profit != 0 else 1
-    avg_loss = avg_loss if avg_loss != 0 else 1
-
-    plr = avg_profit / avg_loss
-
-    return round(plr, 3)
-
-
-# 计算最大回撤率 (mdr)
-def calculate_mdr(account_list, initial_cash):
-    max_drawdown = 0
-    peak_value = initial_cash
-    for trade in account_list:
-        if trade["closeTime"]:
-            peak_value = max(peak_value, peak_value + trade['pnl'])
-            drawdown = (peak_value - (initial_cash + trade['pnl'])) / peak_value
-            max_drawdown = max(max_drawdown, drawdown)
-
-    return round(max_drawdown, 3)
-
-
-# 计算最大资金使用率 (maxFUR)
-def calculate_max_fur(account_list):
-    max_fur = 0
-    for trade in account_list:
-        if trade["closeTime"]:
-            # 假设 'size' 表示交易量, openPrice 表示开盘价格, closePrice 表示平仓价格
-            margin_used = abs(trade['size'] * (trade['openPrice'] - trade['price']))
-            max_fur = max(max_fur, margin_used)
-
-    return round(max_fur, 3)
 
 
 def calculate_additional_metrics(account_list):
@@ -367,11 +279,10 @@ def calculate_trading_indicator_statistics(soup, account_list):
     df["isLoss"] = df["netProfit"] < 0
     df["orderType"] = df["orderType"].str.lower()
 
-    # 计算连续额外和连续亏损
+    # 计算连续盈利和连续亏损
     profits = df["netProfit"].tolist()
     consecutive_profits = []
     consecutive_losses = []
-
     current_profit = 0
     current_loss = 0
     consec_win = 0
@@ -400,26 +311,31 @@ def calculate_trading_indicator_statistics(soup, account_list):
             consec_win = 0
             consec_loss = 0
 
-    # 统计值
+    # 提取起始资金
     starting_cash_str = soup.find(string="Balance:").find_next().text
-    # 去掉空格
-    starting_cash = starting_cash_str.replace(' ', '')
-    # 转换为浮点数
-    starting_cash = float(starting_cash)
+    starting_cash = float(starting_cash_str.replace(' ', ''))
 
+    # 统计计算
     total_net_profit = df["netProfit"].sum()
     total_profit = df[df["netProfit"] > 0]["netProfit"].sum()
     total_loss = -df[df["netProfit"] < 0]["netProfit"].sum()
-    profit_factor = total_profit / total_loss if total_loss != 0 else float("inf")
-    expected_payoff = total_net_profit / len(df)
-    absolute_drawdown = starting_cash - df["netProfit"].cumsum().min()
+    absolute_drawdown = df["netProfit"].cumsum().min()
     maximal_drawdown = df["netProfit"].cumsum().cummax() - df["netProfit"].cumsum()
     max_drawdown = maximal_drawdown.max()
-    relative_loss = max_drawdown / starting_cash
+
+    profit_trades = df[df["isProfit"]]
+    loss_trades = df[df["isLoss"]]
+    average_profit_trade = round(profit_trades["netProfit"].mean(), 2) if not profit_trades.empty else 0
+    average_loss_trade = round(loss_trades["netProfit"].mean(), 2) if not loss_trades.empty else 0
+    largest_profit = round(df["netProfit"].max(), 2) if not df.empty else 0
+    largest_loss = round(df["netProfit"].min(), 2) if not df.empty else 0
+    profit_factor = total_profit / total_loss if total_loss != 0 else 0
+    expected_payoff = total_net_profit / len(df) if len(df) > 0 else 0
+    relative_loss = max_drawdown / starting_cash if starting_cash != 0 else 0
 
     trader_report = {
         "startingCash": starting_cash,
-        "FreeMargin": starting_cash + total_net_profit,
+        "FreeMargin": round(starting_cash + total_net_profit, 2),
         "totalNetProfit": round(total_net_profit, 2),
         "totalProfit": round(total_profit, 2),
         "totalLoss": round(total_loss, 2),
@@ -430,32 +346,30 @@ def calculate_trading_indicator_statistics(soup, account_list):
         "relativeLosses": round(relative_loss, 4),
         "totalTrades": len(df),
         "shortPositions": int((df["orderType"] == "sell").sum()),
-        "shortPositionsRatio": round((df["orderType"] == "sell").mean() * 100, 2),
+        "shortPositionsRatio": round((df["orderType"] == "sell").mean() * 100, 2) if not df.empty else 0,
         "longPositions": int((df["orderType"] == "buy").sum()),
-        "longPositionsRatio": round((df["orderType"] == "buy").mean() * 100, 2),
+        "longPositionsRatio": round((df["orderType"] == "buy").mean() * 100, 2) if not df.empty else 0,
         "profitTrades": int(df["isProfit"].sum()),
-        "profitTradesRatio": round(df["isProfit"].mean() * 100, 2),
+        "profitTradesRatio": round(df["isProfit"].mean() * 100, 2) if not df.empty else 0,
         "lossTrades": int(df["isLoss"].sum()),
-        "lossTradesRatio": round(df["isLoss"].mean() * 100, 2),
-        "largestProfit": round(df["netProfit"].max(), 2),
-        "largestLoss": round(df["netProfit"].min(), 2),
-        "averageProfitTrade": round(df[df["isProfit"]]["netProfit"].mean(), 2),
-        "averageLossTrade": round(df[df["isLoss"]]["netProfit"].mean(), 2),
+        "lossTradesRatio": round(df["isLoss"].mean() * 100, 2) if not df.empty else 0,
+        "largestProfit": largest_profit,
+        "largestLoss": largest_loss,
+        "averageProfitTrade": average_profit_trade,
+        "averageLossTrade": average_loss_trade,
         "maximalConsecutiveProfit": round(max(consecutive_profits or [0]), 2),
         "maximalConsecutiveLoss": round(min(consecutive_losses or [0]), 2),
         "maximumConsecutiveWins": max_consec_win,
         "maximumConsecutiveLosses": max_consec_loss,
-        "yieldRate": 0,
-        "winRate": 0,
-        "plr": 0,
-        "avgProfit": 0,
-        "mdr": 0,
+        "yieldRate": 0.0,
+        "winRate": 0.0,
+        "plr": 0.0,
+        "avgProfit": 0.0,
+        "mdr": 0.0,
         "isBursted": 0,
-        "maxFUR": 0,
-        "score": 0,
+        "maxFUR": 0.0,
+        "score": 0.0,
     }
-
-    # print(json.dumps(trader_report, indent=4, ensure_ascii=False))
 
     return trader_report
 
@@ -484,6 +398,7 @@ def generate_trader_report(soup, account_list):
         trader_report["winRate"] = trade_metrics["winRate"]
         trader_report["avgProfit"] = trade_metrics["avgProfit"]
         trader_report["plr"] = plr
+        trader_report["ProfitFactor"] = plr
         trader_report["mdr"] = mdr
         trader_report["max_fur"] = max_fur
         trader_report["totalTrades"] = additional_metrics["tradeCount"]
@@ -496,7 +411,143 @@ def generate_trader_report(soup, account_list):
         log.error(f"解析报告出错：{info}")
 
 
-async def data_filters(db, account_list, startTime, endTime):
+def process_manual_generate_trader_report(soup, account_list):
+    """
+    生成交易报告
+    """
+    try:
+        # 提取报告数据
+        trader_report = {
+            "startingCash": soup.find(string="Balance:").find_next().text,
+            "FreeMargin": soup.find(string="Free Margin:").find_next().text,
+            "totalNetProfit": soup.find(string="Total Net Profit:").find_next().text,
+            "totalProfit": soup.find(string="Gross Profit:").find_next().text,
+            "totalLoss": soup.find(string="Gross Loss:").find_next().text,
+            "ProfitFactor": soup.find(string="Profit Factor:").find_next().text,
+            "expectedPayoff": soup.find(string="Expected Payoff:").find_next().text,
+            "absoluteDrawdown": soup.find(string="Absolute Drawdown:").find_next().text,
+            "maximalDrawdown": match_filter_data(soup.find(string="Maximal Drawdown:").find_next().text),
+            "relativeLosses": match_filter_data(soup.find(string="Relative Drawdown:").find_next().text),
+            "totalTrades": soup.find(string="Total Trades:").find_next().text,
+            "shortPositions": match_filter_data(soup.find(string="Short Positions (won %):").find_next().text),
+            "shortPositionsRatio": match_ratio(soup.find(string="Short Positions (won %):").find_next().text),
+            "longPositions": match_filter_data(soup.find(string="Long Positions (won %):").find_next().text),
+            "longPositionsRatio": match_ratio(soup.find(string="Long Positions (won %):").find_next().text),
+            "profitTrades": match_filter_data(soup.find(string="Profit Trades (% of total):").find_next().text),
+            "profitTradesRatio": match_ratio(soup.find(string="Profit Trades (% of total):").find_next().text),
+            "lossTrades": match_filter_data(soup.find(string="Loss trades (% of total):").find_next().text),
+            "lossTradesRatio": match_ratio(soup.find(string="Loss trades (% of total):").find_next().text),
+            "largestProfit": 0,
+            "largestLoss": 0,
+            "averageProfitTrade": 0,
+            "averageLossTrade": 0,
+            "maximalConsecutiveProfit": 0,
+            "maximalConsecutiveLoss": 0,
+            "maximumConsecutiveWins": 0,
+            "maximumConsecutiveLosses": 0,
+            "averageConsecutiveWins": 0,
+            "averageConsecutiveLosses": 0,
+            "yieldRate": 0,
+            "winRate": 0,
+            "plr": 0,
+            "avgProfit": 0,
+            "mdr": 0,
+            "isBursted": 0,
+            "maxFUR": 0,
+            "score": 0,
+        }
+        # 计算所需的指标
+        initial_cleaned = trader_report["startingCash"].replace(' ', '')
+        initial_cash = float(initial_cleaned)
+        consecutive_metrics = calculate_consecutive_win_loss(account_list)
+        trade_metrics = calculate_trade_metrics(account_list, initial_cash)
+        plr = calculate_plr(account_list)
+        mdr = calculate_mdr(account_list, initial_cash)
+        max_fur = calculate_max_fur(account_list)
+        additional_metrics = calculate_additional_metrics(account_list)
+
+        trader_report["startingCash"] = initial_cash
+        trader_report["averageConsecutiveWins"] = consecutive_metrics["averageConsecutiveWins"]
+        trader_report["averageConsecutiveLosses"] = consecutive_metrics["averageConsecutiveLosses"]
+        trader_report["yieldRate"] = trade_metrics["yieldRate"]
+        trader_report["winRate"] = trade_metrics["winRate"]
+        trader_report["avgProfit"] = trade_metrics["avgProfit"]
+        trader_report["plr"] = plr
+        trader_report["mdr"] = mdr
+        trader_report["max_fur"] = max_fur
+        trader_report["totalTrades"] = additional_metrics["tradeCount"]
+        newReportTemplate = calculate_metrics(account_list)
+
+        # Largest Profit Trade 和 Loss Trade
+        largest_row = soup.find('td', string='Largest')
+        if largest_row:
+            # 提取 Largest profit 和 loss 数据
+            largest_profit = largest_row.find_next('td', class_='mspt').text.strip()
+            largest_loss = largest_row.find_next('td', class_='mspt').find_next('td', class_='mspt').text.strip()
+
+            # 去除空格并转换为浮动数值
+            trader_report["largestProfit"] = float(
+                largest_profit.replace(" ", "").replace(",", "")) if largest_profit else 0
+            trader_report["largestLoss"] = float(largest_loss.replace(" ", "").replace(",", "")) if largest_loss else 0
+
+        # Average Profit Trade 和 Loss Trade
+        average_row = soup.find('td', string='Average')
+        if average_row:
+            # 提取 Average profit 和 loss 数据
+            average_profit = average_row.find_next('td', class_='mspt').text.strip()
+            average_loss = average_row.find_next('td', class_='mspt').find_next('td', class_='mspt').text.strip()
+
+            # 去除空格并转换为浮动数值
+            trader_report["averageProfitTrade"] = float(
+                average_profit.replace(" ", "").replace(",", "")) if average_profit else 0
+            trader_report["averageLossTrade"] = float(
+                average_loss.replace(" ", "").replace(",", "")) if average_loss else 0
+
+        # Maximum Consecutive Wins 和 Consecutive Losses
+        maximum_row = soup.find('td', string='Maximum')
+        if maximum_row:
+            # 提取 Maximum consecutive wins 和 consecutive losses 数据
+            max_consecutive_wins = maximum_row.find_next('td', class_='mspt').text.strip()
+            max_consecutive_losses = maximum_row.find_next('td', class_='mspt').find_next('td',
+                                                                                          class_='mspt').text.strip()
+
+            # 处理数据
+            max_consecutive_wins_value = max_consecutive_wins.split('(')[1].split(')')[0]  # 提取括号内的数字
+            max_consecutive_losses_value = max_consecutive_losses.split('(')[1].split(')')[0]  # 提取括号内的数字
+
+            trader_report["maximumConsecutiveWins"] = float(
+                max_consecutive_wins_value.replace(' ', '')) if max_consecutive_wins_value else 0
+            trader_report["maximumConsecutiveLosses"] = float(
+                max_consecutive_losses_value.replace(' ', '')) if max_consecutive_losses_value else 0
+
+        # Maximal Consecutive Profit 和 Loss
+        maximal_row = soup.find('td', string='Maximal')
+        if maximal_row:
+            # 提取 Maximal consecutive profit 和 loss 数据
+            maximal_consecutive_profit = maximal_row.find_next('td', class_='mspt').text.strip()
+            maximal_consecutive_loss = maximal_row.find_next('td', class_='mspt').find_next('td',
+                                                                                            class_='mspt').text.strip()
+            # 处理数据，提取括号内的数字
+            maximal_consecutive_profit_value = maximal_consecutive_profit.split('(')[0].strip()  # 提取括号外的数字
+            maximal_consecutive_loss_value = maximal_consecutive_loss.split('(')[0].strip()  # 提取括号外的数字
+
+            # 更新数据
+            trader_report["maximalConsecutiveProfit"] = float(
+                maximal_consecutive_profit_value.replace(" ", "").replace(",",
+                                                                          "")) if maximal_consecutive_profit_value else 0
+            trader_report["maximalConsecutiveLoss"] = float(
+                maximal_consecutive_loss_value.replace(" ", "").replace(",",
+
+                                                                        "")) if maximal_consecutive_loss_value else 0
+
+        return trader_report, additional_metrics, newReportTemplate
+
+    except Exception as e:
+        info = traceback.format_exc()
+        log.error(f"解析报告出错：{info}")
+
+
+async def data_filters(db, account_list, startTime, endTime, upload_type=None):
     """
     根据起始和结束时间过滤 account_list 订单数据，只包含起始和结束时间的订单
     """
@@ -518,50 +569,56 @@ async def data_filters(db, account_list, startTime, endTime):
         if order.get("timestamp")  # 确保 timestamp 不是 None 或空
            and start_dt <= datetime.strptime(order["timestamp"], "%Y-%m-%d %H:%M:%S") <= end_dt
     ]
+    if upload_type != "2":  # 不是手动上传的
+        # 过滤出 closeTime 为空的交易记录 就是持仓订单的
+        open_trades = [trade for trade in filtered_list if trade['closeTime'] is None]
+        print(len(open_trades))
+        # 更新持仓订单的pnl，就是未关仓的
+        for open_order in open_trades:
+            identifier = open_order["identifier"]
+            key = identifier.split('@')[0]  # 提取 @ 前面的部分 例如: NTROILM5S0001@1737024960@
+            # 交易策略
+            trading_strategy_db = await db.execute(select(TradingStrategy).filter(
+                TradingStrategy.tradeUid == key))
 
-    # 过滤出 closeTime 为空的交易记录 就是持仓订单的
-    open_trades = [trade for trade in filtered_list if trade['closeTime'] is None]
-    print(len(open_trades))
-    # 更新持仓订单的pnl，就是未关仓的
-    for open_order in open_trades:
-        identifier = open_order["identifier"]
-        key = identifier.split('@')[0]  # 提取 @ 前面的部分 例如: NTROILM5S0001@1737024960@
-        # 交易策略
-        trading_strategy_db = await db.execute(select(TradingStrategy).filter(
-            TradingStrategy.tradeUid == key))
+            trading_strategy_datas = trading_strategy_db.scalars().first()
+            # 分割字符串
+            platform, goods = trading_strategy_datas.goods.split('-')
 
-        trading_strategy_datas = trading_strategy_db.scalars().first()
-        # 分割字符串
-        platform, goods = trading_strategy_datas.goods.split('-')
-        select_model_class, result = await select_goods_common(db, trading_strategy_datas.goods, model_classes)
-        # 查K线
-        select_k_time = select(select_model_class).where(
-            select_model_class.platform == platform,
-            select_model_class.tradingGoods == goods,
-            select_model_class.type == "M1",
-            select_model_class.tradeDateTime <= end_dt
-        ).order_by(select_model_class.tradeDateTime.desc()).limit(1)
+            select_model_class, goods_ = await select_goods_common(db, trading_strategy_datas.goods, model_classes)
+            # 查K线
+            select_k_time = select(select_model_class).where(
+                select_model_class.platform == platform,
+                select_model_class.tradingGoods == goods,
+                select_model_class.type == "M1",
+                select_model_class.tradeDateTime <= end_dt
+            ).order_by(select_model_class.tradeDateTime.desc()).limit(1)
 
-        # 执行查询
-        result = await db.execute(select_k_time)
-        kline_data = result.scalar_one_or_none()
+            # 执行查询
+            result = await db.execute(select_k_time)
+            kline_data = result.scalar_one_or_none()
 
-        if kline_data:
-            open_order["price"] = kline_data.closed
-            if open_order["orderType"] == "sell":
-                # 做空 PnL = (开仓价格−平仓价格（现价 K线M1的收盘价）)×交易手数×杠杆−隔夜利息
-                open_order["pnl"] = round((open_order["openPrice"] - kline_data.closed) * (open_order["size"] * 100), 3)
+            if kline_data:
+                open_order["price"] = kline_data.closed
+                if open_order["orderType"] == "sell":
+                    # 做空 PnL = (开仓价格−平仓价格（现价 K线M1的收盘价）)×交易手数×杠杆−隔夜利息
+                    open_order["pnl"] = round((open_order["openPrice"] - kline_data.closed) * (open_order["size"] * goods_.profitRatio), 3)
+                else:
+                    # 做多 PnL=(平仓价格（现价 K线M1的收盘价）− 开仓价格)×交易手数×杠杆−隔夜利息
+                    open_order["pnl"] = round((kline_data.closed - open_order["openPrice"]) * (open_order["size"] * goods_.profitRatio), 3)
+
+                print("closed")
+                print(end_dt)
+                print(kline_data.closed)
+                print(kline_data.tradeDateTime)
             else:
-                # 做多 PnL=(平仓价格（现价 K线M1的收盘价）− 开仓价格)×交易手数×杠杆−隔夜利息
-                open_order["pnl"] = round((kline_data.closed - open_order["openPrice"]) * (open_order["size"] * 100), 3)
-        else:
-            print("No data found")
+                print("No data found")
 
     return filtered_list
 
 
 async def process_manual_upload(soup, data_json, strategy,
-                                startTime, endTime, uid, goods, period, db):
+                                startTime, endTime, uid, goods, period, db, upload_type):
     account_list = []
     # 手动上传的逻辑：如策略查询、交易数据处理等
     closed_transactions_header = soup.find('b', string='Closed Transactions:')
@@ -573,10 +630,10 @@ async def process_manual_upload(soup, data_json, strategy,
     account_list.extend(closed_transactions)
     account_list.extend(open_transactions)
 
-    filtered_result = data_filters(account_list, startTime, endTime)
+    filtered_result = await data_filters(db, account_list, startTime, endTime, upload_type)
 
     # 提取报告数据
-    trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, filtered_result)
+    trader_report, additional_metrics, newReportTemplate = process_manual_generate_trader_report(soup, filtered_result)
 
     try:
         # 创建策略结果记录
@@ -626,7 +683,7 @@ async def process_auto_upload(soup, db, grouped_transactions, startTime, endTime
     async with db.begin():  # 开启事务
         for identifier, orders in grouped_transactions.items():
             filtered_result = await data_filters(db, orders, startTime, endTime)
-            # 提取报告数据
+            # # 提取报告数据
             trader_report, additional_metrics, newReportTemplate = generate_trader_report(soup, filtered_result)
             # 添加入库
             try:
@@ -734,8 +791,10 @@ async def process_auto_upload(soup, db, grouped_transactions, startTime, endTime
 
                 )
                 db.add(add_strategy_record)
+                log.info("交易报告提交成功")
             except Exception as e:
                 info = traceback.format_exc()
                 log.error("交易报告提交失败：{}".format(info))
                 await db.rollback()  # 如果发生异常，回滚事务
                 await db.close()
+

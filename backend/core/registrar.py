@@ -45,23 +45,12 @@ def register_app():
         docs_url=settings.DOCS_URL,
         redoc_url=settings.REDOCS_URL,
         openapi_url=settings.OPENAPI_URL,
-        # lifespan=register_init,
     )
 
-    # # 静态文件
-    # register_static_file(app)
-    #
-    # # 中间件
+    # 中间件
     register_middleware(app)
-    #
-    # # 路由
+    #  路由
     register_router(app)
-    #
-    # # 分页
-    # register_page(app)
-
-    # 全局异常处理
-    # register_exception(app)
 
     return app
 

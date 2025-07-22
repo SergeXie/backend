@@ -15,7 +15,7 @@ from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
 from models.dql_platform import DplGoodsTest, DqlIndicators, TradingFPG, TradingBRC5, TradingOnda, TradingFXTM5, \
-    TradingIndex, TradingIndex2, TradingFPG2, DqlStrategy
+    TradingIndex, TradingIndex2, TradingFPG2, DqlStrategy, DqlOrder
 from utils.indicators import *
 # from utils.indicators.atr_kmeans import ResponseATRKmeansData
 from utils.indicators.deeplearn_v2 import ResponseDL2Data
@@ -32,10 +32,13 @@ from utils.indicators.bollinger import ResponseBollingerData
 from utils.indicators.ema import ResponseEMAData
 from utils.indicators.btatr import ResponseATRData
 from utils.indicators.rsi import ResponseRSIData
+from utils.indicators.wm import ResponseWMData
 from pypinyin import lazy_pinyin, Style
+from typing import List, Dict, Any
+from utils.strategys import reload_strategies
 from utils.timezone import timezone
 from dateutil import parser
-
+from utils.public_strategy import ComprehensiveAnalyzer
 
 # 创建一个带有过期时间的缓存，设置每个缓存条目的过期时间为 60 秒
 cache = TTLCache(maxsize=10000, ttl=3600)
@@ -73,7 +76,12 @@ indicator_classes = {
     "btATR": ResponseATRData,
     "RSI": ResponseRSIData,
     "SMCP": ResponseSMCPData,
+    "WM": ResponseWMData,
 }
+
+
+strategy_classes = {}
+strategy_classes = reload_strategies()
 
 
 def match_ratio(data):
@@ -403,6 +411,7 @@ async def get_entities_list(entity_type, pageNo=1, pageSize=100, orderBy=0, keyW
                             "name": data.name,
                             "description": data.description,
                             "subType": data.subType if entity_type.__tablename__ == "dql_indicators" else None,
+                            "isSupportBacktesting": data.isSupportBacktesting if entity_type.__tablename__ == "dql_strategy" else None,
                             "type": data.type,
                             "owner": data.owner,
                             "parameter": json.loads(data.parameters),
@@ -685,7 +694,416 @@ async def get_indicator_data(request, data_type, name):
         return Response(status_code=500, content="系统错误!")
 
 
-async def fetch_indicators(db: AsyncSession, uid: int):
+async def fetch_indicators(db: AsyncSession, uid: str):
     select_indicators = await db.execute(select(DqlStrategy).where(
         DqlStrategy.uid == uid, DqlStrategy.is_delete == 0))
     return select_indicators.scalars().first()
+
+
+async def save_trader_result(traderResult, db, strategyUid, period):
+    for row in traderResult:
+        order = DqlOrder(
+            tradingGoods=row.get('goodsId', ''),  # tradingGoods 和 goodsId 用同一个
+            goodsId=row.get('goodsId', ''),
+            period=period,
+            tradeid=row.get('tradeid', 0),
+            openPrice=row.get('openPrice', 0.0),
+            openTime=row.get('openTime', ''),
+            timestamp=row.get('timestamp', ''),
+            closeTime=row.get('closeTime', None),
+            orderType=row.get('orderType', ''),
+            placeType=row.get('placeType', ''),
+            size=row.get('size', 0.0),
+            price=row.get('price', 0.0),
+            stopLoss=row.get('stopLoss', 0.0),
+            takeProfit=row.get('takeProfit', 0.0),
+            taxes=row.get('taxes', 0.0),
+            swap=row.get('swap', 0.0),
+            commission=row.get('commission', 0.0),
+            pnl=row.get('pnl', 0.0),
+            spread=row.get('spread', 0.0),
+            initialCash=row.get('initialCash', 0.0),
+            klineId=row.get('klineId', 0),
+            strategyUid=strategyUid,
+        )
+        db.add(order)
+
+    await db.commit()
+    log.info("新增订单信息成功！")
+
+
+
+async def run_backtest(db: AsyncSession, indicator_data_request, strategys, tester_uid, goods_data, task_name=None):
+    """
+
+    :param db: 会话
+    :param indicator_data_request: 请求参数
+    :param strategys: 策略对象
+    :param tester_uid: 策略接口uid
+    :param task_name: 任务名称
+    :return:
+    """
+    try:
+        # 根据period参数的取值进行条件判断
+        period_dict = {"period": indicator_data_request.get("period", None),
+                       "tradingGoods": indicator_data_request.get("goods", None),
+                       "beginTime": indicator_data_request.get("startTime", None),
+                       "endTime": indicator_data_request.get("endTime", None)}
+
+        period_tuple = tuple(period_dict.items())
+
+        indicator_params = indicator_data_request.get("parameter", {})
+        # 在参数中增加k线的品种和周期
+        indicator_params['Kline_period'] = indicator_data_request.get("period", None)
+        indicator_params['Kline_goods'] = indicator_data_request.get("goods", None)
+
+        trading_data = await fetch_trading_data(db, indicator_data_request.get("goods", None),
+                                                indicator_data_request.get("period", None), model_classes,
+                                                begin_time=indicator_data_request.get("startTime", None),
+                                                end_time=indicator_data_request.get("endTime", None),
+                                                period_tuple=period_tuple, class_name=json.loads(strategys.className))
+
+        if not trading_data:
+            return
+
+        # 创建backtrader大脑实例
+        cerebro = bt.Cerebro()
+
+        # 启用 cheat-on-close 让市价单在当前K线收盘执行
+        cerebro.broker.set_coc(True)  # 允许市价单在当前K线收盘价执行
+
+        # 数据源处理
+        df = pd.DataFrame(trading_data)
+        df['datetime'] = pd.to_datetime(df['datetime'])
+        df.set_index('datetime', inplace=True)
+        data = PandasData(dataname=df)
+
+        # 添加数据源
+        cerebro.adddata(data)
+        # strategys.className 存储的是列表类型
+        for class_name in json.loads(strategys.className):
+            # 加载策略goodsId
+            cerebro.addstrategy(strategy_classes.get(class_name), indicator_params,
+                                goodsId=indicator_data_request.get("goods", None),
+                                begin_time=indicator_data_request.get("startTime", None),
+                                baseLots=goods_data.baseLots)
+
+        Indicators_subType = None
+        # 指标数据
+        if indicator_classes.get(strategys.indicatorsClassName):
+            query = await db.execute(select(DqlIndicators).where(
+                DqlIndicators.className == strategys.indicatorsClassName))
+
+            DqlIndicators_result = query.scalars().first()
+            Indicators_subType = DqlIndicators_result.subType
+            cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),
+                                indicator_params, indicator_name=None, comments=None,
+                                begin_time=indicator_data_request.get("startTime", None))
+
+        # 综合分析器
+        cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')
+        # 添加最大回撤分析器
+        cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
+
+        # 设置初始资金
+        cerebro.broker.set_cash(float(indicator_data_request.get("initialCash", 10000)))
+
+        # mult 合约单位100  leverage 杠杆
+        cerebro.broker.setcommission(
+            commission=indicator_data_request.get("commission", 0),
+            mult=goods_data.profitRatio, leverage=indicator_data_request.get("leverage", 1))
+
+        if indicator_data_request.get("spread", 0):
+            # 设置滑点/点差
+            cerebro.broker.set_slippage_fixed(fixed=indicator_data_request.get("spread", 0) / 100)
+
+        result = cerebro.run(stdstats=True, tradehistory=True)
+        # 获取最大回撤信息
+        drawdown = result[0].analyzers.drawdown.get_analysis()
+
+        # 回测结果
+        trader_return = result[0].get_analysis()
+
+        traderResult = trader_return.get('trader_result')
+        traderReport = trader_return.get('trader_report')
+        floatingPointValues = trader_return.get('floating_point_values')
+        netAssetValues = trader_return.get('net_asset_values')
+        newReportTemplate = result[0].analyzers.comprehensive.get_analysis()
+        try:
+            indicator_result_data = result[1].get_analysis()
+            indicator_data_dict = {
+                "startPoint": indicator_result_data[1],
+                "endPoint": indicator_result_data[2],
+                "buyselldata": indicator_result_data[3] if len(indicator_result_data[3:4]) > 0 else {},
+                "data": indicator_result_data[0],
+                "subType": Indicators_subType
+            }
+        except Exception as e:
+            indicator_data_dict = {}
+
+        traderReport["maxFUR"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
+        traderReport["mdr"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
+        return {"traderResult": traderResult, "traderReport": traderReport,
+                "floatingPointValues": floatingPointValues, "netAssetValues": netAssetValues,
+                "indicatorResult": indicator_data_dict,
+                "newReportTemplate": newReportTemplate}
+
+    except Exception as e:
+        info = traceback.format_exc()
+        log.error("策略结果插入数据库失败：{}".format(info))
+        await db.rollback()  # 如果发生异常，回滚事务
+        await db.close()
+        return None
+
+
+def calculate_consecutive_win_loss(account_list):
+    consecutive_wins = 0
+    consecutive_losses = 0
+    win_count = 0
+    loss_count = 0
+    max_consecutive_wins = 0
+    max_consecutive_losses = 0
+
+    for trade in account_list:
+        if trade["closeTime"]:
+            if trade['pnl'] > 0:
+                win_count += 1
+                consecutive_wins += 1
+                max_consecutive_wins = max(max_consecutive_wins, consecutive_wins)
+                consecutive_losses = 0  # Reset consecutive losses
+            elif trade['pnl'] < 0:
+                loss_count += 1
+                consecutive_losses += 1
+                max_consecutive_losses = max(max_consecutive_losses, consecutive_losses)
+                consecutive_wins = 0  # Reset consecutive wins
+
+    average_consecutive_wins = consecutive_wins / win_count if win_count > 0 else 0
+    average_consecutive_losses = consecutive_losses / loss_count if loss_count > 0 else 0
+
+    return {
+        'averageConsecutiveWins': round(average_consecutive_wins, 2),
+        'averageConsecutiveLosses': round(average_consecutive_losses, 2),
+    }
+
+
+# 计算 yieldRate, winRate, avgProfit
+def calculate_trade_metrics(account_list, initial_cash):
+    total_profit = sum(trade['pnl'] for trade in account_list if trade["closeTime"])
+    total_trades = len(account_list)
+    win_trades = len([trade for trade in account_list if trade['pnl'] > 0 and trade["closeTime"]])
+
+    yield_rate = (total_profit / initial_cash) * 100 if initial_cash else 0
+    win_rate = (win_trades / total_trades) * 100 if total_trades > 0 else 0
+    avg_profit = total_profit / total_trades if total_trades > 0 else 0
+
+    return {
+        'yieldRate': round(yield_rate, 3),
+        'winRate': round(win_rate, 3),
+        'avgProfit': round(avg_profit, 3)
+    }
+
+
+# 计算 plr (盈亏比)
+def calculate_plr(account_list):
+    positive_pnl = [trade['pnl'] for trade in account_list if trade['pnl'] > 0 and trade["closeTime"]]
+    negative_pnl = [trade['pnl'] for trade in account_list if trade['pnl'] < 0 and trade["closeTime"]]
+
+    avg_profit = sum(positive_pnl) / len(positive_pnl) if positive_pnl else 0
+    avg_loss = abs(sum(negative_pnl) / len(negative_pnl)) if negative_pnl else 0
+
+    # 如果 avg_profit 或 avg_loss 为0，则替换为1
+    avg_profit = avg_profit if avg_profit != 0 else 1
+    avg_loss = avg_loss if avg_loss != 0 else 1
+
+    plr = avg_profit / avg_loss
+
+    return round(plr, 3)
+
+
+# 计算最大回撤率 (mdr)
+def calculate_mdr(account_list, initial_cash):
+    max_drawdown = 0
+    peak_value = initial_cash
+    for trade in account_list:
+        if trade["closeTime"]:
+            peak_value = max(peak_value, peak_value + trade['pnl'])
+            drawdown = (peak_value - (initial_cash + trade['pnl'])) / peak_value
+            max_drawdown = max(max_drawdown, drawdown)
+
+    return round(max_drawdown, 3)
+
+
+# 计算最大资金使用率 (maxFUR)
+def calculate_max_fur(account_list):
+    max_fur = 0
+    for trade in account_list:
+        if trade["closeTime"]:
+            # 假设 'size' 表示交易量, openPrice 表示开盘价格, closePrice 表示平仓价格
+            margin_used = abs(trade['size'] * (trade['openPrice'] - trade['price']))
+            max_fur = max(max_fur, margin_used)
+
+    return round(max_fur, 3)
+
+
+def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
+    # 只取orderType为close的订单，按timestamp升序
+    orders = [x for x in data if x["orderType"] == "close"]
+    orders.sort(key=lambda x: x["timestamp"])
+    if not orders:
+        return {}
+
+    total_trades = len(orders)
+    pnls = [o["pnl"] for o in orders]
+    profits = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+
+    # 基本盈亏相关
+    total_net_profit = sum(pnls)
+    total_profit = sum(profits)
+    total_loss = abs(sum(losses))
+    expected_payoff = total_net_profit / total_trades if total_trades else 0
+    largest_profit = max(profits) if profits else 0
+    largest_loss = min(losses) if losses else 0
+    average_profit_trade = sum(profits) / len(profits) if profits else 0
+    average_loss_trade = sum(losses) / len(losses) if losses else 0
+
+    # 胜率、盈利比、盈亏比
+    profit_trades = len(profits)
+    loss_trades = len(losses)
+    profit_factor = total_profit / abs(total_loss) if total_loss else 0
+
+    # 资金曲线、最大回撤、绝对回撤
+    cash_curve = []
+    cash = starting_cash
+    min_cash = starting_cash
+    max_cash = starting_cash
+    max_drawdown = 0
+    absolute_drawdown = 0
+    peak = starting_cash
+
+    for o in orders:
+        cash += o["pnl"]
+        cash_curve.append(cash)
+        if cash > peak:
+            peak = cash
+        drawdown = peak - cash
+        if drawdown > max_drawdown:
+            max_drawdown = drawdown
+        if cash < min_cash:
+            min_cash = cash
+        if starting_cash - cash > absolute_drawdown:
+            absolute_drawdown = starting_cash - cash
+        if cash > max_cash:
+            max_cash = cash
+
+    relative_losses = max_drawdown / peak if peak else 0
+
+    # 连续统计
+    cons_profit, cons_loss = 0, 0
+    max_cons_profit, max_cons_loss = 0, 0
+    max_cons_win, max_cons_loss_num = 0, 0
+    tmp_cons_win, tmp_cons_loss = 0, 0
+    cons_win_list, cons_loss_list = [], []
+    for p in pnls:
+        if p > 0:
+            cons_profit += p
+            cons_loss = 0
+            tmp_cons_win += 1
+            if tmp_cons_loss > 0:
+                cons_loss_list.append(tmp_cons_loss)
+                tmp_cons_loss = 0
+        elif p < 0:
+            cons_loss += p
+            cons_profit = 0
+            tmp_cons_loss += 1
+            if tmp_cons_win > 0:
+                cons_win_list.append(tmp_cons_win)
+                tmp_cons_win = 0
+        else:
+            cons_profit = 0
+            cons_loss = 0
+            if tmp_cons_win > 0:
+                cons_win_list.append(tmp_cons_win)
+                tmp_cons_win = 0
+            if tmp_cons_loss > 0:
+                cons_loss_list.append(tmp_cons_loss)
+                tmp_cons_loss = 0
+        if cons_profit > max_cons_profit:
+            max_cons_profit = cons_profit
+        if cons_loss < max_cons_loss:
+            max_cons_loss = cons_loss
+        if tmp_cons_win > max_cons_win:
+            max_cons_win = tmp_cons_win
+        if tmp_cons_loss > max_cons_loss_num:
+            max_cons_loss_num = tmp_cons_loss
+    # 补最后一段
+    if tmp_cons_win > 0:
+        cons_win_list.append(tmp_cons_win)
+    if tmp_cons_loss > 0:
+        cons_loss_list.append(tmp_cons_loss)
+    average_consecutive_wins = sum(cons_win_list) / len(cons_win_list) if cons_win_list else 0
+    average_consecutive_losses = sum(cons_loss_list) / len(cons_loss_list) if cons_loss_list else 0
+
+    # 多空单
+    short_positions = [o for o in orders if o["size"] < 0]
+    long_positions = [o for o in orders if o["size"] > 0]
+    short_positions_num = len(short_positions)
+    long_positions_num = len(long_positions)
+    short_positions_ratio = short_positions_num / total_trades if total_trades else 0
+    long_positions_ratio = long_positions_num / total_trades if total_trades else 0
+
+    # 获利单百分比、亏损单百分比
+    profit_trades_ratio = profit_trades / total_trades if total_trades else 0
+    loss_trades_ratio = loss_trades / total_trades if total_trades else 0
+
+    # 是否爆仓
+    is_bursted = any(c <= 0 for c in cash_curve)
+
+    trade_metrics = calculate_trade_metrics(data, starting_cash)
+
+    cash_curve = []
+    cash = starting_cash
+    for o in orders:
+        cash += o["pnl"]
+        cash_curve.append(cash)
+
+    result = {
+        "startingCash": starting_cash,
+        "FreeMargin": round(starting_cash + total_net_profit, 2),
+        "totalProfit": round(total_profit, 2),
+        "totalNetProfit": round(total_net_profit, 2),
+        "totalLoss": -round(total_loss, 2),
+        "expectedPayoff": round(expected_payoff, 2),
+        "absoluteDrawdown": round(absolute_drawdown, 2),
+        "maximalDrawdown": round(max_drawdown, 2),
+        "relativeLosses": round(relative_losses, 4),
+        "totalTrades": total_trades,
+        "shortPositions": short_positions_num,
+        "longPositions": long_positions_num,
+        "profitTrades": profit_trades,
+        "lossTrades": loss_trades,
+        "largestProfit": largest_profit,
+        "largestLoss": largest_loss,
+        "averageProfitTrade": round(average_profit_trade, 2),
+        "averageLossTrade": average_loss_trade,
+        "maximalConsecutiveProfit": max_cons_profit,
+        "maximalConsecutiveLoss": max_cons_loss,
+        "maximumConsecutiveWins": max_cons_win,
+        "maximumConsecutiveLosses": max_cons_loss_num,
+        "averageConsecutiveWins": average_consecutive_wins,
+        "averageConsecutiveLosses": average_consecutive_losses,
+        "ProfitFactor": round(profit_factor, 2),
+        "shortPositionsRatio": round(short_positions_ratio, 2),
+        "longPositionsRatio": round(long_positions_ratio, 2),
+        "profitTradesRatio": round(profit_trades_ratio, 2),
+        "lossTradesRatio": round(loss_trades_ratio, 2),
+        "yieldRate": trade_metrics["yieldRate"],
+        "winRate": trade_metrics["winRate"],
+        "plr": calculate_plr(data),
+        "avgProfit": trade_metrics["avgProfit"],
+        "mdr": calculate_mdr(data, starting_cash),
+        "isBursted": is_bursted,
+        "maxFUR": calculate_max_fur(data),
+        "cashCurve": cash_curve
+    }
+    return result

@@ -1,7 +1,6 @@
 import calendar
 import datetime
 import json
-import time
 import traceback
 import uuid
 from typing import Optional
@@ -12,12 +11,12 @@ from starlette.responses import Response
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult
+from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult, DqlOrder
 from schemas.base import ErrorModel
-from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData
+from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData, DqlIndicatorsModel
 from utils.common import select_goods_common, RandomIDGenerator, select_kline_data, Trader, \
     GoodTrader, PandasData, cache, get_indicator_data, model_classes, \
-    get_entities_list, generate_random_string
+    get_entities_list, generate_random_string, statistics_from_orders
 from utils.prod_backtrader import MyStrategy
 from utils.timezone import timezone
 import pandas as pd
@@ -45,6 +44,74 @@ async def test_user(page_no: Optional[int] = 1, page_size: Optional[int] = 100):
                       "platform": data.platform} for data in result]
 
         return await response_base.success(data=data_list)
+
+
+@router.get("/selectKlineOrders", name="获取K线历史下单订单信息")
+async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: str, strategyUid: str):
+    """
+    :param goods: 交易品种 FPG-AUDUSD
+    :param period: 周期
+    :param beginTime: 开始时间
+    :param endTime: 结束时间
+    :param strategyUid: 策略uid
+    """
+
+    async with async_db_session() as db:
+        order_strategy = (await db.execute(select(DqlOrder).where(DqlOrder.strategyUid == strategyUid))).scalars().first()
+        if not order_strategy:
+            return await response_base.fail(msg="该策略不存在实时回测报告", data=[])
+
+        stmt = (
+            select(DqlOrder)
+            .where(
+                and_(
+                    DqlOrder.tradingGoods == goods,
+                    DqlOrder.period == period,
+                    DqlOrder.timestamp.between(beginTime, endTime),
+                    DqlOrder.strategyUid == strategyUid,
+                )
+            )
+            .order_by(DqlOrder.timestamp.asc())
+        )
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+        if not rows:
+            return await response_base.fail(msg="时间范围内不存在实时回测报告", data=[])
+
+        strategy = (await db.execute(select(DqlStrategy).where(DqlStrategy.uid == strategyUid))).scalars().first()
+
+        indicatorData = (await db.execute(select(DqlIndicators).where(
+            DqlIndicators.className == strategy.indicatorsClassName))).scalars().first()
+        if indicatorData:
+            indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
+        else:
+            indicator_dict = None
+
+        digits = (await db.execute(
+            select(DplGoodsTest.digits).where(DplGoodsTest.goods == goods)
+        )).scalars().first()
+
+    # 需要格式化的所有时间字段
+    time_fields = ['createTime', 'openTime', 'closeTime', 'timestamp']
+    data = []
+    for row in rows:
+        d = row.__dict__.copy()
+        d.pop('_sa_instance_state', None)
+        for field in time_fields:
+            if field in d and isinstance(d[field], datetime.datetime):
+                d[field] = d[field].strftime('%Y-%m-%d %H:%M:%S')
+        data.append(d)
+
+    trader_report = statistics_from_orders(data)
+    result_data = [{"goods": goods, "period": period, "startTime": beginTime, "endTime": endTime,
+                    "name": strategy.name, "initialCash": 100000, "digits": digits, "parameter": None,
+                    "paramsStrName": None, "account": None, "userName": None, "currency": "USD", "spread": 0,
+                    "strategyUid": strategyUid,"testerUids": strategyUid, "traderReportType": 3,
+                    "netAssetValues": trader_report["cashCurve"], "parameterList": json.loads(strategy.parameters),
+                    "traderResult": data, "traderReport": trader_report,
+                    "indicatorData": [indicator_dict] if indicator_dict else []}]
+
+    return await response_base.success(data=result_data)
 
 
 @router.get("/dynamicKline", name="动态0号K线")

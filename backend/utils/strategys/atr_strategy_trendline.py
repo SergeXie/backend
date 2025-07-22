@@ -113,20 +113,32 @@ class MyStrategy(CommonStrategy):
             if self.prev_trend == 0:  # 跳过第一条
                 self.prev_trend = trend
             else:
+                if not self.position and self.prev_trend == trend:
+                    if self.trade_xinhao == 1 and self.atr_stoploss.lines.target_up[0] != \
+                            self.atr_stoploss.lines.target_up[-1]:
+                        self.private_modify(limit_price=self.atr_stoploss.lines.target_up[0],size=10)
+                    elif self.trade_xinhao == -1 and self.atr_stoploss.lines.target_dn[0] != \
+                            self.atr_stoploss.lines.target_dn[-1]:
+                        self.private_modify(limit_price=self.atr_stoploss.lines.target_dn[0],size=10)
+
                 if self.prev_trend != trend:  # 信号反转
                     if not self.position:  # 不持仓
                         if trend == 1:
                             self.trade_xinhao = 1
+                            self.private_buy_limit(limit_price=self.atr_stoploss.lines.target_up[0])
                         elif trend == -1:
                             self.trade_xinhao = -1
+                            self.private_sell_limit(limit_price=self.atr_stoploss.lines.target_dn[0])
                     else:  # 持仓
                         if self.atr_stoploss.lines.trend_change[0] != self.atr_stoploss.lines.trend_change[-1]:
                             if trend == -1 and self.position.size > 0:
                                 self.order = self.close(size=self.baseLots)  # 平仓，以下一日开盘价卖出
                                 self.trade_xinhao = -1
+                                self.private_sell_limit(limit_price=self.atr_stoploss.lines.target_dn[0])
                             elif trend == 1 and self.position.size < 0:
                                 self.order = self.close(size=self.baseLots)  # 平仓，以下一日开盘价卖出
                                 self.trade_xinhao = 1
+                                self.private_buy_limit(limit_price=self.atr_stoploss.lines.target_up[0])
                     self.prev_trend = trend
 
             if not self.position:
@@ -136,14 +148,6 @@ class MyStrategy(CommonStrategy):
                 elif self.trade_xinhao == -1 and self.data.high >= self.atr_stoploss.lines.target_dn[0]:
                     self.order = self.sell(size=self.baseLots)
                     self.trade_xinhao = 0
-
-            if self.position:
-                if trend == -1 and self.data.low <= self.atr_stoploss.lines.target_up[0]:
-                    self.order = self.close(size=self.baseLots)
-                    print('close', self.datas[0].datetime.datetime())
-                elif trend == 1 and self.data.high >= self.atr_stoploss.lines.target_dn[0]:
-                    print('close', self.datas[0].datetime.datetime())
-                    self.order = self.close(size=self.baseLots)
 
 
             # 检查是否到达数据末尾且仍持有仓位

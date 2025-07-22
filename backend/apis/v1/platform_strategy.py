@@ -8,12 +8,10 @@ import traceback
 import shutil
 from collections import defaultdict, namedtuple
 import chardet
-import backtrader as bt
-import pandas as pd
 from datetime import datetime
 from bs4 import BeautifulSoup
 from fastapi import APIRouter, Query, HTTPException, UploadFile, File, BackgroundTasks
-from sqlalchemy import select, desc, update, func
+from sqlalchemy import select, desc, update, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 from starlette.responses import Response
@@ -21,16 +19,15 @@ from apis.v1.platform import model_classes
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DqlIndicators, TradingStrategy, DplGoodsTest
-from schemas.platorm_strategr_schemas import TestResultRequest
-from utils.common import fetch_trading_data, PandasData, get_entities_list, generate_random_string, \
-    generate_lazy_pinyin, indicator_classes, \
-    to_float, format_datetime, select_goods_common, select_kline_data, fetch_indicators
-from utils.public_strategy import ComprehensiveAnalyzer
+from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest, DqlOrder
+from schemas.platorm_strategr_schemas import TestResultRequest, RealOrderFloatingProfitModel
+from utils.common import get_entities_list, generate_random_string, \
+    generate_lazy_pinyin, \
+    to_float, format_datetime, select_goods_common, select_kline_data, fetch_indicators, \
+    run_backtest
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
-from utils.trader_report_calculate import extract_transactions, generate_trader_report, normalize_to_float, \
-    data_filters, process_manual_upload, process_auto_upload
+from utils.trader_report_calculate import  normalize_to_float, process_manual_upload, process_auto_upload
 from dateutil import parser
 
 router = APIRouter()
@@ -123,129 +120,6 @@ async def create_strategy_record(db: AsyncSession, indicator_data_request, strat
     except Exception as e:
         info = traceback.format_exc()
         log.error("策略存储插入数据库失败：{}".format(info))
-        await db.rollback()  # 如果发生异常，回滚事务
-        await db.close()
-        return None
-
-
-async def run_backtest(db: AsyncSession, indicator_data_request, strategys, tester_uid, goods_data, task_name=None):
-    """
-
-    :param db: 会话
-    :param indicator_data_request: 请求参数
-    :param strategys: 策略对象
-    :param tester_uid: 策略接口uid
-    :param task_name: 任务名称
-    :return:
-    """
-    try:
-        # 根据period参数的取值进行条件判断
-        period_dict = {"period": indicator_data_request.get("period", None),
-                       "tradingGoods": indicator_data_request.get("goods", None),
-                       "beginTime": indicator_data_request.get("startTime", None),
-                       "endTime": indicator_data_request.get("endTime", None)}
-
-        period_tuple = tuple(period_dict.items())
-
-        indicator_params = indicator_data_request.get("parameter", {})
-        # 在参数中增加k线的品种和周期
-        indicator_params['Kline_period'] = indicator_data_request.get("period", None)
-        indicator_params['Kline_goods'] = indicator_data_request.get("goods", None)
-
-        trading_data = await fetch_trading_data(db, indicator_data_request.get("goods", None),
-                                                indicator_data_request.get("period", None), model_classes,
-                                                begin_time=indicator_data_request.get("startTime", None),
-                                                end_time=indicator_data_request.get("endTime", None),
-                                                period_tuple=period_tuple, class_name=json.loads(strategys.className))
-
-        if not trading_data:
-            return
-
-        # 创建backtrader大脑实例
-        cerebro = bt.Cerebro()
-
-        # 启用 cheat-on-close 让市价单在当前K线收盘执行
-        cerebro.broker.set_coc(True)  # 允许市价单在当前K线收盘价执行
-
-        # 数据源处理
-        df = pd.DataFrame(trading_data)
-        df['datetime'] = pd.to_datetime(df['datetime'])
-        df.set_index('datetime', inplace=True)
-        data = PandasData(dataname=df)
-
-        # 添加数据源
-        cerebro.adddata(data)
-        # strategys.className 存储的是列表类型
-        for class_name in json.loads(strategys.className):
-            # 加载策略goodsId
-            cerebro.addstrategy(strategy_classes.get(class_name), indicator_params,
-                                goodsId=indicator_data_request.get("goods", None),
-                                begin_time=indicator_data_request.get("startTime", None),
-                                baseLots=goods_data.baseLots)
-
-        Indicators_subType = None
-        # 指标数据
-        if indicator_classes.get(strategys.indicatorsClassName):
-            query = await db.execute(select(DqlIndicators).where(
-                DqlIndicators.className == strategys.indicatorsClassName))
-
-            DqlIndicators_result = query.scalars().first()
-            Indicators_subType = DqlIndicators_result.subType
-            cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),
-                                indicator_params, indicator_name=None, comments=None,
-                                begin_time=indicator_data_request.get("startTime", None))
-
-        # 综合分析器
-        cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')
-        # 添加最大回撤分析器
-        cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
-
-        # 设置初始资金
-        cerebro.broker.set_cash(float(indicator_data_request.get("initialCash", 10000)))
-
-        # mult 合约单位100  leverage 杠杆
-        cerebro.broker.setcommission(
-            commission=indicator_data_request.get("commission", 0),
-            mult=goods_data.profitRatio, leverage=indicator_data_request.get("leverage", 1))
-
-        if indicator_data_request.get("spread", 0):
-            # 设置滑点/点差
-            cerebro.broker.set_slippage_fixed(fixed=indicator_data_request.get("spread", 0) / 100)
-
-        result = cerebro.run(stdstats=True, tradehistory=True)
-        # 获取最大回撤信息
-        drawdown = result[0].analyzers.drawdown.get_analysis()
-
-        # 回测结果
-        trader_return = result[0].get_analysis()
-
-        traderResult = trader_return.get('trader_result')
-        traderReport = trader_return.get('trader_report')
-        floatingPointValues = trader_return.get('floating_point_values')
-        netAssetValues = trader_return.get('net_asset_values')
-        newReportTemplate = result[0].analyzers.comprehensive.get_analysis()
-        try:
-            indicator_result_data = result[1].get_analysis()
-            indicator_data_dict = {
-                "startPoint": indicator_result_data[1],
-                "endPoint": indicator_result_data[2],
-                "buyselldata": indicator_result_data[3] if len(indicator_result_data[3:4]) > 0 else {},
-                "data": indicator_result_data[0],
-                "subType": Indicators_subType
-            }
-        except Exception as e:
-            indicator_data_dict = {}
-
-        traderReport["maxFUR"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
-        traderReport["mdr"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
-        return {"traderResult": traderResult, "traderReport": traderReport,
-                "floatingPointValues": floatingPointValues, "netAssetValues": netAssetValues,
-                "indicatorResult": indicator_data_dict,
-                "newReportTemplate": newReportTemplate}
-
-    except Exception as e:
-        info = traceback.format_exc()
-        log.error("策略结果插入数据库失败：{}".format(info))
         await db.rollback()  # 如果发生异常，回滚事务
         await db.close()
         return None
@@ -488,10 +362,7 @@ async def test_result_list(params: TestResultRequest):
         )
 
         if params.trader_report_type:
-            if params.trader_report_type == 3:  # 系统
-                query = query.where(DqlStrategyTestResult.traderReportType == None)
-            else:
-                query = query.where(DqlStrategyTestResult.traderReportType == params.trader_report_type)
+            query = query.where(DqlStrategyTestResult.traderReportType == params.trader_report_type)
         if params.goods != '%':
             query = query.where(DqlStrategyTestResult.goodsId.like(params.goods))
 
@@ -601,13 +472,19 @@ async def fetch_tester_result(request: Request):
             dql_strategy_test_result_all = query.scalars().all()
 
             for data in dql_strategy_test_result_all:
+                # 查询品种表各个品种的精度
+                goods_digits = await db.execute(select(DplGoodsTest.digits).where(
+                    DplGoodsTest.goods == data.goodsId
+                ))
+                result_goods_digits = goods_digits.scalars().first()
+
                 trader_result = json.loads(data.traderResult)
                 data_dict = dict()
                 data_dict["testerUids"] = data.uid
                 data_dict["name"] = data.title
                 data_dict["goods"] = data.goodsId
+                data_dict["digits"] = result_goods_digits
                 data_dict["period"] = data.period
-                data_dict["leverage"] = 0
                 data_dict["initialCash"] = 0
                 data_dict["startTime"] = data.startTime.strftime('%Y-%m-%d %H:%M:%S')
                 data_dict["endTime"] = data.endTime.strftime('%Y-%m-%d %H:%M:%S')
@@ -631,6 +508,7 @@ async def fetch_tester_result(request: Request):
                 data_dict["traderReportType"] = data.traderReportType
 
                 result_data.append(data_dict)
+
 
             return await response_base.success(data=result_data)
 
@@ -756,6 +634,119 @@ async def fetch_floating_profit(request: Request):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 
+@router.post("/realOrderFloatingProfit", name="获取回测时间范围内实时策略历史订单浮动盈亏")
+async def real_order_floating_profit(order_object: RealOrderFloatingProfitModel):
+    async with async_db_session() as db:
+        orders = (
+            select(DqlOrder)
+            .where(
+                and_(
+                    DqlOrder.tradingGoods == order_object.goods,
+                    DqlOrder.period == order_object.period,
+                    DqlOrder.timestamp.between(order_object.beginTime, order_object.endTime),
+                    DqlOrder.strategyUid == order_object.strategyUid,
+                )
+            )
+            .order_by(DqlOrder.timestamp.asc())
+        )
+        result = await db.execute(orders)
+        rows = result.scalars().all()
+
+        # 需要格式化的所有时间字段
+        time_fields = ['createTime', 'openTime', 'closeTime', 'timestamp']
+        order_data = []
+        for row in rows:
+            d = row.__dict__.copy()
+            d.pop('_sa_instance_state', None)
+            for field in time_fields:
+                if field in d and isinstance(d[field], datetime):
+                    d[field] = d[field].strftime('%Y-%m-%d %H:%M:%S')
+            order_data.append(d)
+
+        # 拿起始时间-结束时间获取K线
+        select_model_class, goods_ = await select_goods_common(db, order_object.goods, model_classes)
+        if not select_model_class:
+            return await response_base.fail(msg="交易品种:{}未查询到".format(order_object.goods), data=[])
+
+        db_select_kline = select(select_model_class).where(
+            select_model_class.tradingGoods == goods_.trading_goods,
+            select_model_class.platform == goods_.platform,
+            select_model_class.type == order_object.period,
+            select_model_class.tradeDateTime.between(order_object.beginTime, order_object.endTime))
+
+        kline_datas = await select_kline_data(db, db_select_kline)
+
+        # === 初始化变量 ===
+        floating_pnl_list = []  # 存储浮动盈亏数据
+
+        # 查找closeTime等于null的（持仓单子）
+        new_trader_orders = [x for x in order_data if x.get("closeTime", None)]
+        # 使用集合跟踪已出现的 tradeid
+        seen_tradeids = set()
+        # 生成新列表，仅包含 closeTime 为空的记录，且 tradeid 不重复
+        unique_open_trades = []
+        for trade_id in new_trader_orders:
+            seen_tradeids.add(trade_id["tradeid"])
+
+        for trade in order_data:
+            if trade.get("closeTime", None):
+                unique_open_trades.append(trade)
+            elif not trade.get("closeTime", None) and trade.get("tradeid", None) not in seen_tradeids:
+                unique_open_trades.append(trade)
+
+        starting_cash = normalize_to_float(order_object.initialCash)
+        # === 遍历 K 线计算浮动盈亏 ===
+        for kline in kline_datas:
+            current_price = kline["close"]  # K 线收盘价
+            current_date = kline["timestamp"]  # K 线时间
+            net_value = starting_cash  # 每根 K 线初始净值
+            profit = 0  # 初始化浮动盈亏
+            # 遍历所有交易订单，按时间顺序执行
+            for trade in unique_open_trades:
+                order_type = trade["orderType"]
+                close_time = trade.get("closeTime", None)
+                open_time = trade.get("openTime", None)
+                if open_time:
+                    open_time = open_time
+                else:
+                    open_time = trade.get("timestamp", None)
+                order_size = trade.get("size", None)
+                open_price = trade.get("openPrice", None)
+
+                if close_time:
+                    # 计算浮动盈亏（持仓未平仓）
+                    if open_time < current_date and close_time > current_date:
+                        position = 1 if order_type == "buy" else -1
+                        net_value = net_value + (
+                                    current_price - open_price) * position * order_size * goods_.profitRatio
+
+                    # 计算已实现盈亏（已平仓）
+                    if close_time and close_time <= current_date:
+                        net_value += trade["pnl"]
+
+                if open_time:
+                    if open_time < current_date and not close_time:
+                        position = 1 if order_type == "buy" else -1
+                        net_value = net_value + (
+                                    current_price - open_price) * position * order_size * goods_.profitRatio
+
+            # 存储当前时间的浮动盈亏
+            floating_pnl_list.append({
+                "timestamp": current_date,
+                "pnl": round(profit, 2),
+                "netValue": round(net_value, 2)
+            })
+
+    result_list = list()
+    # === 返回最终计算结果 ===
+    result_list.append({
+        "strategyUid": order_object.strategyUid,
+        "floatingPnl": floating_pnl_list
+    })
+
+    return await response_base.success(data=result_list)
+
+
 @router.post("/syncBatchTest", name="策略批量回测(同步)")
 async def indicator_sync_batch_test(request: Request):
     strategy_data_requests = await request.json()
@@ -792,9 +783,14 @@ async def indicator_sync_batch_test(request: Request):
             strategy_data_requests["indicatorResult"] = backtest_result["indicatorResult"]
             strategy_data_requests["newReportTemplate"] = backtest_result["newReportTemplate"]
 
+            # 对交易订单 traderResult还在持仓的，进行盈利结算 TODO 暂时保留
+            # traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("endTime"), traderResult, traderReport)
+
             try:
+                # TODO 保存回测所有信息保存策略结果表中
                 tester_uid = await create_strategy_record(db, strategy_data_requests, strategy)
 
+                # TODO 更新
                 await db.execute(
                     update(DqlStrategyTestResult).where(DqlStrategyTestResult.uid == tester_uid).values(
                         traderResult=json.dumps({"traderResult": traderResult,
@@ -891,29 +887,32 @@ async def strategy_delete(uid: str):
         return await response_base.success(msg="策略删除成功")
 
 
-@router.get("/deleteTestResult", name="策略结果删除")
-async def strategy_delete(uid: str):
+@router.post("/deleteTestResult", name="策略结果删除")
+async def strategy_delete(request: Request):
     """
-    :param uid:  策略uid
+    :param uid:  List of strategy uids
     :return:
     """
+    data = await request.json()
 
+    uids = data["uids"]
     async with async_db_session() as db:
         # 查询策略表
-        strategy_result_query = await db.execute(select(
-            DqlStrategyTestResult).where(DqlStrategyTestResult.uid == uid,
-                                         DqlStrategyTestResult.is_delete == 0))
+        for uid_ in uids:
+            # Query the strategy table for each uid
+            strategy_result_query = await db.execute(select(
+                DqlStrategyTestResult).where(DqlStrategyTestResult.uid == uid_,
+                                             DqlStrategyTestResult.is_delete == 0))
 
-        result = strategy_result_query.scalars().first()
+            result = strategy_result_query.scalars().first()
 
-        if result is None:
-            return await response_base.fail(msg="策略结果不存在")
+            if result is None:
+                return await response_base.fail(msg=f"策略结果不存在: {uid_}")
 
-        result.is_delete = 1
-        await db.commit()
+            result.is_delete = 1
+            await db.commit()
 
         return await response_base.success(msg="策略删除成功")
-
 
 @router.post("/saveTestResult", name="策略结果入库")
 async def save_test_result(request: Request):
@@ -1145,7 +1144,7 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
 
                 # 仅获取基础信息并快速响应
                 background_tasks.add_task(process_manual_upload,soup, data_json, strategy,
-                                          startTime, endTime, uid, goods, period, db)
+                                          startTime, endTime, uid, goods, period, db, upload_type)
 
             else:
                 # 自动解析HTML部分

@@ -1,4 +1,5 @@
 import datetime
+import traceback
 from collections import defaultdict
 import json
 import pymysql
@@ -16,9 +17,8 @@ DB_CONFIG = {
     'password': 'u12VxHdAT38UEa67Kc',
     'database': 'game',
     'port': 3306,
-    'charset': 'utf8mb4'
+    'charset': 'utf8mb4',
 }
-
 
 # SQL 查询语句
 base_query = """
@@ -40,6 +40,7 @@ base_query = """
         t3.heroType,   -- lz_hero 表中的 heroType 字段
         t4.remark,     -- lz_hero_details 表中的 remark 字段
         t4.position,   -- lz_hero_details 表中的 position 字段
+        t4.proficiency,
         t2.peakHeroWinRate,
         t2.peakHeroShowRate,
         t2.peakHeroBanRate,
@@ -49,7 +50,9 @@ base_query = """
         t2.kzInfo,
         t2.bkzInfo,
         t2.tfInfo,
-        t2.dfInfo
+        t2.dfInfo,
+        t2.appleHonor,
+        t2.androidHonor,
     FROM 
         lz_hero_rank t1
     INNER JOIN 
@@ -65,15 +68,15 @@ base_query = """
 """
 
 
-async def get_hero_detail(heroId, remark=None, position=None):
+async def get_hero_detail(heroId, remark=None, position=None, proficiency=None):
     connection = pymysql.connect(**DB_CONFIG)
     try:
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
             # 构建 SQL 语句
             query = f"""
-                        UPDATE lz_hero_details SET remark = %s, position = %s WHERE heroId = %s;
+                        UPDATE lz_hero_details SET remark = %s, position = %s, proficiency = %s WHERE heroId = %s;
                     """
-            cursor.execute(query, (remark, position, heroId))
+            cursor.execute(query, (remark, position, proficiency, heroId))
             # 提交事务
             connection.commit()
             return True
@@ -111,6 +114,7 @@ def get_hero_data():
                     t1.createTime,
                     t4.remark,
                     t4.position,
+                    t4.proficiency,
                     t3.heroType,
                     t2.peakHeroWinRate,
                     t2.peakHeroShowRate,
@@ -121,7 +125,9 @@ def get_hero_data():
                     t2.kzInfo,
                     t2.bkzInfo,
                     t2.tfInfo,
-                    t2.dfInfo
+                    t2.dfInfo,
+                    t2.appleHonor,
+                    t2.androidHonor
                 FROM
                     lz_hero_rank t1
                 INNER JOIN (
@@ -191,13 +197,12 @@ def get_all_hero_equips():
     finally:
         connection.close()
 
-def get_all_hero_equips2():
 
+def get_all_hero_equips2():
     return []
 
 
 def get_all_hero_runes2():
-
     return []
 
 
@@ -340,6 +345,10 @@ async def read_hero_data(request: Request):
             hero['equips'] = equip_dict[hero['heroId']]
             hero['runes'] = rune_dict[hero['heroId']]
 
+            # json.loads
+            hero["appleHonor"] = json.loads(hero["appleHonor"]) if hero["appleHonor"] else hero["appleHonor"]
+            hero["androidHonor"] = json.loads(hero["androidHonor"]) if hero["androidHonor"] else hero["androidHonor"]
+
             if hero.get("kzInfo"):
                 hero["kzInfo"] = json.loads(hero.get("kzInfo", []))
                 hero["bkzInfo"] = json.loads(hero.get("bkzInfo", []))
@@ -473,7 +482,6 @@ async def read_hero_data(request: Request):
 
 @router.post("/heroDetailOperate", name="添加修改英雄详情")
 async def hero_detail_operate(request: Request):
-
     """
     heroId：英雄ID
     remark: 备注
@@ -485,7 +493,9 @@ async def hero_detail_operate(request: Request):
 
     # 1 根据传递的heroId进行数据库查询该条字段, 如果存在！则根据请求的参数进行插入数据库
     result = await get_hero_detail(data.get("heroId", None),
-                                   data.get("remark", None), data.get("position", None))
+                                   data.get("remark", None),
+                                   data.get("position", None),
+                                   data.get("proficiency", None))
     # 响应
     if result:
         return await response_base.success()
@@ -514,7 +524,8 @@ async def abroad_hero_list():
                     t1.dfInfoCombinationValue,
                     t1.createTime,
                     t4.remark,
-                    t4.position
+                    t4.position,
+                    t4.proficiency
                 FROM 
                     lz_hero_abroad t1
                 INNER JOIN 
@@ -540,6 +551,7 @@ async def abroad_hero_list():
                     "dfInfoCombinationValue": x.get("dfInfoCombinationValue", 0),
                     "remark": x.get("remark"),  # 从 t4 表获取的字段
                     "position": x.get("position"),  # 从 t4 表获取的字段
+                    "proficiency": x.get("proficiency"),  # 从 t4 表获取的字段
                     "updatetime": x["createTime"].strftime('%Y-%m-%d %H:%M:%S')
                 }
                 for x in result
@@ -549,6 +561,181 @@ async def abroad_hero_list():
 
     finally:
         connection.close()
+
+
+@router.get("/heroRankings", name="英雄荣誉排行榜")
+async def hero_rankings(heroId: str, osType: str, areaId: str):
+    try:
+        connection = pymysql.connect(**DB_CONFIG)
+
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            # 修正 SQL 语句
+            base_query = """
+                SELECT 
+                    t1.*, 
+                    t2.userName, 
+                    t2.avater, 
+                    t2.roleName, 
+                    t2.roleJobName
+                FROM 
+                    lz_player_rank_log t1
+                LEFT JOIN 
+                    lz_player t2 ON t1.userId = t2.userId
+                WHERE 
+                    t1.heroId = %s AND t1.os = %s and t1.areaId= %s
+                ORDER BY 
+                    t1.id DESC LIMIT 100;
+            """
+
+            # 执行 SQL 语句
+            cursor.execute(base_query, (heroId, osType, areaId))
+
+            # 获取查询结果
+            results = cursor.fetchall()
+
+            # 处理查询结果
+            result_list = []
+            user_ids = []
+            for row in results:
+                # print(row)
+                data_dict = {}
+                data_dict["id"] = row["id"]
+                data_dict["userId"] = row["userId"]
+                if int(row["userId"]) > 0:
+                    user_ids.append(data_dict["userId"])
+                data_dict["heroId"] = row["heroId"]
+                if int(areaId) == 1:  # 全国
+                    data_dict["power"] = row["power"]
+                else:  # 区域
+                    data_dict["power"] = row["power"]
+                data_dict["areaId"] = row["areaId"]
+                data_dict["os"] = row["os"]
+                data_dict["userName"] = row["userName"]
+                data_dict["avater"] = row["avater"]
+                data_dict["roleName"] = row["roleName"]
+                data_dict["roleJobName"] = row["roleJobName"]
+                result_list.append(data_dict)
+
+            user_hero_data = {}
+            if user_ids:
+                users_base_query = f"""
+                    SELECT
+                        t2.cname,
+                        t2.icon,
+                        t1.*
+                    FROM
+                        lz_player_rank t1
+                    LEFT JOIN
+                        lz_hero t2 ON t1.heroId = t2.id
+                    LEFT JOIN
+                        lz_player t3 ON t1.userId = t3.userId
+                    WHERE t1.userId IN ({', '.join(map(str, user_ids))})
+                    ORDER BY
+                        t1.isInNationalTop DESC,
+                        t1.isInHistoryNationalTop DESC,
+                        t1.isInRegionalTop DESC,
+                        t1.isInHistoryRegionalTop DESC,
+                        t1.nationalPower DESC,
+                        t1.regionalPower DESC,
+                        t1.nationalHistoryPower DESC,
+                        t1.regionalHistoryPower DESC;
+                """
+
+                # 执行 SQL 语句
+                cursor.execute(users_base_query)
+
+                # 获取查询结果
+                users_results = cursor.fetchall()
+
+                for data in users_results:
+                    if (data["isInHistoryNationalTop"] <= 0 and
+                            data["isInHistoryRegionalTop"] <= 0 and
+                            data["isInNationalTop"] <= 0 and
+                            data["isInRegionalTop"] <= 0):
+                        continue
+
+                    user_id = data["userId"]
+                    data["lastNationalTopTime"] = data["lastNationalTopTime"].strftime('%Y-%m-%d %H:%M:%S')
+                    data["lastRegionalTopTime"] = data["lastRegionalTopTime"].strftime('%Y-%m-%d %H:%M:%S')
+                    data["lastHistoryNationalTopTime"] = data["lastHistoryNationalTopTime"].strftime(
+                        '%Y-%m-%d %H:%M:%S')
+                    data["lastHistoryRegionalTopTime"] = data["lastHistoryRegionalTopTime"].strftime(
+                        '%Y-%m-%d %H:%M:%S')
+                    data["updateTime"] = data["updateTime"].strftime('%Y-%m-%d %H:%M:%S')
+                    data["createTime"] = data["createTime"].strftime('%Y-%m-%d %H:%M:%S')
+                    user_hero_data_list = []
+                    if user_id in user_hero_data:
+                        user_hero_data_list = user_hero_data[user_id]
+                    else:
+                        user_hero_data[user_id] = user_hero_data_list
+
+                    if len(user_hero_data_list) < 10:
+                        user_hero_data_list.append(data)
+
+            data_result = {"code": 200, "msg": "Success",
+                           "data": result_list, "userHeroData": user_hero_data}
+
+            return data_result
+
+    except Exception as e:
+        info = traceback.format_exc()
+        print("error:{}".format(info))
+
+
+@router.get("/rankingStatistics", name="玩家上榜英雄统计")
+async def ranking_statistics(userId: str, osType: str, areaId: int):
+    connection = pymysql.connect(**DB_CONFIG)
+
+    with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+        # 查询所有排行统计
+        base_query = """
+            SELECT
+                t2.cname,
+                t2.icon,
+                t1.*
+            FROM
+                lz_player_rank t1
+            LEFT JOIN
+                lz_hero t2 ON t1.heroId = t2.id
+            LEFT JOIN
+                lz_player t3 ON t1.userId = t3.userId
+            WHERE
+                t1.userId = %s
+            ORDER BY
+                t1.isInNationalTop DESC,
+                t1.isInHistoryNationalTop DESC,
+                t1.isInRegionalTop DESC,
+                t1.isInHistoryRegionalTop DESC,
+                t1.nationalPower DESC,
+                t1.regionalPower DESC,
+                t1.nationalHistoryPower DESC,
+                t1.regionalHistoryPower DESC;
+        """
+        cursor.execute(base_query, (userId))
+
+        # 获取所有数据
+        results = cursor.fetchall()
+
+        result_list = []
+        # 输出查询结果
+        for row in results:
+            # Check if any of the power values are less than or equal to 0
+            if (row["isInHistoryNationalTop"] <= 0 and
+                    row["isInHistoryRegionalTop"] <= 0 and
+                    row["isInNationalTop"] <= 0 and
+                    row["isInRegionalTop"] <= 0):
+                continue
+
+            row["lastNationalTopTime"] = row["lastNationalTopTime"].strftime('%Y-%m-%d %H:%M:%S')
+            row["lastRegionalTopTime"] = row["lastRegionalTopTime"].strftime('%Y-%m-%d %H:%M:%S')
+            row["lastHistoryNationalTopTime"] = row["lastHistoryNationalTopTime"].strftime('%Y-%m-%d %H:%M:%S')
+            row["lastHistoryRegionalTopTime"] = row["lastHistoryRegionalTopTime"].strftime('%Y-%m-%d %H:%M:%S')
+            row["updateTime"] = row["updateTime"].strftime('%Y-%m-%d %H:%M:%S')
+            row["createTime"] = row["createTime"].strftime('%Y-%m-%d %H:%M:%S')
+            result_list.append(row)
+
+        return await response_base.success(data=result_list)
+
 
 
 

@@ -121,7 +121,7 @@ class DqlIndicators(Base):
     createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
                                                  server_default='CURRENT_TIMESTAMP', comment='创建时间')
     pinyinname: Mapped[str] = mapped_column(String(255), nullable=False, comment='中文指标的拼音')
-    weights: Mapped[str] = mapped_column(Float, nullable=False, comment='指标权重')
+    weights: Mapped[int] = mapped_column(Integer, nullable=False, comment='指标权重')
 
 
 class DqlStrategy(Base):
@@ -144,6 +144,7 @@ class DqlStrategy(Base):
     pinyinname: Mapped[str] = mapped_column(String(255), nullable=False, comment='中文指标的拼音')
     weights: Mapped[str] = mapped_column(Float, nullable=False, comment='指标权重')
     is_delete: Mapped[int] = mapped_column(Integer, nullable=False, comment='0 未删除 1 已删除')
+    isSupportBacktesting: Mapped[int] = mapped_column(Integer, default=1, nullable=False, comment='1 策略支持回测 0 策略不支持回测')
     createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
                                                 server_default='CURRENT_TIMESTAMP', comment='创建时间')
 
@@ -191,8 +192,8 @@ class DqlStrategyTestResult(Base):
                                                    comment='计算回测结果状态 1 计算完成 0 未计算完成')
     newReportTemplate: Mapped[str] = mapped_column(LONGTEXT, nullable=False, comment='新报告模板')
 
-    traderReportType: Mapped[int] = mapped_column(Integer, nullable=False, index=True,
-                                                  comment='交易报告上传类型  2 手动上传  1 自动上传  其他为系统报告')
+    traderReportType: Mapped[int] = mapped_column(Integer, default=3, nullable=False, index=True,
+                                                  comment='交易报告上传类型  2 手动上传  1 自动上传  3 系统报告')
 
     createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
                                                  server_default='CURRENT_TIMESTAMP', comment='创建时间')
@@ -225,6 +226,36 @@ class TradingStrategy(Base):
     goods: Mapped[str] = mapped_column(String(64), nullable=False, comment='品种')
     period: Mapped[str] = mapped_column(String(8), nullable=False, comment='周期')
     parameter: Mapped[str] = mapped_column(Text, nullable=False, comment='参数')
+    createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
+                                                 server_default='CURRENT_TIMESTAMP', comment='创建时间')
+
+
+class DqlOrder(Base):
+    __tablename__ = "dql_orders"
+
+    pkId: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment='主键')
+    tradingGoods: Mapped[str] = mapped_column(VARCHAR(64), nullable=False, comment='交易品种')
+    goodsId: Mapped[str] = mapped_column(VARCHAR(64), nullable=False, comment='交易品种')
+    period: Mapped[str] = mapped_column(VARCHAR(32), nullable=False, comment='周期')
+    tradeid: Mapped[int] = mapped_column(Integer, nullable=False, comment='交易ID')
+    openPrice: Mapped[float] = mapped_column(Float, nullable=False, comment='开仓价格')
+    openTime: Mapped[str] = mapped_column(VARCHAR(64), nullable=False, comment='开仓下单时间')
+    timestamp: Mapped[str] = mapped_column(VARCHAR(64), nullable=False, comment='交易时间')
+    closeTime: Mapped[str] = mapped_column(VARCHAR(64), nullable=True, comment='关仓时间')
+    orderType: Mapped[str] = mapped_column(VARCHAR(16), nullable=False, comment='订单类型')
+    placeType: Mapped[str] = mapped_column(VARCHAR(16), nullable=False, comment='下单类型')
+    size: Mapped[float] = mapped_column(Float, nullable=False,comment='手数')
+    price: Mapped[float] = mapped_column(Float, nullable=False, comment='价格')
+    stopLoss: Mapped[float] = mapped_column(Float, nullable=False, default=0, comment='止损价格')
+    takeProfit: Mapped[float] = mapped_column(Float, nullable=False, default=0, comment='止盈价格')
+    taxes: Mapped[float] = mapped_column(Float, nullable=False, default=0, comment='税')
+    swap: Mapped[float] = mapped_column(Float, nullable=False, default=0, comment='隔夜费')
+    commission: Mapped[float] = mapped_column(Float, nullable=False, default=0, comment='手续费')
+    pnl: Mapped[float] = mapped_column(Float, nullable=False, comment='盈亏')
+    spread: Mapped[float] = mapped_column(Float, nullable=False, comment='点差')
+    initialCash: Mapped[float] = mapped_column(Float, nullable=False, comment='余额')
+    klineId:  Mapped[int] = mapped_column(BigInteger, nullable=False, comment='K线ID')
+    strategyUid: Mapped[str] = mapped_column(String(64), nullable=False, comment='回测策略uid')
     createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
                                                  server_default='CURRENT_TIMESTAMP', comment='创建时间')
 
