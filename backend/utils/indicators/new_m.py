@@ -21,7 +21,7 @@ class ResponseWMpredictData(bt.Strategy):
         self.comments = comments
         self.result_data_dict = dict()
         self.Id_TS_dict = {}
-        
+
         self.BarState = []
         self.BarStateText = []
 
@@ -60,6 +60,7 @@ class ResponseWMpredictData(bt.Strategy):
         #     print("zigzag_points:", len(zigzag_points))
         #     dict_index2ts, dict_ts2index = self.zigzag_calculator.get_index_timestamp_maps()
         #     self.pattern_recognizer.analyze_zigzag_points(zigzag_points, dict_index2ts, dict_ts2index)
+
     def stop(self):
         zigzag_points = self.zigzag_calculator.get_zigzag_points()
         zigzag_list = []
@@ -83,21 +84,20 @@ class ResponseWMpredictData(bt.Strategy):
             self.BarStateText.append({
                 "kLineId": int(self.data.klineId[0]),
                 "price": price,
-                "timestamp": self.Id_TS_dict.get(int(self.data.klineId[0]),),
-                "value": f"{np.round(price, 2)}: " + str(i*100) + '%'
+                "timestamp": self.Id_TS_dict.get(int(self.data.klineId[0]), ),
+                "value": f"{np.round(price, 2)}: " + str(i * 100) + '%'
             })
             self.BarState.append([
-                            {
-                                "kLineId": int(self.data.klineId[-2]),
-                                "price": price,
-                            },
-                            {
-                                "kLineId": int(self.data.klineId[0]),
-                                "price": price,
-                            }
-                        ])
-        
-        
+                {
+                    "kLineId": int(self.data.klineId[-2]),
+                    "price": price,
+                },
+                {
+                    "kLineId": int(self.data.klineId[0]),
+                    "price": price,
+                }
+            ])
+
         # df1 = pd.read_pickle('data1.pkl')
         # df2 = pd.read_pickle('data5.pkl')
         # df3 = pd.read_pickle('data15.pkl')
@@ -107,20 +107,20 @@ class ResponseWMpredictData(bt.Strategy):
         # 可选：重置索引（避免原索引重复）
         # merged_df = merged_df.reset_index(drop=True)
         # 训练模型
-        model_, scaler, metrics, class_map = train_wmclass_predictor(df, epochs=1)  # 模型以及训练完毕，这里这是为了获取scaler
-        # model.save('./my_trained_model')
-        
+        model_, scaler, metrics, class_map = train_wmclass_predictor(df,
+                                                                     epochs=1)  # 模型以及训练完毕，这里这是为了获取scaler,在训练时候使用df，预测时使用merged_df
+        # model.save('./my_trained_model.h5')
+
         # 加载模型
-        model = tf.keras.models.load_model('my_trained_model') 
-        
+        model = tf.keras.models.load_model('my_trained_model.h5')
+
         # 使用模型进行预测
         # 假设new_samples是包含新样本的DataFrame或numpy数组
         predictions = predict_wmclass(model, scaler, df, class_map)
         print("预测结果:", list(predictions))
         print("真正结果:", list(df['wmclass']))
-        
-        return super().stop()
 
+        return super().stop()
 
     def get_analysis(self):
         # 组织数据结构，从独立的算法类获取数据
@@ -147,29 +147,29 @@ class ResponseWMpredictData(bt.Strategy):
         # 画横线
         for i in self.BarState:
             self.result_data_dict["lines"].append({
-                        "type": "graphical",
-                        "BackgroundColor": self.indicator_params.get("TrendDMAColor", "#0000FF"),
-                        "lineWidth": 1,
-                        "lineStyle": 1,
-                        "color": "#FFFFFF",
-                        "globalAlpha": 0.1,
-                        "data": i
-                    })
+                "type": "graphical",
+                "BackgroundColor": self.indicator_params.get("TrendDMAColor", "#0000FF"),
+                "lineWidth": 1,
+                "lineStyle": 1,
+                "color": "#FFFFFF",
+                "globalAlpha": 0.1,
+                "data": i
+            })
         # 写概率
         for i in self.BarStateText:
             print(i)
             self.result_data_dict["lines"].append({
-                        "type": "text",
-                        "TextColor": self.indicator_params.get("TextColor", "#0000FF"),
-                        "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFFFFF"),
-                        "position": 'right',
-                        "data": [i],
-                    })
-        return [self.result_data_dict["lines"], None , None]
-
+                "type": "text",
+                "TextColor": self.indicator_params.get("TextColor", "#0000FF"),
+                "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFFFFF"),
+                "position": 'right',
+                "data": [i],
+            })
+        return [self.result_data_dict["lines"], None, None]
 
 
 import random
+
 
 class WMPatternRecognizer:
     """
@@ -203,7 +203,6 @@ class WMPatternRecognizer:
             if not con1 and not con2:
                 self._add_dataset(self.dataset, zigzag_points[-5:], stutas=0)
 
-
     def _judgment_m_pattern(self, zigzag_points):
         """判断M形态 (双顶)"""
         # M形态需要至少5个点: L-D-H-D-L (或 H-D-H-D-H)
@@ -233,7 +232,7 @@ class WMPatternRecognizer:
             con5 = False
 
         if con1 and con3 and con4 and con5:
-            self._add_dataset(self.dataset, zigzag_points[-5:],stutas=1)
+            self._add_dataset(self.dataset, zigzag_points[-5:], stutas=1)
             self.detected_patterns.append({
                 "kLineId": zigzag_points[-3]['kLineId'],
                 "timestamp": zigzag_points[-3]['timestamp'],
@@ -246,7 +245,6 @@ class WMPatternRecognizer:
             })
             return True
         return False
-    
 
     def _judgment_w_pattern(self, zigzag_points):
         """判断W形态 (双底)"""
@@ -276,7 +274,7 @@ class WMPatternRecognizer:
             con5 = False
 
         if con1 and con3 and con4 and con5:
-            self._add_dataset(self.dataset, zigzag_points[-5:],stutas=-1)
+            self._add_dataset(self.dataset, zigzag_points[-5:], stutas=-1)
             self.detected_patterns.append({
                 "kLineId": zigzag_points[-3]['kLineId'],
                 "timestamp": zigzag_points[-3]['timestamp'],
@@ -308,7 +306,7 @@ class WMPatternRecognizer:
         thi = zigzag_points_1for5[2]
         fou = zigzag_points_1for5[3]
         fif = zigzag_points_1for5[4]
-        
+
         dataset.append(
             [sec['index'] - fri['index'],
              thi['index'] - sec['index'],
@@ -321,16 +319,16 @@ class WMPatternRecognizer:
              stutas,
              ]
         )
-        
+
     def get_dataset(self):
         return self.dataset
-    
+
     def get_m_zigzag_points(self):
         return self.m_zigzag_points
-    
+
     def get_w_zigzag_points(self):
         return self.w_zigzag_points
-    
+
     def probability(self):
         math_diff_list = []
         for i in self.m_zigzag_points:
@@ -339,7 +337,7 @@ class WMPatternRecognizer:
             thi = i[-3]
             fou = i[-2]
             fif = i[-1]
-            
+
             p = (fif['hloc'][1] - thi['hloc'][1]) / (thi['hloc'][1] - fou['hloc'][0])
             math_diff_list.append(p)
         print('math_diff_list', math_diff_list)
@@ -349,23 +347,21 @@ class WMPatternRecognizer:
         except:
             print('error')
             return None
-        
-            
-    
+
     def calculate_probability_distribution(self, data, bins=None, num_bins=6):
         """
         计算连续型数据的概率分布（按区间划分）
-        
+
         参数:
             data: 输入的数据集（列表或数组）
             bins: 自定义区间边界（如[0, 0.5, 1.0]），默认None则自动生成
             num_bins: 自动生成区间时的区间数量，默认6个
-        
+
         返回:
             dict: 包含两个键的字典
                 - 'intervals': 区间列表（如["[0.0, 0.6)", ...]）
                 - 'probabilities': 对应区间的概率列表
-        
+
         """
         # 数据验证
         if not data:
@@ -373,25 +369,25 @@ class WMPatternRecognizer:
         data = np.asarray(data)
         if len(data) < 2:
             raise ValueError("数据量太少，无法计算分布")
-        
+
         # 处理区间边界
         if bins is None:
             # 自动生成区间（基于数据最小值和最大值）
             min_val = np.min(data)
             max_val = np.max(data)
             bins = np.linspace(min_val, max_val, num_bins + 1)  # 生成num_bins个区间
-        
+
         # 计算频数和概率
         freq, edges = np.histogram(data, bins=bins)
         total = len(data)
         probabilities = freq / total  # 频率即概率估计
-        
+
         # 格式化区间为字符串（如"[0.0, 0.6)"）
         intervals = []
         for i in range(len(edges) - 1):
-            interval_str = f"[{edges[i]:.4f}, {edges[i+1]:.4f})"
+            interval_str = f"[{edges[i]:.4f}, {edges[i + 1]:.4f})"
             intervals.append(interval_str)
-        
+
         return {
             "intervals": intervals,
             "probabilities": probabilities.round(4).tolist()  # 保留4位小数
