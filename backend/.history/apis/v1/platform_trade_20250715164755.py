@@ -561,7 +561,7 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             # 接收消息
             data = await websocket.receive_text()
-            # print(data)
+            print(data)
 
             # 解析-参数
             parsed_params = parse_qs(data)
@@ -605,7 +605,7 @@ async def websocket_endpoint(websocket: WebSocket):
             elif cmd == 'heartbeat':
                 with open('static/strategy_hold_order_pickle.pkl', 'rb') as f:
                     strategy_hold_order_pickle = pickle.load(f)
-                # print('心跳', inverse_dict.get(websocket))
+                print('心跳', inverse_dict.get(websocket))
                 if not inverse_dict.get(websocket) is None:
                     # 用户订阅的策略列表 形状为['NTRXAUM1S000', 'NTRXAUM1S0001']
                     User_Subscription_Strategy = inverse_dict.get(websocket)

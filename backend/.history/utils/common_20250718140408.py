@@ -33,7 +33,7 @@ from utils.indicators.ema import ResponseEMAData
 from utils.indicators.btatr import ResponseATRData
 from utils.indicators.rsi import ResponseRSIData
 from utils.indicators.wm import ResponseWMData
-from utils.indicators.new_m import ResponseWMpredictData
+# from utils.indicators.new_m import ResponseWMpredictData
 from pypinyin import lazy_pinyin, Style
 from typing import List, Dict, Any
 from utils.strategys import reload_strategies
@@ -78,7 +78,7 @@ indicator_classes = {
     "RSI": ResponseRSIData,
     "SMCP": ResponseSMCPData,
     "WM": ResponseWMData,
-    "WMpredict": ResponseWMpredictData,
+    "WMpredict": ResponseWMData,
 }
 
 
