@@ -120,7 +120,7 @@ class ResponseWMData(bt.Strategy):
             dict_index2ts, dict_ts2index = self.data_processor.get_index_timestamp_maps()
             zigzag_points = self.pattern_recognizer.get_zigzag_points()
 
-        # print(self.pattern_recognizer.get_zigzag_points())
+        print(self.pattern_recognizer.get_zigzag_points())
 
         pattern_titles = self.pattern_recognizer.get_pattern_titles()  # 获取原始形态标题列表
         # formatted_m_w_patterns = self.pattern_recognizer.get_formatted_m_w_patterns(dict_index2ts,

@@ -62,52 +62,31 @@ class ResponseWMData(bt.Strategy):
 
 
     def next(self):
-        if self.Z_from == 'zig':
 
-            # 确保数据长度足够
-            if len(self) < self.p.inp_depth:
-                return
+        # 确保数据长度足够
+        if len(self) < self.p.inp_depth:
+            return
 
-            # 准备当前K线数据，传递给ZigZagCalculator
-            current_kline_data = {
-                "kLineId": self.data.klineId[0],  # 假设datafeed提供了klineId
-                "timestamp": self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
-                "open": self.data.open[0],
-                "high": self.data.high[0],
-                "low": self.data.low[0],
-                "close": self.data.close[0],
-                "volume": self.data.volume[0],
-            }
+        # 准备当前K线数据，传递给ZigZagCalculator
+        current_kline_data = {
+            "kLineId": self.data.klineId[0],  # 假设datafeed提供了klineId
+            "timestamp": self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
+            "open": self.data.open[0],
+            "high": self.data.high[0],
+            "low": self.data.low[0],
+            "close": self.data.close[0],
+            "volume": self.data.volume[0],
+        }
 
-            # 调用ZigZag算法类的处理方法
-            # process_kline会返回是否产生了新的zigzag点，如果产生，就通知形态识别器
-            new_zigzag_point_or_updated = self.zigzag_calculator.process_kline(current_kline_data)
+        # 调用ZigZag算法类的处理方法
+        # process_kline会返回是否产生了新的zigzag点，如果产生，就通知形态识别器
+        new_zigzag_point_or_updated = self.zigzag_calculator.process_kline(current_kline_data)
 
-            # 如果ZigZag有更新，就通知形态识别器进行分析
-            if new_zigzag_point_or_updated:
-                zigzag_points = self.zigzag_calculator.get_zigzag_points()
-                dict_index2ts, dict_ts2index = self.zigzag_calculator.get_index_timestamp_maps()
-                self.pattern_recognizer.analyze_zigzag_points(zigzag_points, dict_index2ts, dict_ts2index)
-
-        #################################################################################################
-        elif self.Z_from == 'pc':
-            result_data, result_data_original, po_high, po_low = self.data_processor.process_next_data()
-            # print(result_data)
-            self.result_data.extend(result_data)  # 原点
-            self.result_data_original.extend(result_data_original)  # 偏点
-            self.po_high.extend(po_high)  # 破高
-            self.po_low.extend(po_low)  # 破低
-
-            if len(result_data) != 0:
-                self.zigzag.append(result_data[0])
-                dict_index2ts, dict_ts2index = self.data_processor.get_index_timestamp_maps()
-                self.pattern_recognizer.analyze_zigzag_points(self.zigzag, dict_index2ts, dict_ts2index)
-
-    def stop(self):
-        (self.notnallpoint,
-         self.title, self.titlepeak, self.titlebottol, self.title_offset,
-         self.titlepeak_offset, self.titlebottol_offset, offset_index) = self.data_processor.process_stop_data(self.result_data, self.result_data_original)
-
+        # 如果ZigZag有更新，就通知形态识别器进行分析
+        if new_zigzag_point_or_updated:
+            zigzag_points = self.zigzag_calculator.get_zigzag_points()
+            dict_index2ts, dict_ts2index = self.zigzag_calculator.get_index_timestamp_maps()
+            self.pattern_recognizer.analyze_zigzag_points(zigzag_points, dict_index2ts, dict_ts2index)
 
     def get_analysis(self):
         # # 组织数据结构，从独立的算法类获取数据
@@ -120,7 +99,7 @@ class ResponseWMData(bt.Strategy):
             dict_index2ts, dict_ts2index = self.data_processor.get_index_timestamp_maps()
             zigzag_points = self.pattern_recognizer.get_zigzag_points()
 
-        # print(self.pattern_recognizer.get_zigzag_points())
+        print(self.pattern_recognizer.get_zigzag_points())
 
         pattern_titles = self.pattern_recognizer.get_pattern_titles()  # 获取原始形态标题列表
         # formatted_m_w_patterns = self.pattern_recognizer.get_formatted_m_w_patterns(dict_index2ts,

@@ -78,7 +78,7 @@ indicator_classes = {
     "RSI": ResponseRSIData,
     "SMCP": ResponseSMCPData,
     "WM": ResponseWMData,
-    "WMpredict": ResponseWMpredictData,
+    "WMpredict": ResponseWMData,
 }
 
 

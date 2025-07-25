@@ -1,0 +1,664 @@
+2025-07-18 13:49:48.468 | ERROR    | utils.common:get_indicator_data:686 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 666, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1222, in runstrategies
+    strat = stratcls(*sargs, **skwargs)
+TypeError: 'NoneType' object is not callable
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'Candel_Length': 8, 'BackgroundColor': '#FFFFFF', 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'L4UWskmXY4-DqV1MaEXs-', 'beginTime': '2025-07-03 07:30:00', 'endTime': '2025-07-18 08:30:00'}
+2025-07-18 13:53:17.250 | ERROR    | utils.common:get_indicator_data:686 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 666, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1222, in runstrategies
+    strat = stratcls(*sargs, **skwargs)
+TypeError: 'NoneType' object is not callable
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'Candel_Length': 8, 'BackgroundColor': '#FFFFFF', 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'L4UWskmXY4-DqV1MaEXs-', 'beginTime': '2025-07-03 07:30:00', 'endTime': '2025-07-18 08:30:00'}
+2025-07-18 13:58:48.777 | ERROR    | utils.common:get_indicator_data:686 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 666, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1222, in runstrategies
+    strat = stratcls(*sargs, **skwargs)
+TypeError: 'NoneType' object is not callable
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'Candel_Length': 8, 'BackgroundColor': '#FFFFFF', 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'L4UWskmXY4-DqV1MaEXs-', 'beginTime': '2025-07-03 07:30:00', 'endTime': '2025-07-18 08:30:00'}
+2025-07-18 14:01:19.404 | ERROR    | utils.common:get_indicator_data:686 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 666, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1222, in runstrategies
+    strat = stratcls(*sargs, **skwargs)
+TypeError: 'NoneType' object is not callable
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'Candel_Length': 8, 'BackgroundColor': '#FFFFFF', 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'L4UWskmXY4-DqV1MaEXs-', 'beginTime': '2025-07-03 07:45:00', 'endTime': '2025-07-18 08:45:00'}
+2025-07-18 14:02:07.051 | ERROR    | utils.common:get_indicator_data:686 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 666, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1222, in runstrategies
+    strat = stratcls(*sargs, **skwargs)
+TypeError: 'NoneType' object is not callable
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 0, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'ckl-aAyaN5bbFFVeU2Hj2', 'beginTime': '2025-07-03 07:45:00', 'endTime': '2025-07-18 08:45:00'}
+2025-07-18 14:03:01.243 | ERROR    | utils.common:get_indicator_data:686 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 666, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1222, in runstrategies
+    strat = stratcls(*sargs, **skwargs)
+TypeError: 'NoneType' object is not callable
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 0, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'ckl-aAyaN5bbFFVeU2Hj2', 'beginTime': '2025-07-03 07:45:00', 'endTime': '2025-07-18 08:45:00'}
+2025-07-18 14:07:14.740 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1298, in runstrategies
+    self._runonce(runstrats)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1700, in _runonce
+    strat._oncepost(dt0)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 309, in _oncepost
+    self.next()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 58, in next
+    self.pattern_recognizer.analyze_zigzag_points(zigzag_points, dict_index2ts, dict_ts2index)
+NameError: name 'dict_index2ts' is not defined
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 0, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'ckl-aAyaN5bbFFVeU2Hj2', 'beginTime': '2025-07-03 07:45:00', 'endTime': '2025-07-18 08:45:00'}
+2025-07-21 15:26:58.756 | ERROR    | utils.common:get_indicator_data:694 - 获取技术指标K线PeriodKLines数据错误：Traceback (most recent call last):
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 657, in _read_bytes
+    data = await self._reader.readexactly(num_bytes)
+  File "D:\anaconda3\envs\p310\lib\asyncio\streams.py", line 706, in readexactly
+    raise exceptions.IncompleteReadError(incomplete, n)
+asyncio.exceptions.IncompleteReadError: 0 bytes read on a total of 4 expected bytes
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 1130, in _rollback_impl
+    self.engine.dialect.do_rollback(self.connection)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\default.py", line 692, in do_rollback
+    dbapi_connection.rollback()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\dialects\mysql\aiomysql.py", line 200, in rollback
+    self.await_(self._connection.rollback())
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 127, in await_only
+    return current.driver.switch(awaitable)  # type: ignore[no-any-return]
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 192, in greenlet_spawn
+    value = await result
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 399, in rollback
+    await self._read_ok_packet()
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 372, in _read_ok_packet
+    pkt = await self._read_packet()
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 609, in _read_packet
+    packet_header = await self._read_bytes(4)
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 661, in _read_bytes
+    raise OperationalError(CR.CR_SERVER_LOST, msg) from e
+pymysql.err.OperationalError: (2013, 'Lost connection to MySQL server during query')
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 613, in get_indicator_data
+    async with async_db_session() as db:
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1071, in __aexit__
+    await asyncio.shield(task)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1016, in close
+    await greenlet_spawn(self.sync_session.close)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 197, in greenlet_spawn
+    result = context.throw(*sys.exc_info())
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\orm\session.py", line 2462, in close
+    self._close_impl(invalidate=False)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\orm\session.py", line 2531, in _close_impl
+    transaction.close(invalidate)
+  File "<string>", line 2, in close
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\orm\state_changes.py", line 139, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\orm\session.py", line 1363, in close
+    transaction.close()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2589, in close
+    self._do_close()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2727, in _do_close
+    self._close_impl()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2713, in _close_impl
+    self._connection_rollback_impl()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2705, in _connection_rollback_impl
+    self.connection._rollback_impl()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 1132, in _rollback_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2356, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 1130, in _rollback_impl
+    self.engine.dialect.do_rollback(self.connection)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\default.py", line 692, in do_rollback
+    dbapi_connection.rollback()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\dialects\mysql\aiomysql.py", line 200, in rollback
+    self.await_(self._connection.rollback())
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 127, in await_only
+    return current.driver.switch(awaitable)  # type: ignore[no-any-return]
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 192, in greenlet_spawn
+    value = await result
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 399, in rollback
+    await self._read_ok_packet()
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 372, in _read_ok_packet
+    pkt = await self._read_packet()
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 609, in _read_packet
+    packet_header = await self._read_bytes(4)
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 661, in _read_bytes
+    raise OperationalError(CR.CR_SERVER_LOST, msg) from e
+sqlalchemy.exc.OperationalError: (pymysql.err.OperationalError) (2013, 'Lost connection to MySQL server during query')
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+2025-07-21 17:13:54.395 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 79, in stop
+    predictions = predict_wmclass(model, scaler, new_samples, class_map)
+NameError: name 'new_samples' is not defined
+  request_item:{'uid': 'SITIJi6neOxGV4', 'goods': 'FPG-XAUUSD', 'period': 'M30', 'beginTime': '2023-01-01 00:00:00', 'endTime': '2025-06-02 00:00:00', 'parameter': {'Periods': 10, 'Multiplier': 3.0, 'TrendUpColor': '#00FF00', 'TrenDownColor': '#FF0000', 'Kline_period': 'M30', 'Kline_goods': 'FPG-XAUUSD'}, 'index': 0}
+2025-07-22 16:08:42.534 | ERROR    | utils.common:get_indicator_data:694 - 获取技术指标K线PeriodKLines数据错误：Traceback (most recent call last):
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 657, in _read_bytes
+    data = await self._reader.readexactly(num_bytes)
+  File "D:\anaconda3\envs\p310\lib\asyncio\streams.py", line 706, in readexactly
+    raise exceptions.IncompleteReadError(incomplete, n)
+asyncio.exceptions.IncompleteReadError: 0 bytes read on a total of 4 expected bytes
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 1130, in _rollback_impl
+    self.engine.dialect.do_rollback(self.connection)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\default.py", line 692, in do_rollback
+    dbapi_connection.rollback()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\dialects\mysql\aiomysql.py", line 200, in rollback
+    self.await_(self._connection.rollback())
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 127, in await_only
+    return current.driver.switch(awaitable)  # type: ignore[no-any-return]
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 192, in greenlet_spawn
+    value = await result
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 399, in rollback
+    await self._read_ok_packet()
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 372, in _read_ok_packet
+    pkt = await self._read_packet()
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 609, in _read_packet
+    packet_header = await self._read_bytes(4)
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 661, in _read_bytes
+    raise OperationalError(CR.CR_SERVER_LOST, msg) from e
+pymysql.err.OperationalError: (2013, 'Lost connection to MySQL server during query')
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 613, in get_indicator_data
+    async with async_db_session() as db:
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1071, in __aexit__
+    await asyncio.shield(task)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1016, in close
+    await greenlet_spawn(self.sync_session.close)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 197, in greenlet_spawn
+    result = context.throw(*sys.exc_info())
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\orm\session.py", line 2462, in close
+    self._close_impl(invalidate=False)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\orm\session.py", line 2531, in _close_impl
+    transaction.close(invalidate)
+  File "<string>", line 2, in close
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\orm\state_changes.py", line 139, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\orm\session.py", line 1363, in close
+    transaction.close()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2589, in close
+    self._do_close()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2727, in _do_close
+    self._close_impl()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2713, in _close_impl
+    self._connection_rollback_impl()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2705, in _connection_rollback_impl
+    self.connection._rollback_impl()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 1132, in _rollback_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2356, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 1130, in _rollback_impl
+    self.engine.dialect.do_rollback(self.connection)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\default.py", line 692, in do_rollback
+    dbapi_connection.rollback()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\dialects\mysql\aiomysql.py", line 200, in rollback
+    self.await_(self._connection.rollback())
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 127, in await_only
+    return current.driver.switch(awaitable)  # type: ignore[no-any-return]
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 192, in greenlet_spawn
+    value = await result
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 399, in rollback
+    await self._read_ok_packet()
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 372, in _read_ok_packet
+    pkt = await self._read_packet()
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 609, in _read_packet
+    packet_header = await self._read_bytes(4)
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 661, in _read_bytes
+    raise OperationalError(CR.CR_SERVER_LOST, msg) from e
+sqlalchemy.exc.OperationalError: (pymysql.err.OperationalError) (2013, 'Lost connection to MySQL server during query')
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+2025-07-22 16:21:40.386 | ERROR    | utils.common:get_indicator_data:694 - 获取技术指标K线PeriodKLines数据错误：Traceback (most recent call last):
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 657, in _read_bytes
+    data = await self._reader.readexactly(num_bytes)
+  File "D:\anaconda3\envs\p310\lib\asyncio\streams.py", line 706, in readexactly
+    raise exceptions.IncompleteReadError(incomplete, n)
+asyncio.exceptions.IncompleteReadError: 0 bytes read on a total of 4 expected bytes
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 1130, in _rollback_impl
+    self.engine.dialect.do_rollback(self.connection)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\default.py", line 692, in do_rollback
+    dbapi_connection.rollback()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\dialects\mysql\aiomysql.py", line 200, in rollback
+    self.await_(self._connection.rollback())
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 127, in await_only
+    return current.driver.switch(awaitable)  # type: ignore[no-any-return]
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 192, in greenlet_spawn
+    value = await result
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 399, in rollback
+    await self._read_ok_packet()
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 372, in _read_ok_packet
+    pkt = await self._read_packet()
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 609, in _read_packet
+    packet_header = await self._read_bytes(4)
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 661, in _read_bytes
+    raise OperationalError(CR.CR_SERVER_LOST, msg) from e
+pymysql.err.OperationalError: (2013, 'Lost connection to MySQL server during query')
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 613, in get_indicator_data
+    async with async_db_session() as db:
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1071, in __aexit__
+    await asyncio.shield(task)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1016, in close
+    await greenlet_spawn(self.sync_session.close)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 197, in greenlet_spawn
+    result = context.throw(*sys.exc_info())
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\orm\session.py", line 2462, in close
+    self._close_impl(invalidate=False)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\orm\session.py", line 2531, in _close_impl
+    transaction.close(invalidate)
+  File "<string>", line 2, in close
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\orm\state_changes.py", line 139, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\orm\session.py", line 1363, in close
+    transaction.close()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2589, in close
+    self._do_close()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2727, in _do_close
+    self._close_impl()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2713, in _close_impl
+    self._connection_rollback_impl()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2705, in _connection_rollback_impl
+    self.connection._rollback_impl()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 1132, in _rollback_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 2356, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\base.py", line 1130, in _rollback_impl
+    self.engine.dialect.do_rollback(self.connection)
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\engine\default.py", line 692, in do_rollback
+    dbapi_connection.rollback()
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\dialects\mysql\aiomysql.py", line 200, in rollback
+    self.await_(self._connection.rollback())
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 127, in await_only
+    return current.driver.switch(awaitable)  # type: ignore[no-any-return]
+  File "D:\anaconda3\envs\p310\lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 192, in greenlet_spawn
+    value = await result
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 399, in rollback
+    await self._read_ok_packet()
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 372, in _read_ok_packet
+    pkt = await self._read_packet()
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 609, in _read_packet
+    packet_header = await self._read_bytes(4)
+  File "D:\anaconda3\envs\p310\lib\site-packages\aiomysql\connection.py", line 661, in _read_bytes
+    raise OperationalError(CR.CR_SERVER_LOST, msg) from e
+sqlalchemy.exc.OperationalError: (pymysql.err.OperationalError) (2013, 'Lost connection to MySQL server during query')
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+2025-07-23 16:28:40.368 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 68, in stop
+    print("概率:", len(p))
+TypeError: object of type 'NoneType' has no len()
+  request_item:{'uid': 'SITIJi6neOxGV4', 'goods': 'FPG-XAUUSD', 'period': 'M5', 'beginTime': '2025-07-01 00:00:00', 'endTime': '2025-07-22 00:00:00', 'parameter': {'Periods': 10, 'Multiplier': 3.0, 'TrendUpColor': '#00FF00', 'TrenDownColor': '#FF0000', 'Kline_period': 'M5', 'Kline_goods': 'FPG-XAUUSD'}, 'index': 0}
+2025-07-23 17:32:53.524 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 67, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 294, in probability
+    return calculate_probability_distribution(math_diff_list, bins=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+NameError: name 'calculate_probability_distribution' is not defined
+  request_item:{'uid': 'SITIJi6neOxGV4', 'goods': 'FPG-XAUUSD', 'period': 'M15', 'beginTime': '2025-06-01 00:00:00', 'endTime': '2025-07-24 00:00:00', 'parameter': {'Periods': 10, 'Multiplier': 3.0, 'TrendUpColor': '#00FF00', 'TrenDownColor': '#FF0000', 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'index': 0}
+2025-07-23 17:56:35.064 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 67, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 294, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 327, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-23 18:03:55.490 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 67, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 294, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 327, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-23 18:04:51.010 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 67, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 294, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 327, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-24 10:20:41.023 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 67, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 312, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 345, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-24 10:21:31.425 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 67, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 312, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 345, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-24 10:24:06.843 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 67, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 320, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 353, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-24 10:30:54.588 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 67, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 327, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 360, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-24 10:31:25.023 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 67, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 327, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 360, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-24 10:31:26.990 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 672, in get_indicator_data
+    result_data_list = result[0].get_analysis()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 145, in get_analysis
+    "timestamp": self.Id_TS_dict.get(int(self.data.klineId[0]),),
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\lineseries.py", line 461, in __getattr__
+    return getattr(self.lines, name)
+AttributeError: 'Lines_LineSeries_LineIterator_DataAccessor_Strateg' object has no attribute 'Id_TS_dict'
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-03 23:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-24 10:32:36.915 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 70, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 330, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 363, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-24 10:34:47.509 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 70, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 330, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 363, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-24 11:04:51.499 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 70, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 330, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 1.0, 2.0, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 363, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-24 11:07:43.867 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 70, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 330, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 1.0, 2.0, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 363, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:45:00'}
+2025-07-24 11:35:20.995 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 70, in stop
+    df = pd.DataFrame(dataset, columns=['col1', 'col2', 'col3', 'col4', 'col5', 'col6', 'col7', 'col8', 'wmclass'])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 330, in probability
+    fif = i[-1]
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 363, in calculate_probability_distribution
+    for interval, prob in zip(distribution["intervals"], distribution["probabilities"]):
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M30', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M30', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:30:00'}
+2025-07-24 11:36:45.903 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 73, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 335, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 1.0, 2.0, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 355, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M30', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M30', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:30:00'}
+2025-07-24 11:37:11.320 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 73, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 335, in probability
+    return self.calculate_probability_distribution(math_diff_list, bins=[0, 1.0, 2.0, 3.0])
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 355, in calculate_probability_distribution
+    raise ValueError("输入数据不能为空")
+ValueError: 输入数据不能为空
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M30', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M30', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:30:00'}
+2025-07-24 11:39:33.089 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 73, in stop
+    p = self.pattern_recognizer.probability()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 339, in probability
+    return com
+UnboundLocalError: local variable 'com' referenced before assignment
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M30', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M30', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:30:00'}
+2025-07-24 11:40:30.368 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 75, in stop
+    self.BarState = p['probabilities']
+TypeError: 'NoneType' object is not subscriptable
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M30', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M30', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'owDEKu9WGGZSO6_r3agzM', 'beginTime': '2025-07-21 01:00:00', 'endTime': '2025-07-22 23:30:00'}
+2025-07-24 13:51:53.873 | ERROR    | utils.common:get_indicator_data:688 - 技术指标K线PeriodKLines 数据错误：Traceback (most recent call last):
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\common.py", line 668, in get_indicator_data
+    result = cerebro.run(stdstats=True, tradehistory=True)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1132, in run
+    runstrat = self.runstrategies(iterstrat)
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\cerebro.py", line 1306, in runstrategies
+    strat._stop()
+  File "D:\anaconda3\envs\p310\lib\site-packages\backtrader\strategy.py", line 483, in _stop
+    self.stop()
+  File "c:\Users\Administrator\Desktop\深度学习\backend_git\backtesting-backend-master\backend\utils\indicators\new_m.py", line 79, in stop
+    price_diff = last_m_point[3]['hloc'][1] - last_m_point['hloc'][0]  # 高点到低点的价差
+TypeError: list indices must be integers or slices, not str
+  request_item:{'goods': 'FPG-XAUUSD', 'period': 'M15', 'parameter': {'TrendColor': '#FF0000', 'TrendPackconnectionColor': 'rgba(136, 136, 136, 1)', 'TextColor': '#ffffff', 'BackgroundColor': 'rgba(15, 0, 120, 0.6)', 'Zfrom': 1, 'Candel_Length': 8, 'NumericalDifference': 1, 'ShowTitlenumber': 1, 'ShowTitletime': 1, 'ShowTitlespread': 1, 'ShowKlinediff': 1, 'ShowTitlenumberoffset': 1, 'ShowTitletimeoffset': 1, 'ShowTitlespreadoffset': 1, 'ShowKlinediffoffset': 1, 'IsRightKBroken': 1, 'IsLeftKOffset': 1, 'peakBmp': 103, 'bottolBmp': 102, 'Kline_period': 'M15', 'Kline_goods': 'FPG-XAUUSD'}, 'uid': 'SITIJi6neOxGV4', 'pId': 'yJp9OumCtUoL9sRvd8Y4t', 'beginTime': '2025-06-02 01:00:00', 'endTime': '2025-07-09 05:30:00'}

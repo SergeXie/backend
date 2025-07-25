@@ -51,8 +51,6 @@ class ZigZagCalculator:
         timestamp = kline_data['timestamp']
         current_high = kline_data['high']
         current_low = kline_data['low']
-        current_close = kline_data['close']
-        current_open = kline_data['open']
 
         self._kline_index_counter += 1
         current_index = self._kline_index_counter
@@ -95,7 +93,6 @@ class ZigZagCalculator:
                     "timestamp": timestamp,
                     "price": self.last_high_val,
                     "index": current_index,
-                    "hloc": [current_high, current_low, current_close, current_open],
                 })
                 new_zigzag_point_generated = True
             elif is_current_low_extremum:
@@ -106,8 +103,6 @@ class ZigZagCalculator:
                     "timestamp": timestamp,
                     "price": self.last_low_val,
                     "index": current_index,
-                    "hloc": [current_high, current_low, current_close, current_open],
-
                 })
                 new_zigzag_point_generated = True
 
@@ -122,7 +117,6 @@ class ZigZagCalculator:
                     "timestamp": timestamp,
                     "price": self.last_low_val,
                     "index": current_index,
-                    "hloc": [current_high, current_low, current_close, current_open],
                 })
                 new_zigzag_point_generated = True
             # 趋势反转：找到高点
@@ -134,7 +128,6 @@ class ZigZagCalculator:
                     "timestamp": timestamp,
                     "price": self.last_high_val,
                     "index": current_index,
-                    "hloc": [current_high, current_low, current_close, current_open],
                 })
                 new_zigzag_point_generated = True
 
@@ -149,7 +142,6 @@ class ZigZagCalculator:
                     "timestamp": timestamp,
                     "price": self.last_high_val,
                     "index": current_index,
-                    "hloc": [current_high, current_low, current_close, current_open],
                 })
                 new_zigzag_point_generated = True
             # 趋势反转：找到低点
@@ -161,7 +153,6 @@ class ZigZagCalculator:
                     "timestamp": timestamp,
                     "price": self.last_low_val,
                     "index": current_index,
-                    "hloc": [current_high, current_low, current_close, current_open],
                 })
                 new_zigzag_point_generated = True
 
