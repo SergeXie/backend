@@ -475,8 +475,6 @@ async def fetch_trading_data(db, goods, period, model_classes,
                     select_model_class.tradeDateTime.between(previous_working_day_str, end_time)
                 ).order_by(select_model_class.tradeDateTime.desc())
 
-                print("previous_working_day_str:{}".format(previous_working_day_str))
-                print("end_time:{}".format(end_time))
 
             else:
                 print('正常时间检测')
@@ -487,10 +485,7 @@ async def fetch_trading_data(db, goods, period, model_classes,
                     select_model_class.type == period,
                     select_model_class.tradeDateTime.between(begin_time, end_time)
                     ).order_by(select_model_class.tradeDateTime.desc())
-                print("====")
-                print(begin_time)
-                print(end_time)
-                print("=====")
+
 
             details = await db.execute(query)
 
