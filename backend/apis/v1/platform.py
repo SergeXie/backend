@@ -16,7 +16,7 @@ from schemas.base import ErrorModel
 from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData, DqlIndicatorsModel
 from utils.common import select_goods_common, RandomIDGenerator, select_kline_data, Trader, \
     GoodTrader, PandasData, cache, get_indicator_data, model_classes, \
-    get_entities_list, generate_random_string, statistics_from_orders
+    get_entities_list, generate_random_string, statistics_from_orders, adjust_unpaired_trades
 from utils.prod_backtrader import MyStrategy
 from utils.timezone import timezone
 import pandas as pd
@@ -103,12 +103,15 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
         data.append(d)
 
     trader_report = statistics_from_orders(data)
+
+    traderResult = await adjust_unpaired_trades(db, beginTime, data)
+
     result_data = [{"goods": goods, "period": period, "startTime": beginTime, "endTime": endTime,
                     "name": strategy.name, "initialCash": 100000, "digits": digits, "parameter": None,
                     "paramsStrName": None, "account": None, "userName": None, "currency": "USD", "spread": 0,
                     "strategyUid": strategyUid,"testerUids": strategyUid, "traderReportType": 3,
                     "netAssetValues": trader_report["cashCurve"], "parameterList": json.loads(strategy.parameters),
-                    "traderResult": data, "traderReport": trader_report,
+                    "traderResult": traderResult, "traderReport": trader_report,
                     "indicatorData": [indicator_dict] if indicator_dict else []}]
 
     return await response_base.success(data=result_data)
@@ -300,7 +303,7 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
         print("lineData")
         print(lineData)
 
-        return await response_base.success(data={"goods": goods, "period": period, "utc": 2, "is_final": is_final,
+        return await response_base.success(data={"goods": goods, "period": period, "utc": 1, "is_final": is_final,
                                                  "lineData": lineData})
 
 
@@ -367,7 +370,7 @@ async def select_kline_front(lineId: Optional[int] = 0,
         print(len(result_list))
 
         # trading_goods 交易品种  period 周期
-        return await response_base.success(data={"goods": goods, "period": period, "utc": 2, "lineData": result_list})
+        return await response_base.success(data={"goods": goods, "period": period, "utc": 1, "lineData": result_list})
 
 
 @router.get("/selectAfterKLine", name="获取K线最新数据")
@@ -412,7 +415,7 @@ async def select_platform_goods_k_line(lineId: int,
                 select_model_class.tradeDateTime >= formatted_datetime).limit(1000)
 
         else:
-            return await response_base.success(data={"goods": goods, "period": period, "utc": 2,
+            return await response_base.success(data={"goods": goods, "period": period, "utc": 1,
                                                      "lineData": []})
 
         if period.startswith("W") or period.startswith("D") or period.startswith("MN"):
@@ -429,7 +432,7 @@ async def select_platform_goods_k_line(lineId: int,
         result_list = await select_kline_data(db, query, period_tuple)
 
         # trading_goods 交易品种  period 周期
-        return await response_base.success(data={"goods": goods, "period": period, "utc": 2,
+        return await response_base.success(data={"goods": goods, "period": period, "utc": 1,
                                                  "lineData": result_list})
 
 
@@ -465,7 +468,7 @@ async def select_multiple_goods_k_lines(goods: str = Query(..., title="交易平
 
         result_list = await select_kline_data(db, result_data)  # 不使用缓存处理函数
 
-        return await response_base.success(data={"goods": goods, "period": period, "utc": 2,
+        return await response_base.success(data={"goods": goods, "period": period, "utc": 1,
                                                  "beginTime": beginTime, "endTime": endTime,
                                                  "lineData": result_list})
 
