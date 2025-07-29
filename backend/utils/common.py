@@ -475,6 +475,9 @@ async def fetch_trading_data(db, goods, period, model_classes,
                     select_model_class.tradeDateTime.between(previous_working_day_str, end_time)
                 ).order_by(select_model_class.tradeDateTime.desc())
 
+                print("previous_working_day_str:{}".format(previous_working_day_str))
+                print("end_time:{}".format(end_time))
+
             else:
                 print('正常时间检测')
                 # 正常根据起始时间至结束时间查询
@@ -484,6 +487,10 @@ async def fetch_trading_data(db, goods, period, model_classes,
                     select_model_class.type == period,
                     select_model_class.tradeDateTime.between(begin_time, end_time)
                     ).order_by(select_model_class.tradeDateTime.desc())
+                print("====")
+                print(begin_time)
+                print(end_time)
+                print("=====")
 
             details = await db.execute(query)
 
@@ -1144,13 +1151,15 @@ async def adjust_unpaired_trades(db, beginTime, trader_result, traderReport=None
             result = await db.execute(select_k_time)
             kline_data = result.scalar_one_or_none()
             if kline_data:
+                size = abs(item["size"])  # 避免负数干扰计算
+
                 item["price"] = kline_data.closed
                 if item["orderType"] == "sell":
                     # 做空 PnL = (开仓价格−平仓价格（现价 K线M1的收盘价）)×交易手数×杠杆−隔夜利息
-                    item["pnl"] = round((item["openPrice"] - kline_data.closed) * (item["size"] * goods_.profitRatio), 3)
+                    item["pnl"] = round((item["openPrice"] - kline_data.closed) * (size * goods_.profitRatio), 3)
                 else:
                     # 做多 PnL=(平仓价格（现价 K线M1的收盘价）− 开仓价格)×交易手数×杠杆−隔夜利息
-                    item["pnl"] = round((kline_data.closed - item["openPrice"]) * (item["size"] * goods_.profitRatio), 3)
+                    item["pnl"] = round((kline_data.closed - item["openPrice"]) * (size * goods_.profitRatio), 3)
 
                 item["initialCash"] += item["pnl"]
 
@@ -1186,6 +1195,8 @@ async def task_run_backtest(db: AsyncSession, indicator_data_request, strategys,
                                                 begin_time=indicator_data_request.get("startTime", None),
                                                 end_time=indicator_data_request.get("endTime", None),
                                                 period_tuple=period_tuple, class_name=json.loads(strategys.className))
+
+        print("trading_data:{}".format(trading_data))
 
         if not trading_data:
             return
