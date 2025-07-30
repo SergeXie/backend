@@ -6,7 +6,7 @@ import re
 import string
 import time
 import traceback
-from collections import Counter
+from collections import Counter, defaultdict
 
 import pandas as pd
 from cachetools import TTLCache
@@ -950,9 +950,25 @@ def calculate_max_fur(account_list):
 
 
 def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
-    # 只取orderType为close的订单，按timestamp升序
+    # 第一步：找出未配对（没有close）对应的 tradeid
+    tradeid_to_types = defaultdict(list)
+    for item in data:
+        tradeid_to_types[item["tradeid"]].append(item["orderType"])
+    unpaired_ids = {tid for tid, types in tradeid_to_types.items() if 'close' not in types}
+
+    # 第二步：提取 close 单
     orders = [x for x in data if x["orderType"] == "close"]
+
+    # 第三步：把未配对的开仓单也加进去（非 close 且 tradeid 属于未配对的）
+    unpaired_open_orders = [
+        x for x in data
+        if x["orderType"] != "close" and x["tradeid"] in unpaired_ids
+    ]
+    orders.extend(unpaired_open_orders)
+
+    # 第四步：按 timestamp 升序排序
     orders.sort(key=lambda x: x["timestamp"])
+
     if not orders:
         return {}
 
@@ -1049,8 +1065,8 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
     average_consecutive_losses = sum(cons_loss_list) / len(cons_loss_list) if cons_loss_list else 0
 
     # 多空单
-    short_positions = [o for o in orders if o["size"] < 0]
-    long_positions = [o for o in orders if o["size"] > 0]
+    short_positions = [o for o in orders if o["placeType"] == "sell"]
+    long_positions = [o for o in orders if o["placeType"] == "buy"]
     short_positions_num = len(short_positions)
     long_positions_num = len(long_positions)
     short_positions_ratio = short_positions_num / total_trades if total_trades else 0
@@ -1110,6 +1126,7 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
         "maxFUR": calculate_max_fur(data),
         "cashCurve": cash_curve
     }
+
     return result
 
 
@@ -1122,11 +1139,13 @@ async def adjust_unpaired_trades(db, beginTime, trader_result, traderReport=None
     :return: 修改后的完整交易记录列表
     """
     endTime = datetime.datetime.now()
-    # 统计 tradeid 出现次数
-    tradeid_counts = Counter(item["tradeid"] for item in trader_result)
+    # 1. 构建 tradeid -> list of orderType 映射
+    tradeid_to_types = defaultdict(list)
+    for item in trader_result:
+        tradeid_to_types[item["tradeid"]].append(item["orderType"])
 
-    # 找到只出现一次的 tradeid（未配对）
-    unpaired_ids = {tid for tid, count in tradeid_counts.items() if count == 1}
+    # 2. 找出那些没有 'close' 类型的 tradeid（表示没有被平仓） 找到未配对的 tradeid（即只出现一次）
+    unpaired_ids = {tid for tid, types in tradeid_to_types.items() if 'close' not in types}
 
     # 修改原列表（in-place 修改）
     for item in trader_result:

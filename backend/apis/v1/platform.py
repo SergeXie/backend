@@ -102,10 +102,8 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                 d[field] = d[field].strftime('%Y-%m-%d %H:%M:%S')
         data.append(d)
 
-    trader_report = statistics_from_orders(data)
-
     traderResult = await adjust_unpaired_trades(db, beginTime, data)
-
+    trader_report = statistics_from_orders(traderResult)
     result_data = [{"goods": goods, "period": period, "startTime": beginTime, "endTime": endTime,
                     "name": strategy.name, "initialCash": 100000, "digits": digits, "parameter": None,
                     "paramsStrName": None, "account": None, "userName": None, "currency": "USD", "spread": 0,
