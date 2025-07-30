@@ -1130,7 +1130,8 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
     return result
 
 
-async def adjust_unpaired_trades(db, beginTime, trader_result, traderReport=None):
+async def adjust_unpaired_trades(db, beginTime, trader_result,
+                                 traderReport=None, starting_cash: float = 100000):
     """
     查找未配对的 tradeid 并修改其 pnl 值，返回更新后的 trader_result 列表
     :param end_dt: 数据库对象
@@ -1141,7 +1142,11 @@ async def adjust_unpaired_trades(db, beginTime, trader_result, traderReport=None
     endTime = datetime.datetime.now()
     # 1. 构建 tradeid -> list of orderType 映射
     tradeid_to_types = defaultdict(list)
+    cash = starting_cash
+
     for item in trader_result:
+        cash += item.get("pnl", 0.0)  # 先更新现金净值
+        item["initialCash"] = round(cash, 2)  # 记录更新后的净值
         tradeid_to_types[item["tradeid"]].append(item["orderType"])
 
     # 2. 找出那些没有 'close' 类型的 tradeid（表示没有被平仓） 找到未配对的 tradeid（即只出现一次）
