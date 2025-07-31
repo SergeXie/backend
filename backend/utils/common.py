@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 
 import pandas as pd
 from cachetools import TTLCache
-from sqlalchemy import select, and_, desc
+from sqlalchemy import select, and_, desc, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 from common.log import log
@@ -704,10 +704,54 @@ async def fetch_indicators(db: AsyncSession, uid: str):
     return select_indicators.scalars().first()
 
 
+from sqlalchemy import select, and_
+
 async def save_trader_result(traderResult, db, strategyUid, period):
+    if not traderResult:
+        return
+
+    # 1. 收集本次所有订单的查重四元组
+    unique_keys = set(
+        (row.get('openTime'), row.get("timestamp"), row.get('orderType'), row.get('klineId'))
+        for row in traderResult
+    )
+
+    # 2. 批量查找数据库已存在的订单
+    exist_stmt = select(DqlOrder.openTime,DqlOrder.timestamp,DqlOrder.orderType, DqlOrder.klineId).where(
+        tuple_(
+            DqlOrder.openTime,
+            DqlOrder.timestamp,
+            DqlOrder.orderType,
+            DqlOrder.klineId,
+        ).in_(unique_keys)
+    )
+    result = await db.execute(exist_stmt)
+    exists = set(result.all())
+
+    # 3. 插入不存在的订单
+    add_count = 0
+    update_count = 0
+
     for row in traderResult:
+        key = (row.get('openTime'), row.get("timestamp"), row.get('orderType'), row.get('klineId'))
+        if key in exists:
+            log.info("重复订单。跳过新增：{}".format(row))
+            # 有重复，更新tradeid
+            stmt = (
+                update(DqlOrder)
+                .where(
+                    DqlOrder.timestamp == row.get('openTime'),
+                    DqlOrder.timestamp == row.get('timestamp'),
+                    DqlOrder.orderType == row.get('orderType'),
+                    DqlOrder.klineId == row.get('klineId'),
+                )
+                .values(tradeid=row.get('tradeid', 0))
+            )
+            await db.execute(stmt)
+            update_count += 1
+            continue
         order = DqlOrder(
-            tradingGoods=row.get('goodsId', ''),  # tradingGoods 和 goodsId 用同一个
+            tradingGoods=row.get('goodsId', ''),
             goodsId=row.get('goodsId', ''),
             period=period,
             tradeid=row.get('tradeid', 0),
@@ -731,9 +775,12 @@ async def save_trader_result(traderResult, db, strategyUid, period):
             strategyUid=strategyUid,
         )
         db.add(order)
+        add_count += 1
 
     await db.commit()
-    log.info("新增订单信息成功！")
+    await db.close()
+    log.info(f"新增订单信息成功，本次插入{add_count}条，跳过{len(traderResult) - add_count}条重复。")
+
 
 
 
@@ -1214,8 +1261,6 @@ async def task_run_backtest(db: AsyncSession, indicator_data_request, strategys,
                                                 begin_time=indicator_data_request.get("startTime", None),
                                                 end_time=indicator_data_request.get("endTime", None),
                                                 period_tuple=period_tuple, class_name=json.loads(strategys.className))
-
-        print("trading_data:{}".format(trading_data))
 
         if not trading_data:
             return

@@ -7,44 +7,48 @@ from database.db_mysql import async_db_session
 from models.dql_platform import TradingFPG, DplGoodsTest, DqlOrder
 from utils.common import fetch_indicators, run_backtest, save_trader_result, task_run_backtest
 
-CYCLES = ['M15', 'M30', 'H1', 'H4']
+CYCLES = ['M15', "M30", "H1", "H4"]
 
 strategyUid = {"趋势止损策略": "SSWiwM6dp5FgE8"}
 goods = "FPG-XAUUSD"
 
-# def get_last_workday(date=None):
-#     """返回指定日期的上一个工作日（不含今天）"""
-#     if date is None:
-#         date = datetime.now().date()
-#     else:
-#         date = date if isinstance(date, datetime.date) else date.date()
-#     while True:
-#         date -= timedelta(days=1)
-#         if date.weekday() < 5:
-#             return date
-#
-# async def get_period_latest_time(db, period):
-#     stmt = select(func.max(DqlOrder.timestamp)).where(DqlOrder.period == period)
-#     result = await db.execute(stmt)
-#     latest_time_str = result.scalar()
-#     if latest_time_str:
-#         begin_time_dt = datetime.strptime(latest_time_str, '%Y-%m-%d %H:%M:%S')
-#     else:
-#         # 没有数据，从历史最早起点开始（可自定义）
-#         begin_time_dt = datetime(2024, 1, 1, 0, 0, 0)
-#     return begin_time_dt
-#
-# def get_last_workday_end():
-#     last_workday = get_last_workday()
-#     end_time_dt = datetime.combine(last_workday, time(23, 59, 59))
-#     return end_time_dt
-#
-# async def get_time_range_for_period(db, period):
-#     begin_time_dt = await get_period_latest_time(db, period)
-#     end_time_dt = get_last_workday_end()
-#     begin_time = begin_time_dt.strftime('%Y-%m-%d %H:%M:%S')
-#     end_time = end_time_dt.strftime('%Y-%m-%d %H:%M:%S')
-#     return begin_time, end_time
+def get_last_workday(date=None):
+    """返回指定日期的上一个工作日（不含今天）"""
+    if date is None:
+        date = datetime.now().date()
+    else:
+        date = date if isinstance(date, datetime.date) else date.date()
+    while True:
+        date -= timedelta(days=1)
+        if date.weekday() < 5:
+            return date
+
+
+async def get_period_latest_time(db, period):
+    stmt = select(func.max(DqlOrder.timestamp)).where(DqlOrder.period == period)
+    result = await db.execute(stmt)
+    latest_time_str = result.scalar()
+    if latest_time_str:
+        latest_time = datetime.strptime(latest_time_str, '%Y-%m-%d %H:%M:%S')
+        next_day = latest_time.date() + timedelta(days=1)
+        begin_time_dt = datetime.combine(next_day, time(0, 0, 0))
+        end_time_dt = datetime.combine(next_day, time(23, 59, 59))
+    else:
+        # 没有数据时可以自定义最早日期
+        start_day = datetime(2024, 1, 1).date()
+        begin_time_dt = datetime.combine(start_day, time(0, 0, 0))
+        end_time_dt = datetime.combine(start_day, time(23, 59, 59))
+
+    begin_time = begin_time_dt.strftime('%Y-%m-%d %H:%M:%S')
+    end_time = end_time_dt.strftime('%Y-%m-%d %H:%M:%S')
+    return begin_time, end_time
+
+
+def get_last_workday_end():
+    last_workday = get_last_workday()
+    end_time_dt = datetime.combine(last_workday, time(23, 59, 59))
+    return end_time_dt
+
 
 
 async def fetch_period_data(db, period, goods, strategyUid, begin_time, end_time):
@@ -80,10 +84,13 @@ async def daily_task():
     log.info(f"定时回测任务启动: {datetime.now()}")
     async with async_db_session() as db:
         for period in CYCLES:
-            begin_time = "2024-01-01 00:00:00"
-            end_time = "2025-07-25 23:59:59"
+            # begin_time = "2025-07-29 00:00:00"
+            # end_time = "2025-07-30 23:59:59"
+            begin_time, end_time = await get_period_latest_time(db, period)
+
+            print(f"开始时间：{begin_time}  结束时间：{end_time}")
             await fetch_period_data(db, period, goods, strategyUid, begin_time, end_time)
 
 scheduler = AsyncIOScheduler()
-# scheduler.add_job(daily_task, "cron", hour=6, minute=15, day_of_week='mon-fri')
-scheduler.add_job(daily_task, "interval", minutes=1)  # 用于测试
+scheduler.add_job(daily_task, "cron", hour=6, minute=15, day_of_week='mon-fri')
+# scheduler.add_job(daily_task, "interval", minutes=1)  # 用于测试
