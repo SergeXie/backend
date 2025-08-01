@@ -475,6 +475,8 @@ async def fetch_trading_data(db, goods, period, model_classes,
                     select_model_class.tradeDateTime.between(previous_working_day_str, end_time)
                 ).order_by(select_model_class.tradeDateTime.desc())
 
+                print("previous_working_day_str:{}".format(previous_working_day_str))
+                print("end_time:{}".format(end_time))
 
             else:
                 print('正常时间检测')
@@ -710,6 +712,19 @@ async def save_trader_result(traderResult, db, strategyUid, period):
     if not traderResult:
         return
 
+    first_exist_stmt = (
+        select(DqlOrder)
+        .where(
+            DqlOrder.period == period,
+            DqlOrder.closeTime.is_(None),
+            DqlOrder.orderType != "close"
+        )
+        .order_by(DqlOrder.openTime.desc())
+        .limit(1)
+    )
+    result = await db.execute(first_exist_stmt)
+    order = result.scalars().first()
+
     # 1. 收集本次所有订单的查重四元组
     unique_keys = set(
         (row.get('openTime'), row.get("timestamp"), row.get('orderType'), row.get('klineId'))
@@ -727,7 +742,7 @@ async def save_trader_result(traderResult, db, strategyUid, period):
     )
     result = await db.execute(exist_stmt)
     exists = set(result.all())
-
+    #
     # 3. 插入不存在的订单
     add_count = 0
     update_count = 0
@@ -735,21 +750,22 @@ async def save_trader_result(traderResult, db, strategyUid, period):
     for row in traderResult:
         key = (row.get('openTime'), row.get("timestamp"), row.get('orderType'), row.get('klineId'))
         if key in exists:
-            log.info("重复订单。跳过新增：{}".format(row))
-            # 有重复，更新tradeid
-            stmt = (
-                update(DqlOrder)
-                .where(
-                    DqlOrder.timestamp == row.get('openTime'),
-                    DqlOrder.timestamp == row.get('timestamp'),
-                    DqlOrder.orderType == row.get('orderType'),
-                    DqlOrder.klineId == row.get('klineId'),
+            if row["openTime"] == order.openTime and row["orderType"] == order.orderType \
+                    and row["klineId"] == order.klineId and row["timestamp"] == order.timestamp:
+                log.info("更新订单：{}".format(row))
+                # 更新查询出来的order的tradeid字段
+                stmt = (
+                    update(DqlOrder)
+                    .where(DqlOrder.pkId == order.pkId)
+                    .values(tradeid=row.get('tradeid', 0))
                 )
-                .values(tradeid=row.get('tradeid', 0))
-            )
-            await db.execute(stmt)
-            update_count += 1
-            continue
+                await db.execute(stmt)
+                update_count += 1
+                continue
+            else:
+                log.info("重复订单。跳过新增：{}".format(row))
+                continue
+
         order = DqlOrder(
             tradingGoods=row.get('goodsId', ''),
             goodsId=row.get('goodsId', ''),
@@ -779,7 +795,7 @@ async def save_trader_result(traderResult, db, strategyUid, period):
 
     await db.commit()
     await db.close()
-    log.info(f"新增订单信息成功，本次插入{add_count}条，跳过{len(traderResult) - add_count}条重复。")
+    log.info(f"新增订单信息成功，本次插入{add_count}条，跳过{len(traderResult) - add_count}条重复。 更新数量：{update_count}")
 
 
 

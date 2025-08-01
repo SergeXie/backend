@@ -24,31 +24,38 @@ def get_last_workday(date=None):
             return date
 
 
-async def get_period_latest_time(db, period):
+async def get_next_begin_and_last_workday_end(db, period):
     stmt = select(func.max(DqlOrder.timestamp)).where(DqlOrder.period == period)
     result = await db.execute(stmt)
     latest_time_str = result.scalar()
     if latest_time_str:
-        latest_time = datetime.strptime(latest_time_str, '%Y-%m-%d %H:%M:%S')
-        next_day = latest_time.date() + timedelta(days=1)
+        begin_time_dt = datetime.strptime(latest_time_str, '%Y-%m-%d %H:%M:%S')
+        next_day = begin_time_dt.date() + timedelta(days=1)
         begin_time_dt = datetime.combine(next_day, time(0, 0, 0))
-        end_time_dt = datetime.combine(next_day, time(23, 59, 59))
+        if period == "H4":
+            begin_time_dt = begin_time_dt - timedelta(days=4)
     else:
-        # 没有数据时可以自定义最早日期
-        start_day = datetime(2024, 1, 1).date()
-        begin_time_dt = datetime.combine(start_day, time(0, 0, 0))
-        end_time_dt = datetime.combine(start_day, time(23, 59, 59))
+        # 没有数据时，自定义最早起点
+        begin_time_dt = datetime(2024, 1, 1, 0, 0, 0)
+
+    # 结束时间是当前日期的上一个工作日的 23:59:59
+    last_workday = get_last_workday()
+    end_time_dt = datetime.combine(last_workday, time(23, 59, 59))
 
     begin_time = begin_time_dt.strftime('%Y-%m-%d %H:%M:%S')
     end_time = end_time_dt.strftime('%Y-%m-%d %H:%M:%S')
     return begin_time, end_time
 
 
-def get_last_workday_end():
-    last_workday = get_last_workday()
-    end_time_dt = datetime.combine(last_workday, time(23, 59, 59))
-    return end_time_dt
-
+def get_last_workday(date=None):
+    if date is None:
+        date = datetime.now().date()
+    else:
+        date = date if isinstance(date, datetime.date) else date.date()
+    while True:
+        date -= timedelta(days=1)
+        if date.weekday() < 5:  # 0=Monday, 4=Friday
+            return date
 
 
 async def fetch_period_data(db, period, goods, strategyUid, begin_time, end_time):
@@ -84,11 +91,10 @@ async def daily_task():
     log.info(f"定时回测任务启动: {datetime.now()}")
     async with async_db_session() as db:
         for period in CYCLES:
-            # begin_time = "2025-07-29 00:00:00"
+            # begin_time = "2024-01-01 00:00:00"
             # end_time = "2025-07-30 23:59:59"
-            begin_time, end_time = await get_period_latest_time(db, period)
-
-            print(f"开始时间：{begin_time}  结束时间：{end_time}")
+            begin_time, end_time = await get_next_begin_and_last_workday_end(db, period)
+            log.info(f"周期：{period} 开始时间：{begin_time}  结束时间：{end_time}")
             await fetch_period_data(db, period, goods, strategyUid, begin_time, end_time)
 
 scheduler = AsyncIOScheduler()
