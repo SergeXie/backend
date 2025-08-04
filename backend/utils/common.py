@@ -376,7 +376,7 @@ async def get_entities_list(entity_type, pageNo=1, pageSize=100, orderBy=0, keyW
         orderDict = {
             0: entity_type.name,  # 默认排序
             -1: desc(entity_type.pinyinname),
-            1: entity_type.pinyinname,
+            1: entity_type.weights,
             -2: desc(entity_type.weights),
             2: entity_type.weights,
         }
