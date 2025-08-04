@@ -55,7 +55,8 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
     :param endTime: 结束时间
     :param strategyUid: 策略uid
     """
-
+    print("beginTime:{}".format(beginTime))
+    print("endTime:{}".format(endTime))
     async with async_db_session() as db:
         order_strategy = (await db.execute(select(DqlOrder).where(DqlOrder.strategyUid == strategyUid))).scalars().first()
         if not order_strategy:
@@ -67,11 +68,12 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                 and_(
                     DqlOrder.tradingGoods == goods,
                     DqlOrder.period == period,
+                    DqlOrder.openTime.between(beginTime, endTime),
                     DqlOrder.timestamp.between(beginTime, endTime),
                     DqlOrder.strategyUid == strategyUid,
                 )
             )
-            .order_by(DqlOrder.timestamp.asc())
+            .order_by(DqlOrder.openTime.asc())
         )
         result = await db.execute(stmt)
         rows = result.scalars().all()
