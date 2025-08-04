@@ -67,11 +67,11 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                 and_(
                     DqlOrder.tradingGoods == goods,
                     DqlOrder.period == period,
-                    DqlOrder.timestamp.between(beginTime, endTime),
+                    DqlOrder.openTime.between(beginTime, endTime),
                     DqlOrder.strategyUid == strategyUid,
                 )
             )
-            .order_by(DqlOrder.timestamp.asc())
+            .order_by(DqlOrder.openTime.asc())
         )
         result = await db.execute(stmt)
         rows = result.scalars().all()
