@@ -127,7 +127,7 @@ async def create_strategy_record(db: AsyncSession, indicator_data_request, strat
 
 @router.get("/list", name="获取所有策略列表")
 async def strategy_list(pageNo: int = Query(1), pageSize: int = Query(100),
-                        orderBy: int = Query(0), keyWord: str = Query('%')):
+                        orderBy: int = Query(1), keyWord: str = Query('%')):
 
     """
     :param pageNo:
