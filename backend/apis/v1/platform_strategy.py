@@ -391,9 +391,11 @@ async def test_result_list(params: TestResultRequest):
         total_count = await db.scalar(select(func.count()).select_from(query.subquery()))
 
         # 分页与排序
-        offset = (params.page_no - 1) * params.page_size
+
         query = query.order_by(desc(DqlStrategyTestResult.weight), order_dict[params.order_by])
-        query = query.offset(offset).limit(params.page_size)
+        if params.page_no and params.page_size:
+            offset = (params.page_no - 1) * params.page_size
+            query = query.offset(offset).limit(params.page_size)
 
         # 定义字段名称
         TestResult = namedtuple("TestResult", [
