@@ -1,8 +1,9 @@
 import calendar
-import datetime
 import json
+import multiprocessing
 import traceback
 import uuid
+from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 from fastapi import APIRouter, Query
 from sqlalchemy import select, and_, update
@@ -14,6 +15,7 @@ from database.db_mysql import async_db_session
 from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult, DqlOrder
 from schemas.base import ErrorModel
 from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData, DqlIndicatorsModel
+from services.indicatory_service import get_indicator_data_async
 from utils.common import select_goods_common, RandomIDGenerator, select_kline_data, Trader, \
     GoodTrader, PandasData, cache, get_indicator_data, model_classes, \
     get_entities_list, generate_random_string, statistics_from_orders, adjust_unpaired_trades
@@ -25,8 +27,7 @@ from utils.indicators import *
 
 router = APIRouter()
 
-# 保存内存变量
-product_list = []
+executor = ProcessPoolExecutor(max_workers=multiprocessing.cpu_count())  # 可调并发数
 
 
 @router.get("/selectAllGoods", name="查询所有平台品种列表",
@@ -627,7 +628,7 @@ async def indicator_front_kline(request: Request):
     :param request:
     :return:
     """
-    return await get_indicator_data(request, "FrontKline", name="history")
+    return await get_indicator_data_async(request, "FrontKline", executor, name="history")
 
 
 @router.post("/indicatorAfterKLine", name="获取指标最新数据")
@@ -637,7 +638,7 @@ async def indicator_after_kline(request: Request):
     :return:
     """
 
-    return await get_indicator_data(request, "AfterKline", name="latest")
+    return await get_indicator_data_async(request, "AfterKline", executor, name="latest")
 
 
 @router.post("/indicatorGoodsPeriodKLines", name="获取指标时段数据")
@@ -646,7 +647,7 @@ async def indicator_goods_kline(request: Request):
     :param request:
     :return:
     """
-    return await get_indicator_data(request, "PeriodKLines", name=None)
+    return await get_indicator_data_async(request, "PeriodKLines", executor, name=None)
 
 
 @router.post("/addLink", name="添加口令链接")

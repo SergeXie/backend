@@ -10,8 +10,8 @@ class ScreenFilter(BaseModel):
 
 
 class TestResultRequest(BaseModel):
-    page_no: int = Field(1, gt=0, alias="pageNo")
-    page_size: int = Field(20, gt=0, alias="pageSize")
+    page_no: Optional[int] = Field(None, gt=0, alias="pageNo")
+    page_size: Optional[int] = Field(None, gt=0, alias="pageSize")
     goods: str = Field('%', alias="goods")
     period: str = Field('%', alias="period")
     strategy_uid: str = Field('%', alias="strategyUid")
