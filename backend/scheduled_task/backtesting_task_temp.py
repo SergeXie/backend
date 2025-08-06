@@ -1,5 +1,5 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from datetime import datetime, timedelta, time
 
 from common.log import log
@@ -90,16 +90,21 @@ async def daily_task():
         log.info("今天是周末，不执行定时任务")
         return
     log.info(f"定时回测任务启动: {datetime.now()}")
+    end_time_dt = datetime.combine(get_last_workday(), time(23, 59, 59))
+    end_time = end_time_dt.strftime('%Y-%m-%d %H:%M:%S')
     async with async_db_session() as db:
+        # 清空 DqlOrder 表
+        await db.execute(delete(DqlOrder))
+        await db.commit()
+        log.info("DqlOrder 表已清空")
+
         for period in CYCLES:
             for _goods in goods:
                 begin_time = "2024-01-01 00:00:00"
-                end_time = "2025-08-05 23:59:59"
-                # begin_time, end_time = await get_next_begin_and_last_workday_end(db, period, _goods)
                 log.info(f"周期：{period} 开始时间：{begin_time}  结束时间：{end_time}")
                 await fetch_period_data(db, period, _goods, strategyUid, begin_time, end_time)
 
         print("完成")
+
 scheduler = AsyncIOScheduler()
-# scheduler.add_job(daily_task, "cron", hour=6, minute=15, day_of_week='mon-fri')
-scheduler.add_job(daily_task, "interval", minutes=1)  # 用于测试
+scheduler.add_job(daily_task, "cron", hour=6, minute=15, day_of_week='mon-fri')
