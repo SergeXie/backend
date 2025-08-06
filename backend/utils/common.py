@@ -706,8 +706,6 @@ async def fetch_indicators(db: AsyncSession, uid: str):
     return select_indicators.scalars().first()
 
 
-from sqlalchemy import select, and_
-
 async def save_trader_result(traderResult, db, strategyUid, period):
     if not traderResult:
         return
