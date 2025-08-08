@@ -58,8 +58,10 @@ class WMPatternRecognizer:
                 "kLineId": zigzag_points[-3]['kLineId'],
                 "timestamp": zigzag_points[-3]['timestamp'],
                 "price": zigzag_points[-3]['price'],
+                "four_price": zigzag_points[-2]['price'],
                 "value": "M形态",
                 "start": zigzag_points[-5]['timestamp'],
+                "start_two": zigzag_points[-4]['timestamp'],
                 "end": zigzag_points[-1]['timestamp'],
                 "high": max(l_val, r_val),  # 形态的最高点是左右肩中较高的那个
                 "low": head_val,  # 形态的最低点是颈线
@@ -97,8 +99,10 @@ class WMPatternRecognizer:
                 "kLineId": zigzag_points[-3]['kLineId'],
                 "timestamp": zigzag_points[-3]['timestamp'],
                 "price": zigzag_points[-3]['price'],
+                "four_price": zigzag_points[-2]['price'],
                 "value": "W形态",
                 "start": zigzag_points[-5]['timestamp'],
+                "start_two": zigzag_points[-4]['timestamp'],
                 "end": zigzag_points[-1]['timestamp'],
                 "high": head_val,  # 形态的最高点是颈线
                 "low": min(l_val, r_val),  # 形态的最低点是左右肩中较低的那个
