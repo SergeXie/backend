@@ -41,12 +41,13 @@ class WMTradingStrategy(CommonStrategy):
         self.baseLots = baseLots
         self.entry_price = None
         self.entry_atr = None
-
+        self.four_price = None
         self.current_trade = None  # 当前持仓信息
         self.handled_patterns = set()  # 已处理形态标识
         self.open_price = None  # 记录开仓价
         self.open_type = None  # "long" or "short"
-
+        is_true = 0
+        self.trend_map = {}  # 时间戳 -> trend_change 值
 
     def next(self):
         self.data_line_count += 1
@@ -60,8 +61,12 @@ class WMTradingStrategy(CommonStrategy):
         close = self.data.close[0]
         open_ = self.data.open[0]
 
+        # 进场点减去第四个点
+
         # 当前趋势
         trend = self.atr_stoploss.lines.trend_change[0]
+        # 记录当前K线的趋势
+        self.trend_map[current_dt.strftime('%Y-%m-%d %H:%M:%S')] = trend
         # 市场的平均波动范围  如果 ATR = 10，说明当前市场每根K线大概有 10 点左右的波动
         atr = self.atr_stoploss.lines.ATR[0]
 
@@ -91,22 +96,29 @@ class WMTradingStrategy(CommonStrategy):
         # ========== 平仓判断 ==========
         if self.position:
             if self.open_type == "long":
-                print("self.entry_atr:{}".format(self.entry_atr))
                 # 趋势反转 or
                 # self.entry_price：开仓时记录下的价格；
                 # close：是当前这根K线的收盘价（现价）
+                # self.four_price 第四个点价格
                 # 当前价格 - 开仓价格 = 当前浮动盈亏 >= 开仓价上涨超过 1 倍 ATR
                 # 且当前这根K线是阴线（close < open_），市场开始转弱，有反转可能  先平仓
-                if trend == -1 or (close - self.entry_price >= self.entry_atr and close < open_):
+                # close < open_ 阴线
+                profit_exists = self.four_price - self.entry_price > 0
+                is_reversal_k = self.four_price < open_
+                print(profit_exists)
+                print(is_reversal_k)
+                if trend == -1 or (profit_exists and is_reversal_k):
                     print(f"[平多] {current_dt}, 原价：{self.entry_price}, 当前：{close}")
                     self.close()
                     self.open_type = None
                     self.entry_price = None
             elif self.open_type == "short":
-                print("self.entry_atr:{}".format(self.entry_atr))
                 # 趋势反转 or 前浮动盈亏 >= 距离开仓价上涨超过 1 倍 ATR（达到预期利润区间）
-                # 且当前这根K线是阴线（close < open_），市场开始转弱，有反转可能 先平仓
-                if trend == 1 or (self.entry_price - close >= self.entry_atr and close > open_):
+                # self.four_price 第四个点价格
+                # close > open_ 代表当前是阳线，市场可能要反弹了 → 先平掉。
+                profit_exists = self.four_price - self.entry_price > 0
+                is_reversal_k = self.four_price > open_
+                if trend == 1 or (profit_exists and is_reversal_k):
                     print(f"[平空] {current_dt}, 原价：{self.entry_price}, 当前：{close}")
                     self.close()
                     self.open_type = None
@@ -115,36 +127,35 @@ class WMTradingStrategy(CommonStrategy):
         # ========== 开仓判断 ==========
         if not self.position:
             for pattern in pattern_titles:
-                # 形态结束时间 + 形态类型（W形态/M形态） 作为唯一标识 key
                 key = (pattern["end"], pattern["value"])
                 if key in self.handled_patterns:
                     continue
 
-                # 判断当前K线时间是否等于该形态的结束点
+                # 当前 K线是否是这个形态的 end 点
                 if pattern["end"] == current_dt.strftime('%Y-%m-%d %H:%M:%S'):
-                    if pattern["value"] == "M形态" and trend == -1:
-                        print(f"[做空] M形态触发 {pattern['end']}，趋势向下 -> 开空 "
-                              f"开仓时间:{current_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+
+                    # 在这里获取 start_two 时刻的趋势值
+                    trend_at_start_two = self.trend_map.get(pattern["start_two"])
+
+                    if pattern["value"] == "M形态" and trend_at_start_two == 1:
+                        print(f"[做空] M形态：开空仓 @ {current_dt} 第二个点的趋势：{trend_at_start_two}")
                         self.order = self.sell(size=self.baseLots)
                         self.entry_price = close
+                        self.four_price = pattern["four_price"]
                         self.entry_atr = atr
                         self.open_type = "short"
 
-                    elif pattern["value"] == "W形态" and trend == 1:
-                        print(f"[做多] W形态触发 {pattern['end']}，趋势向上 -> 开多 "
-                              f"开仓时间:{current_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+                    elif pattern["value"] == "W形态" and trend_at_start_two == -1:
+                        print(f"[做多] W形态：开多仓 @ {current_dt} 第二个点的趋势：{trend_at_start_two}")
                         self.order = self.buy(size=self.baseLots)
                         self.entry_price = close
+                        self.four_price = pattern["four_price"]
                         self.entry_atr = atr
                         self.open_type = "long"
 
-                    # 如果没初始化 self.handled_patterns，就初始化成空集合：
-                    if not hasattr(self, "handled_patterns"):
-                        self.handled_patterns = set()
-
-                    # 把这个已经开仓处理过的形态标记起来，防止后续重复处理这个形态。
                     self.handled_patterns.add(key)
-                    break  # 当前K线只处理一个形态
+                    break
+
 
 
 # 形态关键点位
