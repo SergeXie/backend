@@ -484,16 +484,16 @@ async def fetch_tester_result(request: Request):
                 # 根据策略表查询指标数据
                 strategy = (
                     await db.execute(select(DqlStrategy).where(DqlStrategy.uid == data.strategyUid))).scalars().first()
+                if strategy.indicatorsClassName:
+                    for _indicators in json.loads(strategy.indicatorsClassName):
+                        indicatorData = (await db.execute(select(DqlIndicators).where(
+                            DqlIndicators.className == _indicators))).scalars().first()
+                        if indicatorData:
+                            indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
+                        else:
+                            indicator_dict = None
 
-                for _indicators in json.loads(strategy.indicatorsClassName):
-                    indicatorData = (await db.execute(select(DqlIndicators).where(
-                        DqlIndicators.className == _indicators))).scalars().first()
-                    if indicatorData:
-                        indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
-                    else:
-                        indicator_dict = None
-
-                    indicatorDataList.append(indicator_dict)
+                        indicatorDataList.append(indicator_dict)
 
                 trader_result = json.loads(data.traderResult)
                 data_dict = dict()
