@@ -853,18 +853,6 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
                                 begin_time=indicator_data_request.get("startTime", None),
                                 baseLots=goods_data.baseLots)
 
-        Indicators_subType = None
-        # 指标数据
-        if indicator_classes.get(strategys.indicatorsClassName):
-            query = await db.execute(select(DqlIndicators).where(
-                DqlIndicators.className == strategys.indicatorsClassName))
-
-            DqlIndicators_result = query.scalars().first()
-            Indicators_subType = DqlIndicators_result.subType
-            cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),
-                                indicator_params, indicator_name=None, comments=None,
-                                begin_time=indicator_data_request.get("startTime", None))
-
         # 综合分析器
         cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')
         # 添加最大回撤分析器
@@ -894,23 +882,11 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
         floatingPointValues = trader_return.get('floating_point_values')
         netAssetValues = trader_return.get('net_asset_values')
         newReportTemplate = result[0].analyzers.comprehensive.get_analysis()
-        try:
-            indicator_result_data = result[1].get_analysis()
-            indicator_data_dict = {
-                "startPoint": indicator_result_data[1],
-                "endPoint": indicator_result_data[2],
-                "buyselldata": indicator_result_data[3] if len(indicator_result_data[3:4]) > 0 else {},
-                "data": indicator_result_data[0],
-                "subType": Indicators_subType
-            }
-        except Exception as e:
-            indicator_data_dict = {}
 
         traderReport["maxFUR"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         traderReport["mdr"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         return {"traderResult": traderResult, "traderReport": traderReport,
                 "floatingPointValues": floatingPointValues, "netAssetValues": netAssetValues,
-                "indicatorResult": indicator_data_dict,
                 "newReportTemplate": newReportTemplate}
 
     except Exception as e:
@@ -1300,18 +1276,6 @@ async def task_run_backtest(db: AsyncSession, indicator_data_request, strategys,
                                 goodsId=indicator_data_request.get("goods", None),
                                 baseLots=goods_data.baseLots)
 
-        Indicators_subType = None
-        # 指标数据
-        if indicator_classes.get(strategys.indicatorsClassName):
-            query = await db.execute(select(DqlIndicators).where(
-                DqlIndicators.className == strategys.indicatorsClassName))
-
-            DqlIndicators_result = query.scalars().first()
-            Indicators_subType = DqlIndicators_result.subType
-            cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),
-                                indicator_params, indicator_name=None, comments=None,
-                                begin_time=indicator_data_request.get("startTime", None))
-
         # 综合分析器
         cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')
         # 添加最大回撤分析器
@@ -1341,23 +1305,11 @@ async def task_run_backtest(db: AsyncSession, indicator_data_request, strategys,
         floatingPointValues = trader_return.get('floating_point_values')
         netAssetValues = trader_return.get('net_asset_values')
         newReportTemplate = result[0].analyzers.comprehensive.get_analysis()
-        try:
-            indicator_result_data = result[1].get_analysis()
-            indicator_data_dict = {
-                "startPoint": indicator_result_data[1],
-                "endPoint": indicator_result_data[2],
-                "buyselldata": indicator_result_data[3] if len(indicator_result_data[3:4]) > 0 else {},
-                "data": indicator_result_data[0],
-                "subType": Indicators_subType
-            }
-        except Exception as e:
-            indicator_data_dict = {}
 
         traderReport["maxFUR"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         traderReport["mdr"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         return {"traderResult": traderResult, "traderReport": traderReport,
                 "floatingPointValues": floatingPointValues, "netAssetValues": netAssetValues,
-                "indicatorResult": indicator_data_dict,
                 "newReportTemplate": newReportTemplate}
 
     except Exception as e:

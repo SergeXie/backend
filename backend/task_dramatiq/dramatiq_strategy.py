@@ -82,11 +82,6 @@ async def task_run_backtest(strategy_data_requests, tester_uid, task_name=None):
                                 goodsId=strategy_data_requests.get("goods", None),
                                 begin_time=strategy_data_requests.get("startTime", None),
                                 baseLots=goods_data.baseLots)
-        # 指标数据
-        if indicator_classes.get(strategys.indicatorsClassName):
-            cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),
-                                indicator_params, indicator_name=None, comments=None,
-                                begin_time=strategy_data_requests.get("startTime", None))
 
         # 综合分析器
         cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')
@@ -116,15 +111,6 @@ async def task_run_backtest(strategy_data_requests, tester_uid, task_name=None):
         netAssetValues = trader_return.get('net_asset_values')
         newReportTemplate = result[0].analyzers.comprehensive.get_analysis()
 
-        indicator_result_data = result[1].get_analysis()
-
-        indicator_data_dict = {
-            "startPoint": indicator_result_data[1],
-            "endPoint": indicator_result_data[2],
-            "buyselldata": indicator_result_data[3] if len(indicator_result_data[3:4]) > 0 else {},
-            "data": indicator_result_data[0]
-        }
-
         traderReport["maxFUR"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         traderReport["mdr"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         # 对交易订单 traderResult还在持仓的，进行盈利结算
@@ -142,7 +128,6 @@ async def task_run_backtest(strategy_data_requests, tester_uid, task_name=None):
                                 "floatingPointValues": floatingPointValues,
                                 "netAssetValues": netAssetValues
                             }),
-                            indicatorResult=json.dumps(indicator_data_dict),
                             yieldRate=traderReport.get("yieldRate", 0),
                             isBursted=traderReport.get("isBursted", 0),
                             mdr=traderReport.get("mdr", 0),
