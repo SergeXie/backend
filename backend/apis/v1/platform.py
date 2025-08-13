@@ -82,13 +82,15 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
             return await response_base.fail(msg="时间范围内不存在实时回测报告", data=[])
 
         strategy = (await db.execute(select(DqlStrategy).where(DqlStrategy.uid == strategyUid))).scalars().first()
-
-        indicatorData = (await db.execute(select(DqlIndicators).where(
-            DqlIndicators.className == strategy.indicatorsClassName))).scalars().first()
-        if indicatorData:
-            indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
-        else:
-            indicator_dict = None
+        indicatorDataList = list()
+        for _indicator in json.loads(strategy.indicatorsClassName):
+            indicatorData = (await db.execute(select(DqlIndicators).where(
+                DqlIndicators.className == _indicator))).scalars().first()
+            if indicatorData:
+                indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
+            else:
+                indicator_dict = None
+            indicatorDataList.append(indicator_dict)
 
         digits = (await db.execute(
             select(DplGoodsTest.digits).where(DplGoodsTest.goods == goods)
@@ -113,7 +115,7 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                     "strategyUid": strategyUid,"testerUids": strategyUid, "traderReportType": 3,
                     "netAssetValues": trader_report["cashCurve"], "parameterList": json.loads(strategy.parameters),
                     "traderResult": traderResult, "traderReport": trader_report,
-                    "indicatorData": [indicator_dict] if indicator_dict else []}]
+                    "indicatorData": indicatorDataList}]
 
     return await response_base.success(data=result_data)
 
