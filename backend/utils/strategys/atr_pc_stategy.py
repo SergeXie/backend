@@ -5,10 +5,11 @@ import backtrader as bt
 from utils.indicators import ATRStopLoss
 from utils.module.wm_pattern_recognizer import WMPatternRecognizer
 from utils.module.zigzag_calculator import ZigZagCalculator
+from utils.indicators.packconnection import IndicatorDataProcessor
 from utils.public_strategy import CommonStrategy
 
 
-class WMTradingStrategy(CommonStrategy):
+class PCTradingStrategy(CommonStrategy):
     params = dict(inp_depth=12)
 
     def __init__(self, indicator_params, goodsId=None, begin_time=None, baseLots=0.1):
@@ -22,13 +23,21 @@ class WMTradingStrategy(CommonStrategy):
                                         atr_len=self.indicator_params.get("period", 10),
                                         multiplier=self.indicator_params.get("Multiplier", 3.0))
 
-        # ========== 2. 初始化 WM 形态相关 ==========
+        # ========== 2. 初始化 峰值连线 ==========
         # 调用WM形态
-        self.zigzag_calculator = ZigZagCalculator(inp_depth=self.p.inp_depth)
+        self.data_processor = IndicatorDataProcessor(self.data, indicator_params)
         self.pattern_recognizer = WMPatternRecognizer()
-        self.last_pattern_ts = None
+        self.zigzag = []
+
+        # self.zigzag_calculator = ZigZagCalculator(inp_depth=self.p.inp_depth)
+
+        # self.last_pattern_ts = None
 
         # ========== 3. 控制变量 ==========
+        self.last_from = ''
+        self.sum_po = 0
+
+
         self.data_line_count = 0
         self.prev_trend = 0
         self.dataspread = self.datas[0].spread
@@ -43,13 +52,11 @@ class WMTradingStrategy(CommonStrategy):
         self.open_type = None  # "long" or "short"
         self.open_time_close = None
         self.four_to_three_price = None
-        self.ProfitRatio = self.indicator_params.get("ProfitRatio", 1.0)
-        print("ProfitRatio:{}".format(self.ProfitRatio))
         self.con1 = False
         self.trend_map = {}  # 时间戳 -> trend_change 值
         self.last_trend = 0
+        self.ProfitRatio = self.indicator_params.get("ProfitRatio", 1.0)
 
-        # ========== 4. 参数 ==========
         self.price_diff = 2
 
     def next(self):
@@ -74,24 +81,39 @@ class WMTradingStrategy(CommonStrategy):
         atr = self.atr_stoploss.lines.ATR[0]
 
         # ========== 更新 ZigZag 点 ==========
-        current_kline = {
-            "kLineId": len(self),
-            "timestamp": current_dt.strftime('%Y-%m-%d %H:%M:%S'),
-            "open": open_,
-            "high": self.data.high[0],
-            "low": self.data.low[0],
-            "close": close,
-            "volume": self.data.volume[0],
-        }
+        result_data, result_data_original, po_high, po_low = self.data_processor.process_next_data()
+        # print(current_dt,  po_high, po_low)
+        # print(result_data) if len(result_data) > 0 else None
+        # self.result_data.extend(result_data)  # 原点
+        # self.result_data_original.extend(result_data_original)  # 偏点
+        # self.po_high.extend(po_high)  # 破高
+        # self.po_low.extend(po_low)  # 破低
 
-        updated = self.zigzag_calculator.process_kline(current_kline)
-
-        zigzag_pts = self.zigzag_calculator.get_zigzag_points()
-        index2ts, ts2index = self.zigzag_calculator.get_index_timestamp_maps()
-        self.pattern_recognizer.analyze_zigzag_points(zigzag_pts, index2ts, ts2index)
-
+        if len(result_data) != 0:
+            if self.last_from == 'po_high' or self.last_from == 'po_low':
+                self.zigzag.pop(-1)
+            self.zigzag.append(result_data[0])
+            self.last_from = 'result_data'
+        if len(po_high) != 0:
+            if self.last_from == 'po_high':
+                self.zigzag.pop(-1)
+            self.zigzag.append(po_high[0])
+            self.last_from = 'po_high'
+        if len(po_low) != 0:
+            if self.last_from == 'po_low':
+                self.zigzag.pop(-1)
+            self.zigzag.append(po_low[0])
+            self.last_from = 'po_low'
+        # print(self.zigzag)
+        # self.pattern_recognizer.analyze_zigzag_points(self.zigzag)
+        # pattern_titles = self.pattern_recognizer.get_pattern_titles()
+        dict_index2ts, dict_ts2index = self.data_processor.get_index_timestamp_maps()
+        self.pattern_recognizer.analyze_zigzag_points(self.zigzag, dict_index2ts, dict_ts2index)
         pattern_titles = self.pattern_recognizer.get_pattern_titles()
-        # print('还是这里', pattern_titles)
+        # print(pattern_titles)
+
+
+
         if not pattern_titles:
             return
 
@@ -161,7 +183,7 @@ class WMTradingStrategy(CommonStrategy):
                     trend_at_start_two = self.trend_map.get(pattern["start_two"])
 
                     if pattern["value"] == "M形态" and trend_at_start_two == 1:
-                        print(f"[做空] M形态：开空仓 @ {current_dt} 第二个点的趋势：{trend_at_start_two}")
+                        # print(f"[做空] M形态：开空仓 @ {current_dt} 第二个点的趋势：{trend_at_start_two}")
                         self.order = self.sell(size=self.baseLots)
                         self.open_time_close = close
                         self.four_to_three_price = abs(pattern["four_price"] - pattern["price"])
@@ -169,7 +191,7 @@ class WMTradingStrategy(CommonStrategy):
                         self.open_type = "short"
 
                     elif pattern["value"] == "W形态" and trend_at_start_two == -1:
-                        print(f"[做多] W形态：开多仓 @ {current_dt} 第二个点的趋势：{trend_at_start_two}")
+                        # print(f"[做多] W形态：开多仓 @ {current_dt} 第二个点的趋势：{trend_at_start_two}")
                         self.order = self.buy(size=self.baseLots)
                         self.open_time_close = close
                         self.four_to_three_price = abs(pattern["four_price"] - pattern["price"])
@@ -178,6 +200,7 @@ class WMTradingStrategy(CommonStrategy):
 
                     self.handled_patterns.add(key)
                     break
+
 
 
 
@@ -192,7 +215,5 @@ class WMTradingStrategy(CommonStrategy):
 #     {'kLineId': 10048296.0, 'timestamp': '2025-07-18 05:00:00', 'price': 3344.07, 'value': 'W形态',
 #      'start': '2025-07-16 18:00:00', 'end': '2025-07-18 10:00:00', 'high': 3344.07, 'low': 3309.7}]
 #
-
-
 
 

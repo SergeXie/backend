@@ -57,12 +57,14 @@ class IndicatorDataProcessor:
                 "kLineId": current_kline_id,
                 "timestamp": self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
                 "price": self.TI.lines.mountain_poit_h_po[0],
+                "index": len(self.data)
             })
         if not np.isnan(self.TI.lines.mountain_poit_l_po[0]) and self.TI.lines.mountain_poit_l_po[0] != self.TI.lines.mountain_poit[0]:
             po_low.append({
                 "kLineId": current_kline_id,
                 "timestamp": self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
                 "price": self.TI.lines.mountain_poit_l_po[0],
+                "index": len(self.data)
             })
 
         self.result_data = result_data
@@ -364,7 +366,7 @@ class ResponsePCData(bt.Strategy):
 
     def next(self):
         result_data, result_data_original, po_high, po_low = self.data_processor.process_next_data()
-        print(result_data)
+        # print("破", po_high)
         self.result_data.extend(result_data)  # 原点
         self.result_data_original.extend(result_data_original)  # 偏点
         self.po_high.extend(po_high)  # 破高
