@@ -60,7 +60,6 @@ class ResponseWMData(bt.Strategy):
         self.Z_from = 'pc' if Z_from == 0 else 'zig'
 
 
-
     def next(self):
         if self.Z_from == 'zig':
 
@@ -92,7 +91,7 @@ class ResponseWMData(bt.Strategy):
         #################################################################################################
         elif self.Z_from == 'pc':
             result_data, result_data_original, po_high, po_low = self.data_processor.process_next_data()
-            # print(result_data)
+            # print('这里',po_high)
             self.result_data.extend(result_data)  # 原点
             self.result_data_original.extend(result_data_original)  # 偏点
             self.po_high.extend(po_high)  # 破高
@@ -108,7 +107,6 @@ class ResponseWMData(bt.Strategy):
          self.title, self.titlepeak, self.titlebottol, self.title_offset,
          self.titlepeak_offset, self.titlebottol_offset, offset_index) = self.data_processor.process_stop_data(self.result_data, self.result_data_original)
 
-
     def get_analysis(self):
         # # 组织数据结构，从独立的算法类获取数据
         # zigzag_points = self.zigzag_calculator.get_zigzag_points()
@@ -123,6 +121,8 @@ class ResponseWMData(bt.Strategy):
         # print(self.pattern_recognizer.get_zigzag_points())
 
         pattern_titles = self.pattern_recognizer.get_pattern_titles()  # 获取原始形态标题列表
+        maybe_pattern_titles = self.pattern_recognizer.get_maybe_detected_patterns()
+        print("这里@@@@@@@@@@@@", maybe_pattern_titles)
         # formatted_m_w_patterns = self.pattern_recognizer.get_formatted_m_w_patterns(dict_index2ts,
         #                                                                             dict_ts2index)  # 获取格式化M/W形态数据
 
@@ -134,6 +134,7 @@ class ResponseWMData(bt.Strategy):
                 "position": 'top',
                 "data": pattern_titles
             },
+
             # {
             #     "type": "picture",  # 假设'picture'是您自定义的一种绘图类型，用于M/W形态
             #     "data": formatted_m_w_patterns
