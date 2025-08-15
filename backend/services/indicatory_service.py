@@ -25,6 +25,8 @@ async def get_indicator_data_async(request: Request, data_type: str, executor, n
                 indicator_params = request_item.get("parameter", {})
                 indicator_params['Kline_period'] = request_item.get("period", None)
                 indicator_params['Kline_goods'] = request_item.get("goods", None)
+                indicator_params['begin_time'] = request_item.get("beginTime", None)
+                indicator_params['end_time'] = request_item.get("endTime", None)
                 period = request_item.get("period", None)
                 period_tuple = None
                 if period and period[0] in ['H', 'W', 'D', 'M']:

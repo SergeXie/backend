@@ -89,7 +89,7 @@ async def task_run_backtest(strategy_data_requests, tester_uid, task_name=None):
         cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
 
         # 设置初始资金
-        cerebro.broker.set_cash(float(strategy_data_requests.get("initialCash", 10000)))
+        cerebro.broker.set_cash(float(strategy_data_requests.get("initialCash", 100000)))
 
         # mult 合约单位100  leverage 杠杆
         cerebro.broker.setcommission(

@@ -1,13 +1,19 @@
 import backtrader as bt
 import os
 import numpy as np
+import requests
 import tensorflow as tf
 from tensorflow import keras
 import backtrader as bt
 import joblib
+
+from clients.dl_api_client import call_dl_api
+from common.log import log
+from core.conf import settings
 from models.deepmodel import create_googlenet_1d
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import AUC
+
 
 class ResponseDL2Data(bt.Strategy):
     def __init__(self, indicator_params, indicator_name, comments):
@@ -19,26 +25,21 @@ class ResponseDL2Data(bt.Strategy):
         self.result_data_dict = dict()
         self.close_data = np.array(self.data.close)
 
-
+        # 解析传递的参数
         self.distribution = self.indicator_params.get("TimePeriodssf")
         self.distribution = str(self.distribution).replace("[", "").replace("]", "")
         self.distribution = self.distribution.split(',')
         self.distribution = list(map(float, self.distribution))
         tmp1, tmp2 = split_and_sort_probability(self.distribution)
         self.distribution = tmp1 + tmp2
+
         # print(type(self.distribution),self.distribution)
         # 后期替换为可输入的参数
         # self.distribution = [-3, -2, -1.5, -1, -0.5, 3, 2, 1.5, 1, 0.5]
-        kline_goods = self.indicator_params.get("Kline_goods",'')
-        kline_period = self.indicator_params.get("Kline_period", '')
-        model_index = [kline_goods] + [kline_period]
-
-        old_model_path = '_'.join(str(i) for i in model_index)
-        new_model_path = '_'.join(str(i) for i in self.distribution + [kline_goods] + [kline_period])
-        print(old_model_path, new_model_path)
-
-
-        self.model = train_model(self, self.distribution, old_model_path, new_model_path)  # 数据  y的分布  模型路径和名称
+        self.kline_goods = self.indicator_params.get("Kline_goods",'')
+        self.kline_period = self.indicator_params.get("Kline_period", '')
+        self.end_time = self.indicator_params.get("end_time", '')
+        self.begin_time = self.indicator_params.get("begin_time", '')
 
         self.Id_TS_dict = {}
         self.BarState = []
@@ -46,74 +47,30 @@ class ResponseDL2Data(bt.Strategy):
         self.X_test = []
         self.result_data_pre = []
 
-
-
     def next(self):
-        self.Id_TS_dict[int(self.data.klineId[0])] = self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')
-
-        # 整理出测试数据的格式，保证长度为100
-        self.X_test.append(self.data.close[0])
-        if len(self.X_test) < 100:
-            return
-        elif len(self.X_test) > 100:
-            self.X_test.pop(0)
-        X_test = self.X_test.copy()
-        # print(X_test[-1])
-
-        # 进行归一化
-        X_test = np.array(X_test).reshape(-1, 1)
-        ss = joblib.load('scalar02')
-        X_test = ss.fit_transform(X_test)
-        # 调整输入数据的维度
-        X_test = np.reshape(X_test, (X_test.shape[1], X_test.shape[0], 1))
-        predicted_prices = self.model.predict(X_test)
-        predicted_prices = predicted_prices * 100
-        # predicted_prices = self.scaler.inverse_transform(predicted_prices)
-        # [-30, -20, -10, -5, -3][30, 20, 10, 5, 3]
-        predicted_prices = np.round(predicted_prices[0], 2)
-        # predicted_prices = [str(i) for i in predicted_prices]
-
-
-        # 获取最大值的索引
-        max_index = np.argmax(predicted_prices)
-        diff = self.distribution[max_index]
-
-
-        # self.data.buflen()
-        current_kline_id = int(self.data.klineId[0])
-
-        try:
-            # 将数据添加到结果列表
-            self.result_data_pre.append({
-                "kLineId": int(self.data.klineId[1]),
-                "timestamp": self.datas[0].datetime.datetime(1).strftime('%Y-%m-%d %H:%M:%S'),
-                "price":  self.data.close[0] + diff,
-            })
-            # print(self.data.close[0]+diff)
-            # print(diff, self.distribution)
-        except IndexError as e:
-            pass
-
-
+        pass
 
     def stop(self):
-        pass
-        X_test = []
-        for i in range(-100, 0):
-            X_test.append(self.data.close[i])
-        X_test = np.array(X_test).reshape(-1, 1)
-        ss = joblib.load('scalar02')
-        X_test = ss.fit_transform(X_test)
-
-        # 调整输入数据的维度
-        X_test = np.reshape(X_test, (X_test.shape[1], X_test.shape[0], 1))
-        predicted_prices = self.model.predict(X_test)
-        predicted_prices = predicted_prices*100
-        # predicted_prices = self.scaler.inverse_transform(predicted_prices)
-        # [-30, -20, -10, -5, -3][30, 20, 10, 5, 3]
-        predicted_prices = np.round(predicted_prices[0], 2)
-        predicted_prices = [str(i) for i in predicted_prices]
-        print(predicted_prices)
+        """
+           方法中调用 DL API
+        """
+        try:
+            log.info(f"正在请求 DL API ... 参数：{self.indicator_params}")
+            data = call_dl_api(
+                url=settings.AI_URL,
+                goods=self.kline_goods,
+                period=self.kline_period,
+                begin_time=self.begin_time,
+                end_time=self.end_time,
+                time_periodssf=self.distribution,
+                limit=500,
+                is_desc=True,
+                timeout=120.0,
+            )
+            prices, predicted_prices = data[0], data[1]
+            log.info(f"DL API 调用成功: prices={prices}, probabilities={predicted_prices}")
+        except Exception as e:
+            log.exception("调用 DL API 失败: %s", e)
 
         for i in self.distribution:
             self.BarState.append([
@@ -133,7 +90,6 @@ class ResponseDL2Data(bt.Strategy):
             ])
 
         print(self.data.close[0])
-
 
     def get_analysis(self):
         self.result_data_dict["lines"] = []
