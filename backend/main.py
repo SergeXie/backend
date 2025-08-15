@@ -2,8 +2,7 @@ import sys
 import uvicorn
 from common.log import log
 from core.registrar import register_app
-from scheduled_task.backtesting_task import scheduler
-from contextlib import asynccontextmanager
+from scheduled_task.backtesting_task_temp import scheduler
 
 app = register_app()
 
@@ -22,4 +21,4 @@ async def startup_event():
 if __name__ == "__main__":
 
     log.info("启动")
-    uvicorn.run(app, host="0.0.0.0", port=8081)
+    uvicorn.run(app, host="0.0.0.0", port=8082)

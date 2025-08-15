@@ -19,7 +19,8 @@ from apis.v1.platform import model_classes
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest, DqlOrder
+from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest, DqlOrder, DqlIndicators
+from schemas.platorm import DqlIndicatorsModel
 from schemas.platorm_strategr_schemas import TestResultRequest, RealOrderFloatingProfitModel
 from utils.common import get_entities_list, generate_random_string, \
     generate_lazy_pinyin, \
@@ -127,7 +128,7 @@ async def create_strategy_record(db: AsyncSession, indicator_data_request, strat
 
 @router.get("/list", name="获取所有策略列表")
 async def strategy_list(pageNo: int = Query(1), pageSize: int = Query(100),
-                        orderBy: int = Query(0), keyWord: str = Query('%')):
+                        orderBy: int = Query(1), keyWord: str = Query('%')):
 
     """
     :param pageNo:
@@ -391,9 +392,11 @@ async def test_result_list(params: TestResultRequest):
         total_count = await db.scalar(select(func.count()).select_from(query.subquery()))
 
         # 分页与排序
-        offset = (params.page_no - 1) * params.page_size
+
         query = query.order_by(desc(DqlStrategyTestResult.weight), order_dict[params.order_by])
-        query = query.offset(offset).limit(params.page_size)
+        if params.page_no and params.page_size:
+            offset = (params.page_no - 1) * params.page_size
+            query = query.offset(offset).limit(params.page_size)
 
         # 定义字段名称
         TestResult = namedtuple("TestResult", [
@@ -477,6 +480,20 @@ async def fetch_tester_result(request: Request):
                     DplGoodsTest.goods == data.goodsId
                 ))
                 result_goods_digits = goods_digits.scalars().first()
+                indicatorDataList = list()
+                # 根据策略表查询指标数据
+                strategy = (
+                    await db.execute(select(DqlStrategy).where(DqlStrategy.uid == data.strategyUid))).scalars().first()
+                if strategy.indicatorsClassName:
+                    for _indicators in json.loads(strategy.indicatorsClassName):
+                        indicatorData = (await db.execute(select(DqlIndicators).where(
+                            DqlIndicators.className == _indicators))).scalars().first()
+                        if indicatorData:
+                            indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
+                        else:
+                            indicator_dict = None
+
+                        indicatorDataList.append(indicator_dict)
 
                 trader_result = json.loads(data.traderResult)
                 data_dict = dict()
@@ -497,7 +514,7 @@ async def fetch_tester_result(request: Request):
                 data_dict["spread"] = data.spread
                 data_dict["traderResult"] = trader_result.get("traderResult", [])
                 data_dict["traderReport"] = trader_result.get("traderReport", [])
-                data_dict["indicatorResult"] = json.loads(data.indicatorResult) if data.indicatorResult else None
+                data_dict["indicatorResult"] = None
                 data_dict["floatingPointValues"] = trader_result.get("floatingPointValues", [])
                 data_dict["netAssetValues"] = trader_result.get("netAssetValues", [])
                 data_dict["status"] = data.status
@@ -506,9 +523,9 @@ async def fetch_tester_result(request: Request):
                 data_dict["newReportTemplate"] = json.loads(data.newReportTemplate) if data.newReportTemplate else None
                 data_dict["createTime"] = data.createTime.strftime('%Y-%m-%d %H:%M:%S')
                 data_dict["traderReportType"] = data.traderReportType
+                data_dict["indicatorData"] = indicatorDataList
 
                 result_data.append(data_dict)
-
 
             return await response_base.success(data=result_data)
 
@@ -780,7 +797,6 @@ async def indicator_sync_batch_test(request: Request):
             strategy_data_requests["netAssetValues"] = backtest_result["netAssetValues"]
             strategy_data_requests["traderResult"] = traderResult
             strategy_data_requests["traderReport"] = traderReport
-            strategy_data_requests["indicatorResult"] = backtest_result["indicatorResult"]
             strategy_data_requests["newReportTemplate"] = backtest_result["newReportTemplate"]
 
             # 对交易订单 traderResult还在持仓的，进行盈利结算 TODO 暂时保留
@@ -797,7 +813,6 @@ async def indicator_sync_batch_test(request: Request):
                                                  "traderReport": traderReport,
                                                  "floatingPointValues": backtest_result["floatingPointValues"],
                                                  "netAssetValues": backtest_result["netAssetValues"]}),
-                        indicatorResult=json.dumps(backtest_result["indicatorResult"]),
                         yieldRate=traderReport.get("yieldRate", 0),
                         isBursted=traderReport.get("isBursted", 0),
                         mdr=traderReport.get("mdr", 0),

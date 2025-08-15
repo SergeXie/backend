@@ -6,11 +6,11 @@ import re
 import string
 import time
 import traceback
-from collections import Counter
+from collections import Counter, defaultdict
 
 import pandas as pd
 from cachetools import TTLCache
-from sqlalchemy import select, and_, desc
+from sqlalchemy import select, and_, desc, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 from common.log import log
@@ -376,7 +376,7 @@ async def get_entities_list(entity_type, pageNo=1, pageSize=100, orderBy=0, keyW
         orderDict = {
             0: entity_type.name,  # 默认排序
             -1: desc(entity_type.pinyinname),
-            1: entity_type.pinyinname,
+            1: entity_type.weights,
             -2: desc(entity_type.weights),
             2: entity_type.weights,
         }
@@ -475,6 +475,9 @@ async def fetch_trading_data(db, goods, period, model_classes,
                     select_model_class.tradeDateTime.between(previous_working_day_str, end_time)
                 ).order_by(select_model_class.tradeDateTime.desc())
 
+                print("previous_working_day_str:{}".format(previous_working_day_str))
+                print("end_time:{}".format(end_time))
+
             else:
                 print('正常时间检测')
                 # 正常根据起始时间至结束时间查询
@@ -484,6 +487,7 @@ async def fetch_trading_data(db, goods, period, model_classes,
                     select_model_class.type == period,
                     select_model_class.tradeDateTime.between(begin_time, end_time)
                     ).order_by(select_model_class.tradeDateTime.desc())
+
 
             details = await db.execute(query)
 
@@ -703,9 +707,65 @@ async def fetch_indicators(db: AsyncSession, uid: str):
 
 
 async def save_trader_result(traderResult, db, strategyUid, period):
+    if not traderResult:
+        return
+
+    first_exist_stmt = (
+        select(DqlOrder)
+        .where(
+            DqlOrder.period == period,
+            DqlOrder.closeTime.is_(None),
+            DqlOrder.orderType != "close"
+        )
+        .order_by(DqlOrder.openTime.desc())
+        .limit(1)
+    )
+    result = await db.execute(first_exist_stmt)
+    order = result.scalars().first()
+
+    # 1. 收集本次所有订单的查重四元组
+    unique_keys = set(
+        (row.get('openTime'), row.get("timestamp"), row.get('orderType'), row.get('klineId'))
+        for row in traderResult
+    )
+
+    # 2. 批量查找数据库已存在的订单
+    exist_stmt = select(DqlOrder.openTime,DqlOrder.timestamp,DqlOrder.orderType, DqlOrder.klineId).where(
+        tuple_(
+            DqlOrder.openTime,
+            DqlOrder.timestamp,
+            DqlOrder.orderType,
+            DqlOrder.klineId,
+        ).in_(unique_keys)
+    )
+    result = await db.execute(exist_stmt)
+    exists = set(result.all())
+    #
+    # 3. 插入不存在的订单
+    add_count = 0
+    update_count = 0
+
     for row in traderResult:
+        key = (row.get('openTime'), row.get("timestamp"), row.get('orderType'), row.get('klineId'))
+        if key in exists:
+            if row["openTime"] == order.openTime and row["orderType"] == order.orderType \
+                    and row["klineId"] == order.klineId and row["timestamp"] == order.timestamp:
+                log.info("更新订单：{}".format(row))
+                # 更新查询出来的order的tradeid字段
+                stmt = (
+                    update(DqlOrder)
+                    .where(DqlOrder.pkId == order.pkId)
+                    .values(tradeid=row.get('tradeid', 0))
+                )
+                await db.execute(stmt)
+                update_count += 1
+                continue
+            else:
+                log.info("重复订单。跳过新增：{}".format(row))
+                continue
+
         order = DqlOrder(
-            tradingGoods=row.get('goodsId', ''),  # tradingGoods 和 goodsId 用同一个
+            tradingGoods=row.get('goodsId', ''),
             goodsId=row.get('goodsId', ''),
             period=period,
             tradeid=row.get('tradeid', 0),
@@ -729,9 +789,12 @@ async def save_trader_result(traderResult, db, strategyUid, period):
             strategyUid=strategyUid,
         )
         db.add(order)
+        add_count += 1
 
     await db.commit()
-    log.info("新增订单信息成功！")
+    await db.close()
+    log.info(f"新增订单信息成功，本次插入{add_count}条，跳过{len(traderResult) - add_count}条重复。 更新数量：{update_count}")
+
 
 
 
@@ -790,18 +853,6 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
                                 begin_time=indicator_data_request.get("startTime", None),
                                 baseLots=goods_data.baseLots)
 
-        Indicators_subType = None
-        # 指标数据
-        if indicator_classes.get(strategys.indicatorsClassName):
-            query = await db.execute(select(DqlIndicators).where(
-                DqlIndicators.className == strategys.indicatorsClassName))
-
-            DqlIndicators_result = query.scalars().first()
-            Indicators_subType = DqlIndicators_result.subType
-            cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),
-                                indicator_params, indicator_name=None, comments=None,
-                                begin_time=indicator_data_request.get("startTime", None))
-
         # 综合分析器
         cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')
         # 添加最大回撤分析器
@@ -831,23 +882,11 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
         floatingPointValues = trader_return.get('floating_point_values')
         netAssetValues = trader_return.get('net_asset_values')
         newReportTemplate = result[0].analyzers.comprehensive.get_analysis()
-        try:
-            indicator_result_data = result[1].get_analysis()
-            indicator_data_dict = {
-                "startPoint": indicator_result_data[1],
-                "endPoint": indicator_result_data[2],
-                "buyselldata": indicator_result_data[3] if len(indicator_result_data[3:4]) > 0 else {},
-                "data": indicator_result_data[0],
-                "subType": Indicators_subType
-            }
-        except Exception as e:
-            indicator_data_dict = {}
 
         traderReport["maxFUR"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         traderReport["mdr"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         return {"traderResult": traderResult, "traderReport": traderReport,
                 "floatingPointValues": floatingPointValues, "netAssetValues": netAssetValues,
-                "indicatorResult": indicator_data_dict,
                 "newReportTemplate": newReportTemplate}
 
     except Exception as e:
@@ -948,9 +987,25 @@ def calculate_max_fur(account_list):
 
 
 def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
-    # 只取orderType为close的订单，按timestamp升序
+    # 第一步：找出未配对（没有close）对应的 tradeid
+    tradeid_to_types = defaultdict(list)
+    for item in data:
+        tradeid_to_types[item["tradeid"]].append(item["orderType"])
+    unpaired_ids = {tid for tid, types in tradeid_to_types.items() if 'close' not in types}
+
+    # 第二步：提取 close 单
     orders = [x for x in data if x["orderType"] == "close"]
+
+    # 第三步：把未配对的开仓单也加进去（非 close 且 tradeid 属于未配对的）
+    unpaired_open_orders = [
+        x for x in data
+        if x["orderType"] != "close" and x["tradeid"] in unpaired_ids
+    ]
+    orders.extend(unpaired_open_orders)
+
+    # 第四步：按 timestamp 升序排序
     orders.sort(key=lambda x: x["timestamp"])
+
     if not orders:
         return {}
 
@@ -1047,8 +1102,8 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
     average_consecutive_losses = sum(cons_loss_list) / len(cons_loss_list) if cons_loss_list else 0
 
     # 多空单
-    short_positions = [o for o in orders if o["size"] < 0]
-    long_positions = [o for o in orders if o["size"] > 0]
+    short_positions = [o for o in orders if o["placeType"] == "sell"]
+    long_positions = [o for o in orders if o["placeType"] == "buy"]
     short_positions_num = len(short_positions)
     long_positions_num = len(long_positions)
     short_positions_ratio = short_positions_num / total_trades if total_trades else 0
@@ -1108,10 +1163,12 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
         "maxFUR": calculate_max_fur(data),
         "cashCurve": cash_curve
     }
+
     return result
 
 
-async def adjust_unpaired_trades(db, beginTime, trader_result, traderReport=None):
+async def adjust_unpaired_trades(db, beginTime, trader_result,
+                                 traderReport=None, starting_cash: float = 100000):
     """
     查找未配对的 tradeid 并修改其 pnl 值，返回更新后的 trader_result 列表
     :param end_dt: 数据库对象
@@ -1120,11 +1177,17 @@ async def adjust_unpaired_trades(db, beginTime, trader_result, traderReport=None
     :return: 修改后的完整交易记录列表
     """
     endTime = datetime.datetime.now()
-    # 统计 tradeid 出现次数
-    tradeid_counts = Counter(item["tradeid"] for item in trader_result)
+    # 1. 构建 tradeid -> list of orderType 映射
+    tradeid_to_types = defaultdict(list)
+    cash = starting_cash
 
-    # 找到只出现一次的 tradeid（未配对）
-    unpaired_ids = {tid for tid, count in tradeid_counts.items() if count == 1}
+    for item in trader_result:
+        cash += item.get("pnl", 0.0)  # 先更新现金净值
+        item["initialCash"] = round(cash, 2)  # 记录更新后的净值
+        tradeid_to_types[item["tradeid"]].append(item["orderType"])
+
+    # 2. 找出那些没有 'close' 类型的 tradeid（表示没有被平仓） 找到未配对的 tradeid（即只出现一次）
+    unpaired_ids = {tid for tid, types in tradeid_to_types.items() if 'close' not in types}
 
     # 修改原列表（in-place 修改）
     for item in trader_result:
@@ -1144,13 +1207,15 @@ async def adjust_unpaired_trades(db, beginTime, trader_result, traderReport=None
             result = await db.execute(select_k_time)
             kline_data = result.scalar_one_or_none()
             if kline_data:
+                size = abs(item["size"])  # 避免负数干扰计算
+
                 item["price"] = kline_data.closed
                 if item["orderType"] == "sell":
                     # 做空 PnL = (开仓价格−平仓价格（现价 K线M1的收盘价）)×交易手数×杠杆−隔夜利息
-                    item["pnl"] = round((item["openPrice"] - kline_data.closed) * (item["size"] * goods_.profitRatio), 3)
+                    item["pnl"] = round((item["openPrice"] - kline_data.closed) * (size * goods_.profitRatio), 3)
                 else:
                     # 做多 PnL=(平仓价格（现价 K线M1的收盘价）− 开仓价格)×交易手数×杠杆−隔夜利息
-                    item["pnl"] = round((kline_data.closed - item["openPrice"]) * (item["size"] * goods_.profitRatio), 3)
+                    item["pnl"] = round((kline_data.closed - item["openPrice"]) * (size * goods_.profitRatio), 3)
 
                 item["initialCash"] += item["pnl"]
 
@@ -1211,18 +1276,6 @@ async def task_run_backtest(db: AsyncSession, indicator_data_request, strategys,
                                 goodsId=indicator_data_request.get("goods", None),
                                 baseLots=goods_data.baseLots)
 
-        Indicators_subType = None
-        # 指标数据
-        if indicator_classes.get(strategys.indicatorsClassName):
-            query = await db.execute(select(DqlIndicators).where(
-                DqlIndicators.className == strategys.indicatorsClassName))
-
-            DqlIndicators_result = query.scalars().first()
-            Indicators_subType = DqlIndicators_result.subType
-            cerebro.addstrategy(indicator_classes.get(strategys.indicatorsClassName),
-                                indicator_params, indicator_name=None, comments=None,
-                                begin_time=indicator_data_request.get("startTime", None))
-
         # 综合分析器
         cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')
         # 添加最大回撤分析器
@@ -1252,23 +1305,11 @@ async def task_run_backtest(db: AsyncSession, indicator_data_request, strategys,
         floatingPointValues = trader_return.get('floating_point_values')
         netAssetValues = trader_return.get('net_asset_values')
         newReportTemplate = result[0].analyzers.comprehensive.get_analysis()
-        try:
-            indicator_result_data = result[1].get_analysis()
-            indicator_data_dict = {
-                "startPoint": indicator_result_data[1],
-                "endPoint": indicator_result_data[2],
-                "buyselldata": indicator_result_data[3] if len(indicator_result_data[3:4]) > 0 else {},
-                "data": indicator_result_data[0],
-                "subType": Indicators_subType
-            }
-        except Exception as e:
-            indicator_data_dict = {}
 
         traderReport["maxFUR"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         traderReport["mdr"] = float(format(drawdown.max.drawdown, f".{int(2)}f"))
         return {"traderResult": traderResult, "traderReport": traderReport,
                 "floatingPointValues": floatingPointValues, "netAssetValues": netAssetValues,
-                "indicatorResult": indicator_data_dict,
                 "newReportTemplate": newReportTemplate}
 
     except Exception as e:

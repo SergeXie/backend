@@ -1,8 +1,9 @@
 import calendar
-import datetime
 import json
+import multiprocessing
 import traceback
 import uuid
+from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 from fastapi import APIRouter, Query
 from sqlalchemy import select, and_, update
@@ -14,6 +15,7 @@ from database.db_mysql import async_db_session
 from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult, DqlOrder
 from schemas.base import ErrorModel
 from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData, DqlIndicatorsModel
+from services.indicatory_service import get_indicator_data_async
 from utils.common import select_goods_common, RandomIDGenerator, select_kline_data, Trader, \
     GoodTrader, PandasData, cache, get_indicator_data, model_classes, \
     get_entities_list, generate_random_string, statistics_from_orders, adjust_unpaired_trades
@@ -25,8 +27,7 @@ from utils.indicators import *
 
 router = APIRouter()
 
-# 保存内存变量
-product_list = []
+executor = ProcessPoolExecutor(max_workers=multiprocessing.cpu_count())  # 可调并发数
 
 
 @router.get("/selectAllGoods", name="查询所有平台品种列表",
@@ -55,7 +56,8 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
     :param endTime: 结束时间
     :param strategyUid: 策略uid
     """
-
+    print("beginTime:{}".format(beginTime))
+    print("endTime:{}".format(endTime))
     async with async_db_session() as db:
         order_strategy = (await db.execute(select(DqlOrder).where(DqlOrder.strategyUid == strategyUid))).scalars().first()
         if not order_strategy:
@@ -67,11 +69,12 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                 and_(
                     DqlOrder.tradingGoods == goods,
                     DqlOrder.period == period,
+                    DqlOrder.openTime.between(beginTime, endTime),
                     DqlOrder.timestamp.between(beginTime, endTime),
                     DqlOrder.strategyUid == strategyUid,
                 )
             )
-            .order_by(DqlOrder.timestamp.asc())
+            .order_by(DqlOrder.openTime.asc())
         )
         result = await db.execute(stmt)
         rows = result.scalars().all()
@@ -79,13 +82,15 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
             return await response_base.fail(msg="时间范围内不存在实时回测报告", data=[])
 
         strategy = (await db.execute(select(DqlStrategy).where(DqlStrategy.uid == strategyUid))).scalars().first()
-
-        indicatorData = (await db.execute(select(DqlIndicators).where(
-            DqlIndicators.className == strategy.indicatorsClassName))).scalars().first()
-        if indicatorData:
-            indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
-        else:
-            indicator_dict = None
+        indicatorDataList = list()
+        for _indicator in json.loads(strategy.indicatorsClassName):
+            indicatorData = (await db.execute(select(DqlIndicators).where(
+                DqlIndicators.className == _indicator))).scalars().first()
+            if indicatorData:
+                indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
+            else:
+                indicator_dict = None
+            indicatorDataList.append(indicator_dict)
 
         digits = (await db.execute(
             select(DplGoodsTest.digits).where(DplGoodsTest.goods == goods)
@@ -102,17 +107,15 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                 d[field] = d[field].strftime('%Y-%m-%d %H:%M:%S')
         data.append(d)
 
-    trader_report = statistics_from_orders(data)
-
     traderResult = await adjust_unpaired_trades(db, beginTime, data)
-
+    trader_report = statistics_from_orders(traderResult)
     result_data = [{"goods": goods, "period": period, "startTime": beginTime, "endTime": endTime,
                     "name": strategy.name, "initialCash": 100000, "digits": digits, "parameter": None,
                     "paramsStrName": None, "account": None, "userName": None, "currency": "USD", "spread": 0,
                     "strategyUid": strategyUid,"testerUids": strategyUid, "traderReportType": 3,
                     "netAssetValues": trader_report["cashCurve"], "parameterList": json.loads(strategy.parameters),
                     "traderResult": traderResult, "traderReport": trader_report,
-                    "indicatorData": [indicator_dict] if indicator_dict else []}]
+                    "indicatorData": indicatorDataList}]
 
     return await response_base.success(data=result_data)
 
@@ -303,7 +306,7 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
         print("lineData")
         print(lineData)
 
-        return await response_base.success(data={"goods": goods, "period": period, "utc": 1, "is_final": is_final,
+        return await response_base.success(data={"goods": goods, "period": period, "utc": 3, "is_final": is_final,
                                                  "lineData": lineData})
 
 
@@ -370,7 +373,7 @@ async def select_kline_front(lineId: Optional[int] = 0,
         print(len(result_list))
 
         # trading_goods 交易品种  period 周期
-        return await response_base.success(data={"goods": goods, "period": period, "utc": 1, "lineData": result_list})
+        return await response_base.success(data={"goods": goods, "period": period, "utc": 3, "lineData": result_list})
 
 
 @router.get("/selectAfterKLine", name="获取K线最新数据")
@@ -415,7 +418,7 @@ async def select_platform_goods_k_line(lineId: int,
                 select_model_class.tradeDateTime >= formatted_datetime).limit(1000)
 
         else:
-            return await response_base.success(data={"goods": goods, "period": period, "utc": 1,
+            return await response_base.success(data={"goods": goods, "period": period, "utc": 3,
                                                      "lineData": []})
 
         if period.startswith("W") or period.startswith("D") or period.startswith("MN"):
@@ -432,7 +435,7 @@ async def select_platform_goods_k_line(lineId: int,
         result_list = await select_kline_data(db, query, period_tuple)
 
         # trading_goods 交易品种  period 周期
-        return await response_base.success(data={"goods": goods, "period": period, "utc": 1,
+        return await response_base.success(data={"goods": goods, "period": period, "utc": 3,
                                                  "lineData": result_list})
 
 
@@ -468,7 +471,7 @@ async def select_multiple_goods_k_lines(goods: str = Query(..., title="交易平
 
         result_list = await select_kline_data(db, result_data)  # 不使用缓存处理函数
 
-        return await response_base.success(data={"goods": goods, "period": period, "utc": 1,
+        return await response_base.success(data={"goods": goods, "period": period, "utc": 3,
                                                  "beginTime": beginTime, "endTime": endTime,
                                                  "lineData": result_list})
 
@@ -627,7 +630,7 @@ async def indicator_front_kline(request: Request):
     :param request:
     :return:
     """
-    return await get_indicator_data(request, "FrontKline", name="history")
+    return await get_indicator_data_async(request, "FrontKline", executor, name="history")
 
 
 @router.post("/indicatorAfterKLine", name="获取指标最新数据")
@@ -637,7 +640,7 @@ async def indicator_after_kline(request: Request):
     :return:
     """
 
-    return await get_indicator_data(request, "AfterKline", name="latest")
+    return await get_indicator_data_async(request, "AfterKline", executor, name="latest")
 
 
 @router.post("/indicatorGoodsPeriodKLines", name="获取指标时段数据")
@@ -646,7 +649,7 @@ async def indicator_goods_kline(request: Request):
     :param request:
     :return:
     """
-    return await get_indicator_data(request, "PeriodKLines", name=None)
+    return await get_indicator_data_async(request, "PeriodKLines", executor, name=None)
 
 
 @router.post("/addLink", name="添加口令链接")
