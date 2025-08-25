@@ -1,3 +1,5 @@
+import pickle
+
 import backtrader as bt
 import numpy as np
 import math
@@ -6,7 +8,13 @@ import pandas as pd
 import tensorflow as tf
 from backtrader.feeds import PandasData
 from utils.module.zigzag_calculator import ZigZagCalculator
-from utils.module.dll import train_wmclass_predictor, predict_wmclass
+from utils.module.dll import train_two_classifiers, predict_binary
+
+import warnings
+from sklearn.exceptions import UndefinedMetricWarning
+
+# 过滤特定警告
+warnings.filterwarnings('ignore', category=UndefinedMetricWarning)
 
 
 class ResponseWMpredictData(bt.Strategy):
@@ -24,6 +32,9 @@ class ResponseWMpredictData(bt.Strategy):
 
         self.BarState = []
         self.BarStateText = []
+        self.W_sum = 0
+        self.M_sum = 0
+
 
         # 实例化独立的算法类
         self.zigzag_calculator = ZigZagCalculator(inp_depth=self.p.inp_depth)
@@ -54,90 +65,149 @@ class ResponseWMpredictData(bt.Strategy):
         # process_kline会返回是否产生了新的zigzag点，如果产生，就通知形态识别器
         new_zigzag_point_or_updated = self.zigzag_calculator.process_kline(current_kline_data)
 
-        # # 如果ZigZag有更新，就通知形态识别器进行分析
-        # if new_zigzag_point_or_updated:
-        #     zigzag_points = self.zigzag_calculator.get_zigzag_points()
-        #     print("zigzag_points:", len(zigzag_points))
-        #     dict_index2ts, dict_ts2index = self.zigzag_calculator.get_index_timestamp_maps()
-        #     self.pattern_recognizer.analyze_zigzag_points(zigzag_points, dict_index2ts, dict_ts2index)
 
     def stop(self):
+        digit = int(self.datas[0].digits[0])
         zigzag_points = self.zigzag_calculator.get_zigzag_points()
+        print('这里')
+        # print(zigzag_points)
+
+        dataset = []
+        for i in range(len(zigzag_points) - 3):
+            # 从索引i开始取4个元素组成子列表
+            dataset = add_dataset(dataset, zigzag_points[i:i + 4])
+
         zigzag_list = []
         for zig in zigzag_points:
             zigzag_list.append(zig)
             self.pattern_recognizer.analyze_zigzag_points(zigzag_list)
-        dataset = self.pattern_recognizer.get_dataset()
-        df = pd.DataFrame(dataset, columns=['col1', 'col2', 'col3', 'col4', 'col5', 'col6', 'col7', 'col8', 'wmclass'])
+
+        m_zigzag_points = self.pattern_recognizer.get_m_zigzag_points()
+        # print(m_zigzag_points)
+
+        df = pd.DataFrame(dataset, columns=['col1', 'col2', 'col3', 'col4', 'col5', 'col6',
+                                            'col7', 'col8', 'col9', 'col10', 'col11', 'col12',
+                                            'wmclass'])
         # print(df)
-        m_point = self.pattern_recognizer.get_m_zigzag_points()
-        p = self.pattern_recognizer.probability()
-        print("概率:", p)
+        with open('./dataset/wm_predict_classifiers.pkl', 'rb') as f:
+            classifiers = pickle.load(f)
+
+        model_neg = tf.keras.models.load_model('./dataset/model_neg.h5')
+        model_pos = tf.keras.models.load_model('./dataset/model_pos.h5')
+        predictions_neg, probs_neg = predict_binary(
+            model_neg,
+            classifiers['scaler_neg'],
+            df,
+            -1
+        )
+
+        # 使用第二个模型预测(1 vs 0)
+        predictions_pos, probs_pos = predict_binary(
+            model_pos,
+            classifiers['scaler_pos'],
+            df,
+            1
+        )
+        # print("预测结果:", list(predictions))
+        # print("真正结果:", list(df['wmclass']))
+        # print(len(zigzag_list))
+        # print(len(predictions))
+        # print('@@@@@@@@@@@@@@@@')
+        # print(dataset)
+        # print(zigzag_list)
+        # print('@@@@@@@@@@@@@@@@')
+        a = [0,0,0,0,0,1,0,-1]
+        # print("\n预测结果(-1 vs 0):", predictions_neg)
+        # print("预测概率(-1的概率):", [f"{p:.4f}" for p in probs_neg])
+        #
+        # print("\n预测结果(1 vs 0):", predictions_pos)
+        # print("预测概率(1的概率):", [f"{p:.4f}" for p in probs_pos])
+
+
+        _, neg_one_idx = find_last_negative_indices(predictions_neg)
+        one_idx, _ = find_last_negative_indices(predictions_pos)
+        print(one_idx, neg_one_idx)  # 获取 预测队列中1和-1的位置
+
+        m_point = [zigzag_list[one_idx-4], zigzag_list[one_idx-2], zigzag_list[one_idx-1], zigzag_list[one_idx]]
+        w_point = [zigzag_list[neg_one_idx-4], zigzag_list[neg_one_idx-2], zigzag_list[neg_one_idx-1], zigzag_list[neg_one_idx]]
+
+        #------------------计算概率-----------------------#
+
+        # 计算价差 M顶
+        # m_point = m_zigzag_points[-1]
+        price_diff = m_point[2]['hloc'][1] - m_point[3]['hloc'][0]  # 高点到低点的价差
+        p = probability(m_zigzag_points, datafrom='m')
+        # print("m概率:", p)
         if p is None:
             return
-        price_diff = zigzag_points[-3]['hloc'][1] - zigzag_points[-2]['hloc'][0]  # 高点到低点的价差
+        klineId = int(m_point[3]['kLineId'])
         for index, i in enumerate(p['probabilities']):
-            base_price = zigzag_points[-3]['hloc'][1]
+            base_price = m_point[2]['hloc'][1]
             price = base_price + price_diff * index
+            price = np.round(price, digit)
+            # print(i)
+            i = np.round(i*100, 2)
             # print('来了', price)
             # print(index)
             self.BarStateText.append({
-                "kLineId": int(self.data.klineId[0]),
+                "kLineId": klineId,
                 "price": price,
-                "timestamp": self.Id_TS_dict.get(int(self.data.klineId[0]), ),
-                "value": f"{np.round(price, 2)}: " + str(i * 100) + '%'
+                "timestamp": self.Id_TS_dict.get(klineId, ),
+                "value": f"{np.round(price, 2)}: " + str(i) + '%'
             })
             self.BarState.append([
                 {
-                    "kLineId": int(self.data.klineId[-2]),
+                    "kLineId": int(klineId),
                     "price": price,
                 },
                 {
-                    "kLineId": int(self.data.klineId[0]),
+                    "kLineId": int(klineId),
                     "price": price,
                 }
             ])
 
-        # df1 = pd.read_pickle('data1.pkl')
-        # df2 = pd.read_pickle('data5.pkl')
-        # df3 = pd.read_pickle('data15.pkl')
-        # df4 = pd.read_pickle('data30.pkl')
-        # # 按行合并3个DataFrame（axis=0可省略，默认就是按行合并）
-        # merged_df = pd.concat([df1, df2, df3, df4], axis=0)
-        # 可选：重置索引（避免原索引重复）
-        # merged_df = merged_df.reset_index(drop=True)
-        # 训练模型
-        model_, scaler, metrics, class_map = train_wmclass_predictor(df,
-                                                                     epochs=1)  # 模型以及训练完毕，这里这是为了获取scaler,在训练时候使用df，预测时使用merged_df
-        # model.save('./my_trained_model.h5')
+        # 计算价差 W底
+        w_zigzag_points = self.pattern_recognizer.get_w_zigzag_points()
 
-        # 加载模型
-        model = tf.keras.models.load_model('my_trained_model.h5')
+        p = probability(w_zigzag_points, datafrom='w')
+        # print("w概率:", p)
+        # w_point = w_zigzag_points[-1]
+        price_diff = w_point[2]['hloc'][0] - w_point[3]['hloc'][1]  # 高点到低点的价差
+        klineId = int(w_point[3]['kLineId'])
+        for index, i in enumerate(p['probabilities']):
+            base_price = w_point[2]['hloc'][0]
+            price = base_price + price_diff * index
+            price = np.round(price, digit)
+            # print(i)
+            i = np.round(i*100, 2)
+            # print('来了', price)
+            # print(index)
+            self.BarStateText.append({
+                "kLineId": klineId,
+                "price": price,
+                "timestamp": self.Id_TS_dict.get(klineId, ),
+                "value": f"{np.round(price, 2)}: " + str(i) + '%'
+            })
+            self.BarState.append([
+                {
+                    "kLineId": int(klineId),
+                    "price": price,
+                },
+                {
+                    "kLineId": int(klineId),
+                    "price": price,
+                }
+            ])
 
-        # 使用模型进行预测
-        # 假设new_samples是包含新样本的DataFrame或numpy数组
-        predictions = predict_wmclass(model, scaler, df, class_map)
-        print("预测结果:", list(predictions))
-        print("真正结果:", list(df['wmclass']))
-
+        self.M_sum = len(m_zigzag_points)
+        self.W_sum = len(w_zigzag_points)
         return super().stop()
 
     def get_analysis(self):
+
         # 组织数据结构，从独立的算法类获取数据
         zigzag_points = self.zigzag_calculator.get_zigzag_points()
-
         self.result_data_dict["lines"] = [
-            # {
-            #     "type": "text",
-            #     "TextColor": self.indicator_params.get("TextColor", "#000000"),
-            #     "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFF000"),
-            #     "position": 'top',
-            #     "data": pattern_titles
-            # },
-            # {
-            #     "type": "picture",  # 假设'picture'是您自定义的一种绘图类型，用于M/W形态
-            #     "data": formatted_m_w_patterns
-            # },
             {
                 "type": "brokenline",
                 "color": self.indicator_params.get("UpColor", "#00FFFF"),
@@ -157,7 +227,7 @@ class ResponseWMpredictData(bt.Strategy):
             })
         # 写概率
         for i in self.BarStateText:
-            print(i)
+            # print(i)
             self.result_data_dict["lines"].append({
                 "type": "text",
                 "TextColor": self.indicator_params.get("TextColor", "#0000FF"),
@@ -165,10 +235,138 @@ class ResponseWMpredictData(bt.Strategy):
                 "position": 'right',
                 "data": [i],
             })
+
+        self.result_data_dict["lines"].append({
+            "type": "bottomText",
+            "color": self.indicator_params.get("DnColor", "#FF0000"),
+            "data": f"W形态个数: {self.W_sum}, M形态个数: {self.M_sum},"
+        })
         return [self.result_data_dict["lines"], None, None]
 
 
-import random
+def find_last_negative_indices(lst):
+    last_one_pos = -1  # 初始值表示未找到1
+    last_neg_one_pos = -1  # 初始值表示未找到-1
+
+    # 遍历列表，记录最后出现的1和-1的正索引
+    for index, value in enumerate(lst):
+        if value == 1:
+            last_one_pos = index
+        elif value == -1:
+            last_neg_one_pos = index
+
+    # 计算负索引（从末尾开始计数，最后一个元素为-1）
+    list_length = len(lst)
+    # 若未找到1，则返回None，否则计算负索引
+    last_one_neg = -(list_length - last_one_pos) if last_one_pos != -1 else None
+    # 若未找到-1，则返回None，否则计算负索引
+    last_neg_one_neg = -(list_length - last_neg_one_pos) if last_neg_one_pos != -1 else None
+
+    return last_one_neg, last_neg_one_neg
+
+
+def add_dataset(dataset, zigzag_points_1for5, stutas=0):
+    """
+    用于测试的函数，将zigzag_points_1for5添加到dataset中。
+    zigzag_points_1for5表示5个轴点
+    stutas表示是否是M形态，-1表示W形态，1表示M形态， 0表示其他形态
+    """
+    fri = zigzag_points_1for5[0]
+    sec = zigzag_points_1for5[1]
+    thi = zigzag_points_1for5[2]
+    fou = zigzag_points_1for5[3]
+    # fif = zigzag_points_1for5[4]
+
+    dataset.append(
+        [sec['index'] - fri['index'],
+         thi['index'] - sec['index'],
+         thi['index'] - fri['index'],
+         fou['index'] - thi['index'],
+         fou['index'] - sec['index'],
+         fou['index'] - fri['index'],
+         # fif['index'] - fou['index'],
+         round(sec['price'] - fri['price'], 3),
+         round(thi['price'] - sec['price'], 3),
+         round(thi['price'] - fri['price'], 3),
+         round(fou['price'] - thi['price'], 3),
+         round(fou['price'] - sec['price'], 3),
+         round(fou['price'] - fri['price'], 3),
+         # round(fif['price'] - fou['price'], 3),
+         stutas,
+         ]
+    )
+    return dataset
+
+def probability(zigzag_points, datafrom='m'):
+    '''
+    datafrom表示要计算概率的轴枢点，为m或为w
+    '''
+    math_diff_list = []
+
+    for i in zigzag_points:
+        fir = i[0]
+        sec = i[1]
+        thi = i[2]
+        fou = i[3]
+        fif = i[4]
+        if datafrom == 'm':
+            p = (fif['hloc'][1] - thi['hloc'][1]) / (thi['hloc'][1] - fou['hloc'][0])
+        elif datafrom == 'w':
+            p = (fif['hloc'][0] - thi['hloc'][0]) / (thi['hloc'][0] - fou['hloc'][1])
+        math_diff_list.append(p)
+    # print('math_diff_list', datafrom, math_diff_list)
+    try:
+        com = calculate_probability_distribution(math_diff_list, bins=[0, 1.0, 2.0, 3.0])
+        return com
+    except:
+        print('error')
+        return None
+
+
+def calculate_probability_distribution(data, bins=None, num_bins=6):
+    """
+    计算连续型数据的概率分布（按区间划分）
+
+    参数:
+        data: 输入的数据集（列表或数组）
+        bins: 自定义区间边界（如[0, 0.5, 1.0]），默认None则自动生成
+        num_bins: 自动生成区间时的区间数量，默认6个
+
+    返回:
+        dict: 包含两个键的字典
+            - 'intervals': 区间列表（如["[0.0, 0.6)", ...]）
+            - 'probabilities': 对应区间的概率列表
+
+    """
+    # 数据验证
+    if not data:
+        raise ValueError("输入数据不能为空")
+    data = np.asarray(data)
+    if len(data) < 2:
+        raise ValueError("数据量太少，无法计算分布")
+
+    # 处理区间边界
+    if bins is None:
+        # 自动生成区间（基于数据最小值和最大值）
+        min_val = np.min(data)
+        max_val = np.max(data)
+        bins = np.linspace(min_val, max_val, num_bins + 1)  # 生成num_bins个区间
+
+    # 计算频数和概率
+    freq, edges = np.histogram(data, bins=bins)
+    total = len(data)
+    probabilities = freq / total  # 频率即概率估计
+
+    # 格式化区间为字符串（如"[0.0, 0.6)"）
+    intervals = []
+    for i in range(len(edges) - 1):
+        interval_str = f"[{edges[i]:.4f}, {edges[i + 1]:.4f})"
+        intervals.append(interval_str)
+
+    return {
+        "intervals": intervals,
+        "probabilities": probabilities.round(4).tolist()  # 保留4位小数
+    }
 
 
 class WMPatternRecognizer:
@@ -305,17 +503,19 @@ class WMPatternRecognizer:
         sec = zigzag_points_1for5[1]
         thi = zigzag_points_1for5[2]
         fou = zigzag_points_1for5[3]
-        fif = zigzag_points_1for5[4]
+        # fif = zigzag_points_1for5[4]
 
         dataset.append(
             [sec['index'] - fri['index'],
              thi['index'] - sec['index'],
              fou['index'] - thi['index'],
-             fif['index'] - fou['index'],
+             fou['index'] - sec['index'],
+             # fif['index'] - fou['index'],
              round(sec['price'] - fri['price'], 3),
              round(thi['price'] - sec['price'], 3),
              round(fou['price'] - thi['price'], 3),
-             round(fif['price'] - fou['price'], 3),
+             round(fou['price'] - sec['price'], 3),
+             # round(fif['price'] - fou['price'], 3),
              stutas,
              ]
         )
@@ -329,66 +529,6 @@ class WMPatternRecognizer:
     def get_w_zigzag_points(self):
         return self.w_zigzag_points
 
-    def probability(self):
-        math_diff_list = []
-        for i in self.m_zigzag_points:
-            fir = i[-5]
-            sec = i[-4]
-            thi = i[-3]
-            fou = i[-2]
-            fif = i[-1]
 
-            p = (fif['hloc'][1] - thi['hloc'][1]) / (thi['hloc'][1] - fou['hloc'][0])
-            math_diff_list.append(p)
-        print('math_diff_list', math_diff_list)
-        try:
-            com = self.calculate_probability_distribution(math_diff_list, bins=[0, 1.0, 2.0, 3.0])
-            return com
-        except:
-            print('error')
-            return None
 
-    def calculate_probability_distribution(self, data, bins=None, num_bins=6):
-        """
-        计算连续型数据的概率分布（按区间划分）
 
-        参数:
-            data: 输入的数据集（列表或数组）
-            bins: 自定义区间边界（如[0, 0.5, 1.0]），默认None则自动生成
-            num_bins: 自动生成区间时的区间数量，默认6个
-
-        返回:
-            dict: 包含两个键的字典
-                - 'intervals': 区间列表（如["[0.0, 0.6)", ...]）
-                - 'probabilities': 对应区间的概率列表
-
-        """
-        # 数据验证
-        if not data:
-            raise ValueError("输入数据不能为空")
-        data = np.asarray(data)
-        if len(data) < 2:
-            raise ValueError("数据量太少，无法计算分布")
-
-        # 处理区间边界
-        if bins is None:
-            # 自动生成区间（基于数据最小值和最大值）
-            min_val = np.min(data)
-            max_val = np.max(data)
-            bins = np.linspace(min_val, max_val, num_bins + 1)  # 生成num_bins个区间
-
-        # 计算频数和概率
-        freq, edges = np.histogram(data, bins=bins)
-        total = len(data)
-        probabilities = freq / total  # 频率即概率估计
-
-        # 格式化区间为字符串（如"[0.0, 0.6)"）
-        intervals = []
-        for i in range(len(edges) - 1):
-            interval_str = f"[{edges[i]:.4f}, {edges[i + 1]:.4f})"
-            intervals.append(interval_str)
-
-        return {
-            "intervals": intervals,
-            "probabilities": probabilities.round(4).tolist()  # 保留4位小数
-        }
