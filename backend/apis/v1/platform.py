@@ -6,7 +6,7 @@ import uuid
 from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 from fastapi import APIRouter, Query
-from sqlalchemy import select, and_, update
+from sqlalchemy import select, and_, update, func
 from starlette.requests import Request
 from starlette.responses import Response
 from common.log import log
@@ -28,6 +28,31 @@ from utils.indicators import *
 router = APIRouter()
 
 executor = ProcessPoolExecutor(max_workers=multiprocessing.cpu_count())  # 可调并发数
+
+
+@router.get("/getKlineCount", name="获取K线时间段数量")
+async def get_kline_count(goods: str, period: str, beginTime: str, endTime: str):
+    async with async_db_session() as db:
+        select_model_class, result = await select_goods_common(db, goods, model_classes)
+
+        if not select_model_class:
+            return await response_base.fail(msg="数据库表未找到！", data=[])
+
+        stmt = (
+            select(func.count())
+            .select_from(select_model_class)
+            .where(
+                select_model_class.tradingGoods == result.trading_goods,
+                select_model_class.platform == result.platform,
+                select_model_class.type == period,
+                select_model_class.tradeDateTime.between(beginTime, endTime)  # 含头含尾
+            )
+        )
+
+        res = await db.execute(stmt)
+        total = res.scalar_one()
+
+        return await response_base.success(data={"total": total})
 
 
 @router.get("/selectAllGoods", name="查询所有平台品种列表",
@@ -56,8 +81,6 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
     :param endTime: 结束时间
     :param strategyUid: 策略uid
     """
-    print("beginTime:{}".format(beginTime))
-    print("endTime:{}".format(endTime))
     async with async_db_session() as db:
         order_strategy = (await db.execute(select(DqlOrder).where(DqlOrder.strategyUid == strategyUid))).scalars().first()
         if not order_strategy:
@@ -107,7 +130,7 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                 d[field] = d[field].strftime('%Y-%m-%d %H:%M:%S')
         data.append(d)
 
-    traderResult = await adjust_unpaired_trades(db, beginTime, data)
+    traderResult = await adjust_unpaired_trades(db, beginTime, endTime, data)
     trader_report = statistics_from_orders(traderResult)
     result_data = [{"goods": goods, "period": period, "startTime": beginTime, "endTime": endTime,
                     "name": strategy.name, "initialCash": 100000, "digits": digits, "parameter": None,
