@@ -18,7 +18,7 @@ def create_engine_and_session(url: Union[str, URL]):
         #                              echo=False, future=True, pool_pre_ping=True)
 
         engine = create_async_engine(
-            "mysql+aiomysql://cmdb:cmdb123456@192.168.0.126:3306/dql?charset=utf8mb4",
+            "mysql+aiomysql://cmdb:cmdb123456@192.168.1.126:3306/dql?charset=utf8mb4",
             echo=False,
             future=True,
             pool_pre_ping=True,  # 连接获取前检测是否可用，防止失效连接
