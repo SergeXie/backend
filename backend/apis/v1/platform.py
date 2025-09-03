@@ -23,7 +23,7 @@ from utils.prod_backtrader import MyStrategy
 from utils.timezone import timezone
 import pandas as pd
 from utils.indicators import *
-
+from utils.trader_report_calculate import ManualComprehensiveAnalyzer
 
 router = APIRouter()
 
@@ -131,14 +131,16 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
         data.append(d)
 
     traderResult = await adjust_unpaired_trades(db, beginTime, endTime, data)
-    trader_report = statistics_from_orders(traderResult)
+    trader_report, orders = statistics_from_orders(traderResult)
+    analyzer = ManualComprehensiveAnalyzer()
+    newReportTemplate = analyzer.get_analysis_from_result(orders)
     result_data = [{"goods": goods, "period": period, "startTime": beginTime, "endTime": endTime,
                     "name": strategy.name, "initialCash": 100000, "digits": digits, "parameter": None,
                     "paramsStrName": None, "account": None, "userName": None, "currency": "USD", "spread": 0,
                     "strategyUid": strategyUid,"testerUids": strategyUid, "traderReportType": 3,
                     "netAssetValues": trader_report["cashCurve"], "parameterList": json.loads(strategy.parameters),
                     "traderResult": traderResult, "traderReport": trader_report,
-                    "indicatorData": indicatorDataList}]
+                    "indicatorData": indicatorDataList, "newReportTemplate": newReportTemplate}]
 
     return await response_base.success(data=result_data)
 
