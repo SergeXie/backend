@@ -1166,7 +1166,7 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
         "cashCurve": cash_curve
     }
 
-    return result
+    return result, orders
 
 
 async def adjust_unpaired_trades(db, beginTime, endTime, trader_result,

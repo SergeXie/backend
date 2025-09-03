@@ -96,7 +96,6 @@ async def daily_task():
         # 清空 DqlOrder 表
         await db.execute(delete(DqlOrder))
         await db.commit()
-        log.info("DqlOrder 表已清空")
 
         for period in CYCLES:
             for _goods in goods:

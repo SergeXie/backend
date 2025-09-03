@@ -93,9 +93,7 @@ async def daily_task():
     async with async_db_session() as db:
         for period in CYCLES:
             for _goods in goods:
-                begin_time = "2024-01-01 00:00:00"
-                end_time = "2025-08-05 23:59:59"
-                # begin_time, end_time = await get_next_begin_and_last_workday_end(db, period, _goods)
+                begin_time, end_time = await get_next_begin_and_last_workday_end(db, period, _goods)
                 log.info(f"周期：{period} 开始时间：{begin_time}  结束时间：{end_time}")
                 await fetch_period_data(db, period, _goods, strategyUid, begin_time, end_time)
 
