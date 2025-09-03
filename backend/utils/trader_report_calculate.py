@@ -660,7 +660,7 @@ async def process_manual_upload(soup, data_json, strategy,
             leverage=500,
             calculationStatus=1,
             newReportTemplate=json.dumps(newReportTemplate),
-            traderReportType=2
+            traderReportType=1  # 统一为自动上传类型
         )
         db.add(add_strategy_record)
         await db.commit()
