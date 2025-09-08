@@ -21,7 +21,8 @@ from apis.v1.platform import model_classes
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session, get_db
-from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest, DqlOrder, DqlIndicators
+from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest, DqlOrder, DqlIndicators, \
+    DqlStrategyIndicatorRel
 from schemas.platorm import DqlIndicatorsModel
 from schemas.platorm_strategr_schemas import TestResultRequest, RealOrderFloatingProfitModel
 from utils.common import get_entities_list, generate_random_string, \
@@ -483,19 +484,37 @@ async def fetch_tester_result(request: Request):
                 ))
                 result_goods_digits = goods_digits.scalars().first()
                 indicatorDataList = list()
-                # 根据策略表查询指标数据
-                strategy = (
-                    await db.execute(select(DqlStrategy).where(DqlStrategy.uid == data.strategyUid))).scalars().first()
-                if strategy.indicatorsClassName:
-                    for _indicators in json.loads(strategy.indicatorsClassName):
-                        indicatorData = (await db.execute(select(DqlIndicators).where(
-                            DqlIndicators.className == _indicators))).scalars().first()
-                        if indicatorData:
-                            indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
-                        else:
-                            indicator_dict = None
 
-                        indicatorDataList.append(indicator_dict)
+                # 根据策略表查询指标数据
+                strategy_indicator_rels = (
+                    await db.execute(select(DqlStrategyIndicatorRel).where(
+                        DqlStrategyIndicatorRel.sid == data.strategyUid))).scalars().all()
+                for strategy_indicator_rel in strategy_indicator_rels:
+                    # 查指标表
+                    indicatorData = (await db.execute(select(DqlIndicators).where(
+                                    DqlIndicators.uid == strategy_indicator_rel.iid))).scalars().first()
+
+                    if indicatorData:
+                        indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
+                    else:
+                        indicator_dict = None
+
+                    indicator_dict["parameters"] = json.loads(strategy_indicator_rel.indicatorParameter)
+
+                    indicatorDataList.append(indicator_dict)
+
+                # if strategy_indicator_rels.indicatorsClassName:
+                #     for _indicators in json.loads(strategy.indicatorsClassName):
+                #         indicatorData = (await db.execute(select(DqlIndicators).where(
+                #             DqlIndicators.className == _indicators))).scalars().first()
+                #         if indicatorData:
+                #             indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
+                #         else:
+                #             indicator_dict = None
+                #
+                #         indicatorDataList.append(indicator_dict)
+
+                print("indicatorDataList:{}".format(indicatorDataList))
 
                 trader_result = json.loads(data.traderResult)
                 data_dict = dict()

@@ -124,6 +124,22 @@ class DqlIndicators(Base):
     weights: Mapped[int] = mapped_column(Integer, nullable=False, comment='指标权重')
 
 
+class DqlStrategyIndicatorRel(Base):
+    """
+    指标表
+    """
+    __tablename__ = 'dql_strategy_indicator_rel'
+
+    pkId: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sid: Mapped[str] = mapped_column(String(64), nullable=False, comment='策略id')
+    iid: Mapped[str] = mapped_column(String(64), nullable=False, comment='关联指标id')
+    indicatorName: Mapped[str] = mapped_column(String(32), nullable=False, comment='指标名称')
+    indicatorParameter: Mapped[str] = mapped_column(String(1024), nullable=False, comment='指标参数')
+    createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
+                                                server_default='CURRENT_TIMESTAMP', comment='创建时间')
+
+
+
 class DqlStrategy(Base):
     """
     策略表
