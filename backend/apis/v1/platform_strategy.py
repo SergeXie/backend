@@ -845,8 +845,8 @@ async def indicator_sync_batch_test(request: Request):
                 finally:
                     await db.close()
 
-            strategy_data_requests["testerUids"] = tester_uid
-            strategy_data_requests["createTime"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                strategy_data_requests["testerUids"] = tester_uid
+                strategy_data_requests["createTime"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
             result_data.append(strategy_data_requests)
 
