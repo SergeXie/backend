@@ -503,19 +503,6 @@ async def fetch_tester_result(request: Request):
 
                     indicatorDataList.append(indicator_dict)
 
-                # if strategy_indicator_rels.indicatorsClassName:
-                #     for _indicators in json.loads(strategy.indicatorsClassName):
-                #         indicatorData = (await db.execute(select(DqlIndicators).where(
-                #             DqlIndicators.className == _indicators))).scalars().first()
-                #         if indicatorData:
-                #             indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
-                #         else:
-                #             indicator_dict = None
-                #
-                #         indicatorDataList.append(indicator_dict)
-
-                print("indicatorDataList:{}".format(indicatorDataList))
-
                 trader_result = json.loads(data.traderResult)
                 data_dict = dict()
                 data_dict["testerUids"] = data.uid
