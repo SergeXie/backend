@@ -12,7 +12,8 @@ from starlette.responses import Response
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult, DqlOrder
+from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult, DqlOrder, \
+    DqlStrategyIndicatorRel
 from schemas.base import ErrorModel
 from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData, DqlIndicatorsModel
 from services.indicatory_service import get_indicator_data_async
@@ -105,15 +106,19 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
             return await response_base.fail(msg="时间范围内不存在实时回测报告", data=[])
 
         strategy = (await db.execute(select(DqlStrategy).where(DqlStrategy.uid == strategyUid))).scalars().first()
+
+        strategy_indicator_rels = (await db.execute(select(
+            DqlStrategyIndicatorRel).where(DqlStrategyIndicatorRel.sid == strategyUid))).scalars().first()
         indicatorDataList = list()
-        for _indicator in json.loads(strategy.indicatorsClassName):
-            indicatorData = (await db.execute(select(DqlIndicators).where(
-                DqlIndicators.className == _indicator))).scalars().first()
-            if indicatorData:
-                indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
-            else:
-                indicator_dict = None
-            indicatorDataList.append(indicator_dict)
+        indicatorData = (await db.execute(select(DqlIndicators).where(
+            DqlIndicators.uid == strategy_indicator_rels.iid))).scalars().first()
+        if indicatorData:
+            indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
+            indicator_dict["parameters"] = json.loads(strategy_indicator_rels.indicatorParameter)
+        else:
+            indicator_dict = None
+
+        indicatorDataList.append(indicator_dict)
 
         digits = (await db.execute(
             select(DplGoodsTest.digits).where(DplGoodsTest.goods == goods)

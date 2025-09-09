@@ -149,7 +149,7 @@ class DqlStrategy(Base):
 
     pkId: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     uid: Mapped[str] = mapped_column(String(64), nullable=False, comment='唯一标识符')
-    indicatorsClassName: Mapped[str] = mapped_column(String(64), nullable=False, comment='指标类名 自定义策略的为空')
+    # indicatorsClassName: Mapped[str] = mapped_column(String(64), nullable=False, comment='指标类名 自定义策略的为空')
     name: Mapped[str] = mapped_column(String(32), nullable=False, comment='策略名称')
     className: Mapped[str] = mapped_column(String(32), nullable=False, comment='策略名称')
     description: Mapped[str] = mapped_column(String(255), nullable=False, comment='指标备注')

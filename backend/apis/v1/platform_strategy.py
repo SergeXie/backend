@@ -485,7 +485,7 @@ async def fetch_tester_result(request: Request):
                 result_goods_digits = goods_digits.scalars().first()
                 indicatorDataList = list()
 
-                # 根据策略表查询指标数据
+                # 根据策略中间表查询指标数据
                 strategy_indicator_rels = (
                     await db.execute(select(DqlStrategyIndicatorRel).where(
                         DqlStrategyIndicatorRel.sid == data.strategyUid))).scalars().all()
@@ -496,10 +496,9 @@ async def fetch_tester_result(request: Request):
 
                     if indicatorData:
                         indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
+                        indicator_dict["parameters"] = json.loads(strategy_indicator_rel.indicatorParameter)
                     else:
                         indicator_dict = None
-
-                    indicator_dict["parameters"] = json.loads(strategy_indicator_rel.indicatorParameter)
 
                     indicatorDataList.append(indicator_dict)
 
