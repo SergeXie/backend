@@ -820,49 +820,40 @@ async def save_trader_result(traderResult, db, strategyUid, period, _goods, begi
     await db.commit()
 
 
-async def _dedup_and_insert(rows: List[Dict[str, Any]], db, strategyUid: str, period: str) -> Tuple[int, int, int]:
-    """
-    将过滤后的 rows 入库：
-    - 去重键： (goodsId, period, openTime, timestamp, orderType, klineId)
-    - 若命中且数据库 tradeid 为空/0 而当前有 tradeid -> 补写 tradeid
-    - 若未命中 -> 插入新订单
-    - 返回: (add_count, update_count, skip_count)
-    """
-    add_count = 0
-    # 3) 逐条处理：命中则可能补写 tradeid，未命中则插入
-    for row in rows:
-        # 未命中：插入新订单
-        order = DqlOrder(
-            tradingGoods=row.get('goodsId', ''),
-            goodsId=row.get('goodsId', ''),
+async def _dedup_and_insert(rows, db, strategyUid: str, period: str):
+    if not rows:
+        return 0
+
+    to_insert = []
+    for r in rows:
+        to_insert.append(DqlOrder(
+            tradingGoods=r.get('goodsId', ''),
+            goodsId=r.get('goodsId', ''),
             period=period,
-            tradeid=row.get('tradeid', 0) or 0,
-            openPrice=row.get('openPrice', 0.0) or 0.0,
-            openTime=row.get('openTime', ''),
-            timestamp=row.get('timestamp', ''),
-            closeTime=row.get('closeTime', None),
-            orderType=row.get('orderType', ''),
-            placeType=row.get('placeType', ''),
-            size=row.get('size', 0.0) or 0.0,
-            price=row.get('price', 0.0) or 0.0,
-            stopLoss=row.get('stopLoss', 0.0) or 0.0,
-            takeProfit=row.get('takeProfit', 0.0) or 0.0,
-            taxes=row.get('taxes', 0) or 0,
-            swap=row.get('swap', 0) or 0,
-            commission=row.get('commission', 0.0) or 0.0,
-            pnl=row.get('pnl', 0.0) or 0.0,
-            spread=row.get('spread', 0.0) or 0.0,
-            initialCash=row.get('initialCash', 0.0) or 0.0,
-            klineId=row.get('klineId', 0) or 0,
+            tradeid=r.get('tradeid', 0) or 0,
+            openPrice=r.get('openPrice', 0.0) or 0.0,
+            openTime=r.get('openTime', ''),
+            timestamp=r.get('timestamp', ''),
+            closeTime=r.get('closeTime', None),
+            orderType=r.get('orderType', ''),
+            placeType=r.get('placeType', ''),
+            size=r.get('size', 0.0) or 0.0,
+            price=r.get('price', 0.0) or 0.0,
+            stopLoss=r.get('stopLoss', 0.0) or 0.0,
+            takeProfit=r.get('takeProfit', 0.0) or 0.0,
+            taxes=r.get('taxes', 0) or 0,
+            swap=r.get('swap', 0) or 0,
+            commission=r.get('commission', 0.0) or 0.0,
+            pnl=r.get('pnl', 0.0) or 0.0,
+            spread=r.get('spread', 0.0) or 0.0,
+            initialCash=r.get('initialCash', 0.0) or 0.0,
+            klineId=r.get('klineId', 0) or 0,
             strategyUid=strategyUid,
-        )
-        db.add(order)
-        add_count += 1
+        ))
 
-    # 4) 统一提交（不要在这里 close，会话由上层管理）
+    db.add_all(to_insert)
     await db.commit()
-    # log.info("入库数据：{}".format(rows))
-
+    return len(to_insert)
 
 async def run_backtest(db: AsyncSession, indicator_data_request, strategys, tester_uid, goods_data, task_name=None):
     """
