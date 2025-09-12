@@ -299,6 +299,8 @@ class WMPatternRecognizer:
                 "end": zigzag_points[-1]['timestamp'],
                 "high": max(l_val, r_val),  # 形态的最高点是左右肩中较高的那个
                 "low": head_val,  # 形态的最低点是颈线
+                "leftTop_price": max(zigzag_points[1]['price'], zigzag_points[3]['price']),
+                "rigthBottom_price": min(zigzag_points[0]['price'], zigzag_points[4]['price']),
             })
             self.m_zigzag_points.append(zigzag_points[-5:])
 
@@ -341,6 +343,8 @@ class WMPatternRecognizer:
                 "end": zigzag_points[-1]['timestamp'],
                 "high": head_val,  # 形态的最高点是颈线
                 "low": min(l_val, r_val),  # 形态的最低点是左右肩中较低的那个
+                "leftTop_price": max(zigzag_points[0]['price'], zigzag_points[4]['price']),
+                "rigthBottom_price": min(zigzag_points[1]['price'], zigzag_points[3]['price'])
             })
             self.w_zigzag_points.append(zigzag_points[-5:])
 
@@ -361,7 +365,7 @@ class WMPatternRecognizer:
     def get_zigzag_points(self):
         return self.zigzag_points
 
-    def get_formatted_m_w_patterns(self, dict_index2ts, dict_ts2index):
+    def get_formatted_m_w_patterns(self):
         """
         返回格式化后的M/W形态数据，包含时间范围和高低点信息。
         需要传入映射关系以便可能处理时间戳或索引。
@@ -370,24 +374,38 @@ class WMPatternRecognizer:
         for p in self.detected_patterns:
             start_ts = p.get('start')
             end_ts = p.get('end')
-            high_price = p.get('high')
-            low_price = p.get('low')
+            high_price = p.get('leftTop_price')
+            low_price = p.get('rigthBottom_price')
 
             # 原始代码中有随机偏移，但在独立算法中通常不建议，
             # 这里直接使用形态的起止时间戳，如果需要随机偏移应由外部可视化逻辑处理。
 
             formatted_list.append({
                 "time": [start_ts, end_ts],
-                "leftTop": {
-                    "time": start_ts,
-                    "price": high_price
-                },
-                "rigthBottom": {
-                    "time": end_ts,
-                    "price": low_price
-                },
-                "value": p.get('value')  # 添加形态类型
+                "list":[{
+                    "leftTop": {
+                        "time": start_ts,
+                        "price": high_price
+                    },
+                    "rightBottom": {
+                        "time": end_ts,
+                        "price": low_price
+                    },
+                    "classType": p.get('value')  # 添加形态类型
+                }]
             })
+            # formatted_list.append({
+            #     "time": [start_ts, end_ts],
+            #     "leftTop": {
+            #         "time": start_ts,
+            #         "price": high_price
+            #     },
+            #     "rigthBottom": {
+            #         "time": end_ts,
+            #         "price": low_price
+            #     },
+            #     "value": p.get('value')  # 添加形态类型
+            # })
         return formatted_list
 
     def get_all_wm_patterns(self):

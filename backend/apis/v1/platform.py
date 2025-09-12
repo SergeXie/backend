@@ -682,6 +682,15 @@ async def indicator_goods_kline(request: Request):
     return await get_indicator_data_async(request, "PeriodKLines", executor, name=None)
 
 
+@router.post("/indicatorGoodsPeriodKLinesCopy", name="获取指标时段数据")
+async def indicator_goods_kline(request: Request):
+    """
+    :param request:
+    :return:
+    """
+    return await get_indicator_data_async(request, "PeriodKLines", executor, name=None)
+
+
 @router.post("/addLink", name="添加口令链接")
 async def add_link(request: Request):
     """
