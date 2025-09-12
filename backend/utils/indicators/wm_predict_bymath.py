@@ -117,6 +117,12 @@ class ResWMpredictByMathData(bt.Strategy):
         # ________________保存全部的wm形态_____________________________#
         with open('./dataset/all_wm_pattern_kline.pkl', 'rb') as file:
             all_wm_pattern = pickle.load(file)
+        for i in all_wm_pattern:
+            if "W" in i['pattern_type']:
+                self.W_sum += 1
+            if "M" in i['pattern_type']:
+                self.M_sum += 1
+
 
         print(len(all_wm_pattern))
         print(all_wm_pattern[-1])
@@ -253,7 +259,11 @@ class ResWMpredictByMathData(bt.Strategy):
                 "position": 'right',
                 "data": [i],
             })
-
+        self.result_data_dict["lines"].append({
+            "type": "bottomText",
+            "color": self.indicator_params.get("DnColor", "#FF0000"),
+            "data": f"W形态个数: {self.W_sum}, M形态个数: {self.M_sum},"
+        })
         return [self.result_data_dict["lines"], None, None]
 
 # 权重映射到1~10

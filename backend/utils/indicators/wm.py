@@ -120,11 +120,15 @@ class ResponseWMData(bt.Strategy):
 
         # print(self.pattern_recognizer.get_zigzag_points())
 
-        pattern_titles = self.pattern_recognizer.get_pattern_titles()  # 获取原始形态标题列表
-        maybe_pattern_titles = self.pattern_recognizer.get_maybe_detected_patterns()
-        print("这里@@@@@@@@@@@@", maybe_pattern_titles)
-        # formatted_m_w_patterns = self.pattern_recognizer.get_formatted_m_w_patterns(dict_index2ts,
-        #                                                                             dict_ts2index)  # 获取格式化M/W形态数据
+        # pattern_titles = self.pattern_recognizer.get_pattern_titles()  # 获取原始形态标题列表
+        # maybe_pattern_titles = self.pattern_recognizer.get_maybe_detected_patterns()
+        show_pattern = self.indicator_params.get("show_mabye_pattern")
+        # print(show_pattern)
+        if show_pattern == 0:  # 确认形态
+            pattern_titles = self.pattern_recognizer.get_pattern_titles()  # 获取原始形态标题列表
+        elif show_pattern == 1:
+            pattern_titles = self.pattern_recognizer.get_maybe_detected_patterns()
+        # print("这里@@@@@@@@@@@@")
 
         self.result_data_dict["lines"] = [
             {
