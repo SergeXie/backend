@@ -7,7 +7,8 @@ from database.db_mysql import async_db_session
 from models.dql_platform import TradingFPG, DplGoodsTest, DqlOrder
 from utils.common import fetch_indicators, run_backtest, save_trader_result, task_run_backtest
 
-CYCLES = ['M15', "M30", "H1", "H4"]
+# CYCLES = ['M15', "M30", "H1", "H4"]
+CYCLES = ['M15']
 
 strategyUid = {"趋势止损策略": "SSWiwM6dp5FgE8"}
 goods = ["FPG-XAUUSD", "FPG-USOUSD"]
@@ -99,11 +100,12 @@ async def daily_task():
 
         for period in CYCLES:
             for _goods in goods:
-                begin_time = "2024-01-01 00:00:00"
+                begin_time = "2025-09-01 00:00:00"
                 log.info(f"周期：{period} 开始时间：{begin_time}  结束时间：{end_time}")
                 await fetch_period_data(db, period, _goods, strategyUid, begin_time, end_time)
 
         print("完成")
 
 scheduler = AsyncIOScheduler()
-scheduler.add_job(daily_task, "cron", hour=6, minute=15, day_of_week='mon-fri')
+# scheduler.add_job(daily_task, "cron", hour=6, minute=15, day_of_week='mon-fri')
+scheduler.add_job(daily_task, "interval", minutes=1)  # 用于测试

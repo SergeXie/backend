@@ -8,31 +8,22 @@ from models.dql_platform import TradingFPG, DplGoodsTest, DqlOrder
 from utils.common import fetch_indicators, run_backtest, save_trader_result, task_run_backtest
 
 CYCLES = ['M15', "M30", "H1", "H4"]
-
 strategyUid = {"趋势止损策略": "SSWiwM6dp5FgE8"}
+# goods = ["FPG-XAUUSD"]
 goods = ["FPG-XAUUSD", "FPG-USOUSD"]
 
 
-def get_last_workday(date=None):
-    """返回指定日期的上一个工作日（不含今天）"""
-    if date is None:
-        date = datetime.now().date()
-    else:
-        date = date if isinstance(date, datetime.date) else date.date()
-    while True:
-        date -= timedelta(days=1)
-        if date.weekday() < 5:
-            return date
-
 
 async def get_next_begin_and_last_workday_end(db, period, _goods):
-    stmt = select(func.max(DqlOrder.timestamp)).where(DqlOrder.period == period and DqlOrder.goodsId == _goods)
+    stmt = select(func.max(DqlOrder.timestamp)).where(
+        (DqlOrder.period == period) & (DqlOrder.goodsId == _goods)
+    )
     result = await db.execute(stmt)
     latest_time_str = result.scalar()
     if latest_time_str:
         begin_time_dt = datetime.strptime(latest_time_str, '%Y-%m-%d %H:%M:%S')
-        next_day = begin_time_dt.date() + timedelta(days=1)
-        begin_time_dt = datetime.combine(next_day, time(0, 0, 0))
+        # next_day = begin_time_dt.date() + timedelta(days=1)
+        # begin_time_dt = datetime.combine(next_day, time(0, 0, 0))
         if period == "H4":
             begin_time_dt = begin_time_dt - timedelta(days=4)
     else:
@@ -45,6 +36,10 @@ async def get_next_begin_and_last_workday_end(db, period, _goods):
 
     begin_time = begin_time_dt.strftime('%Y-%m-%d %H:%M:%S')
     end_time = end_time_dt.strftime('%Y-%m-%d %H:%M:%S')
+    print("=====")
+    print(begin_time)
+    print(end_time)
+    print("=======")
     return begin_time, end_time
 
 
@@ -79,13 +74,14 @@ async def fetch_period_data(db, period, _goods, strategyUid, begin_time, end_tim
     if backtest_result:
         traderResult = backtest_result["traderResult"]
         log.info(f"订单数据：traderResult:{traderResult}")
-        await save_trader_result(traderResult, db, strategyUid["趋势止损策略"], period)
+        await save_trader_result(traderResult, db, strategyUid["趋势止损策略"], period, _goods, begin_time)
     else:
         log.info(f"定时任务回测数据为空，周期:{period}")
 
 
 async def daily_task():
     today = datetime.now().date()
+    print("today:{}".format(today))
     if today.weekday() >= 5:
         log.info("今天是周末，不执行定时任务")
         return
@@ -94,10 +90,14 @@ async def daily_task():
         for period in CYCLES:
             for _goods in goods:
                 begin_time, end_time = await get_next_begin_and_last_workday_end(db, period, _goods)
+                # begin_time = "2025-09-09 10:31:00"
+                # end_time = "2025-09-05 23:59:59"
                 log.info(f"周期：{period} 开始时间：{begin_time}  结束时间：{end_time}")
                 await fetch_period_data(db, period, _goods, strategyUid, begin_time, end_time)
 
         print("完成")
+
 scheduler = AsyncIOScheduler()
+
 # scheduler.add_job(daily_task, "cron", hour=6, minute=15, day_of_week='mon-fri')
 scheduler.add_job(daily_task, "interval", minutes=1)  # 用于测试
