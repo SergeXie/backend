@@ -406,11 +406,13 @@ class WMPatternRecognizer:
 
             start_ts = p.get('start')
             end_ts = p.get('end')
-            try:
-                start_ts_a2 = index_to_ts.get(ts_to_index.get(start_ts)+2)
-                end_ts_d2 = index_to_ts.get(ts_to_index.get(end_ts)-2)
-            except:
-                pass
+            # try:
+            #     start_ts_a2 = index_to_ts.get(ts_to_index.get(start_ts)+2)
+            #     end_ts_d2 = index_to_ts.get(ts_to_index.get(end_ts)-2)
+            # except:
+            #     pass
+            start_ts_a2 = start_ts
+            end_ts_d2 = end_ts
 
 
             high_price = p.get('leftTop_price')
