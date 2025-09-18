@@ -33,6 +33,7 @@ class ResponseWMPicyureData(bt.Strategy):
 
         ##################################################################
         self.data_processor = IndicatorDataProcessor(self.data, indicator_params)
+        print('参数这里',indicator_params)
         self.result_data = []
         self.result_data_original = []
         self.po_high = []
