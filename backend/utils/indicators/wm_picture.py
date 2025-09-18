@@ -60,6 +60,9 @@ class ResponseWMPicyureData(bt.Strategy):
         Z_from = indicator_params.get("Zfrom", 1)
         self.Z_from = 'pc' if Z_from == 0 else 'zig'
 
+        self.index_to_ts = {}
+        self.ts_to_index = {}
+
 
     def next(self):
         if self.Z_from == 'zig':
@@ -78,6 +81,10 @@ class ResponseWMPicyureData(bt.Strategy):
                 "close": self.data.close[0],
                 "volume": self.data.volume[0],
             }
+            index = len(self)
+            ts = self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')
+            self.index_to_ts[index] = ts
+            self.ts_to_index[ts] = index
 
             # 调用ZigZag算法类的处理方法
             # process_kline会返回是否产生了新的zigzag点，如果产生，就通知形态识别器
@@ -130,8 +137,10 @@ class ResponseWMPicyureData(bt.Strategy):
         elif show_pattern == 1:
             pattern_titles = self.pattern_recognizer.get_maybe_detected_patterns()
         print("这里@@@@@@@@@@@@")
+        print(self.index_to_ts)
+        print(self.ts_to_index)
 
-        formatted_m_w_patterns = self.pattern_recognizer.get_formatted_m_w_patterns()
+        formatted_m_w_patterns = self.pattern_recognizer.get_formatted_m_w_patterns(self.index_to_ts,self.ts_to_index)
         print(formatted_m_w_patterns)
 
         self.result_data_dict["lines"] = [
