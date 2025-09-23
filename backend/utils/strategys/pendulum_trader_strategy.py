@@ -10,6 +10,7 @@ class PendulumTraderStrategy(CommonStrategy):
         # 保存昨日收盘价和收盘价
         self.pendulum_start_price = 0
         self.pendulum_end_price = 0
+        self.baseLots = baseLots
 
     def next(self):
         current_dt = self.datas[0].datetime.datetime(0)
@@ -18,15 +19,15 @@ class PendulumTraderStrategy(CommonStrategy):
             self.pendulum_end_price = self.data.close[0]
         elif ts.time() > datetime.time(18, 0, 0) and self.pendulum_start_price == 0:
             self.pendulum_start_price = self.data.close[0]
-        elif ts.time() > datetime.time(5, 0, 0):
+        elif ts.time() > datetime.time(3, 0, 0):
             if self.position.size != 0:
-                self.close()
+                self.order = self.close()
                 self.pendulum_start_price = 0
                 self.pendulum_end_price = 0
         elif ts.time() > datetime.time(2, 0, 0):
             if self.position.size == 0:
                 if self.pendulum_end_price > 0 and self.pendulum_start_price > 0:
                     if self.pendulum_end_price > self.pendulum_start_price:
-                        self.sell(size=1)
+                        self.order = self.sell(size=self.baseLots)
                     else:
-                        self.buy(size=1)
+                        self.order = self.buy(size=self.baseLots)

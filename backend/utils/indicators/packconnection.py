@@ -267,7 +267,7 @@ class DataAnalysisOrganizer:
         self.result_data = result_data
         self.po_high = po_high
         self.po_low = po_low
-        self.titlepeak = titlepeak
+        self.titlepeak = titlepeaks
         self.titlebottol = titlebottol
         self.titlepeak_offset = titlepeak_offset
         self.titlebottol_offset = titlebottol_offset
@@ -382,6 +382,7 @@ class ResponsePCData(bt.Strategy):
 
 
     def stop(self):
+        print("self.po_low:{}".format(self.po_low))
         (self.notnallpoint,
          self.title, self.titlepeak, self.titlebottol, self.title_offset,
          self.titlepeak_offset, self.titlebottol_offset, offset_index) = self.data_processor.process_stop_data(self.result_data, self.result_data_original)
