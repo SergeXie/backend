@@ -119,13 +119,6 @@ class ResponsePeakTroughData(bt.Strategy):
                         "timestamp": LZSDTimeUtils.fmt(self.data.datetime.datetime(center_line_index)),
                         "price": l if pt_type == PeakTroughType.Trough else h,
                     })
-        print("xxx")
-        print(self.line_data)
-        print(self.broken_trough_data)
-        print(self.broken_peak_data)
-        print(self.peak_text_data)
-        print(self.trough_text_data)
-        print("xxxx")
 
     def get_analysis(self):
         result_data_dict = {}
