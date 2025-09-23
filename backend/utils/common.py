@@ -34,7 +34,9 @@ from utils.indicators.btatr import ResponseATRData
 from utils.indicators.rsi import ResponseRSIData
 from utils.indicators.wm import ResponseWMData
 from utils.indicators.new_m import ResponseWMpredictData
+from utils.indicators.wm_predict_bymodel import ResWMpredictByModelData
 from utils.indicators.wm_predict_bymath import ResWMpredictByMathData
+from utils.indicators.wm_picture import ResponseWMPicyureData
 from pypinyin import lazy_pinyin, Style
 from typing import List, Dict, Any
 from utils.strategys import reload_strategies
@@ -84,7 +86,8 @@ indicator_classes = {
     "WM": ResponseWMData,
     "WMpredict": ResponseWMpredictData,
     "WMpredictByMath": ResWMpredictByMathData,
-    # "WMpredictByModel": ResWMpredictByModelData,
+    "WMpredictByModel": ResWMpredictByModelData,
+    "WMPicture":ResponseWMPicyureData
 }
 
 

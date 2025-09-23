@@ -13,7 +13,7 @@ from utils.indicators.packconnection import DataAnalysisOrganizer
 
 # 假设 ZigZagCalculator 和 WMPatternRecognizer 已经在当前文件中定义或已导入
 
-class ResponseWMData(bt.Strategy):
+class ResponseWMPicyureData(bt.Strategy):
     # 定义参数
     params = (
         ('inp_depth', 12),
@@ -33,6 +33,7 @@ class ResponseWMData(bt.Strategy):
 
         ##################################################################
         self.data_processor = IndicatorDataProcessor(self.data, indicator_params)
+        print('参数这里',indicator_params)
         self.result_data = []
         self.result_data_original = []
         self.po_high = []
@@ -54,10 +55,14 @@ class ResponseWMData(bt.Strategy):
         self.trend_change_last = 0
         self.tm = 0
         self.result_data_dict = dict()
+        self.M = []
 
         self.zigzag = []
         Z_from = indicator_params.get("Zfrom", 1)
         self.Z_from = 'pc' if Z_from == 0 else 'zig'
+
+        self.index_to_ts = {}
+        self.ts_to_index = {}
 
 
     def next(self):
@@ -77,6 +82,10 @@ class ResponseWMData(bt.Strategy):
                 "close": self.data.close[0],
                 "volume": self.data.volume[0],
             }
+            index = len(self)
+            ts = self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')
+            self.index_to_ts[index] = ts
+            self.ts_to_index[ts] = index
 
             # 调用ZigZag算法类的处理方法
             # process_kline会返回是否产生了新的zigzag点，如果产生，就通知形态识别器
@@ -128,7 +137,12 @@ class ResponseWMData(bt.Strategy):
             pattern_titles = self.pattern_recognizer.get_pattern_titles()  # 获取原始形态标题列表
         elif show_pattern == 1:
             pattern_titles = self.pattern_recognizer.get_maybe_detected_patterns()
-        # print("这里@@@@@@@@@@@@")
+        print("这里@@@@@@@@@@@@")
+        print(self.index_to_ts)
+        print(self.ts_to_index)
+
+        formatted_m_w_patterns = self.pattern_recognizer.get_formatted_m_w_patterns(self.index_to_ts,self.ts_to_index)
+        print(formatted_m_w_patterns)
 
         self.result_data_dict["lines"] = [
             {
@@ -139,10 +153,10 @@ class ResponseWMData(bt.Strategy):
                 "data": pattern_titles
             },
 
-            # {
-            #     "type": "picture",  # 假设'picture'是您自定义的一种绘图类型，用于M/W形态
-            #     "data": formatted_m_w_patterns
-            # },
+            {
+                "type": "picture2",  # 假设'picture'是您自定义的一种绘图类型，用于M/W形态
+                "data": formatted_m_w_patterns
+            },
             {
                 "type": "brokenline",
                 "color": self.indicator_params.get("UpColor", "#00FFFF"),

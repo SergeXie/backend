@@ -160,6 +160,8 @@ class WMPatternRecognizer:
         self.m_zigzag_points = []
         self.w_zigzag_points = []
 
+        self.none_patterns = []
+
 
     def analyze_zigzag_points(self, zigzag_points, dict_index2ts=None, dict_ts2index=None):
         # print(zigzag_points[-1])
@@ -174,10 +176,12 @@ class WMPatternRecognizer:
         if len(zigzag_points) >= 5 :
             self._judgment_m_pattern(zigzag_points, dict_index2ts, dict_ts2index)
             self._judgment_w_pattern(zigzag_points, dict_index2ts, dict_ts2index)
-            self._maybe_m_pattern(zigzag_points[-4:])
-            self._maybe_w_pattern(zigzag_points[-4:])
+            maybe_m = self._maybe_m_pattern(zigzag_points[-4:])
+            maybe_w = self._maybe_w_pattern(zigzag_points[-4:])
 
             self.zigzag_points = zigzag_points
+            if not maybe_m and not maybe_w:
+                self.none_patterns.append(zigzag_points[-5:])
 
     def _maybe_m_pattern(self, zigzag_points):
         fri = zigzag_points[0]
@@ -192,6 +196,13 @@ class WMPatternRecognizer:
             con5 = False
 
         if con1 and con2 and con5:
+            points_data = [
+                {
+                    "timestamp": point['timestamp'],
+                    "kline_data": point  # 包含kLineId、price、index等完整数据
+                }
+                for point in zigzag_points
+            ]
             self.maybe_detected_patterns.append({
                 "timestamp": zigzag_points[2]['timestamp'],
                 "price": zigzag_points[2]['price'],
@@ -204,6 +215,7 @@ class WMPatternRecognizer:
                 "kLineId": zigzag_points[2]['kLineId'],
             })
             self.maybe_m.append({
+                'points': points_data,
                 "timestamp": zigzag_points[2]['timestamp'],
                 "price": zigzag_points[2]['price'],
                 "four_price": zigzag_points[3]['price'],
@@ -216,7 +228,12 @@ class WMPatternRecognizer:
                 "end": zigzag_points[-1]['timestamp'],
                 "kLineId": zigzag_points[2]['kLineId'],
                 "kLineId_3": zigzag_points[3]['kLineId'],
+                "start_timestamp": zigzag_points[0]['timestamp'],
+                "end_timestamp": zigzag_points[-1]['timestamp']
             })
+            return True
+        else:
+            return False
 
     def _maybe_w_pattern(self, zigzag_points):
         fri = zigzag_points[0]
@@ -233,6 +250,13 @@ class WMPatternRecognizer:
             con5 = False
 
         if con1 and con2 and con5:
+            points_data = [
+                {
+                    "timestamp": point['timestamp'],
+                    "kline_data": point  # 包含kLineId、price、index等完整数据
+                }
+                for point in zigzag_points
+            ]
             self.maybe_detected_patterns.append({
                 "kLineId": zigzag_points[2]['kLineId'],
                 "timestamp": zigzag_points[2]['timestamp'],
@@ -245,6 +269,7 @@ class WMPatternRecognizer:
                 "end": zigzag_points[3]['timestamp'],
             })
             self.maybe_w.append({
+                'points': points_data,
                 "kLineId": zigzag_points[2]['kLineId'],
                 "timestamp": zigzag_points[2]['timestamp'],
                 "price": zigzag_points[2]['price'],
@@ -257,7 +282,12 @@ class WMPatternRecognizer:
                 "start_four": zigzag_points[3]['timestamp'],
                 "end": zigzag_points[3]['timestamp'],
                 "kLineId_3": zigzag_points[3]['kLineId'],
+                "start_timestamp": zigzag_points[0]['timestamp'],
+                "end_timestamp": zigzag_points[-1]['timestamp'],
             })
+            return True
+        else:
+            return False
 
     def _judgment_m_pattern(self, zigzag_points, dict_index2ts, dict_ts2index):
         """判断M形态 (双顶)"""
@@ -299,8 +329,11 @@ class WMPatternRecognizer:
                 "end": zigzag_points[-1]['timestamp'],
                 "high": max(l_val, r_val),  # 形态的最高点是左右肩中较高的那个
                 "low": head_val,  # 形态的最低点是颈线
+                "leftTop_price": max(zigzag_points[1]['price'], zigzag_points[3]['price']),
+                "rigthBottom_price": min(zigzag_points[0]['price'], zigzag_points[4]['price']),
             })
             self.m_zigzag_points.append(zigzag_points[-5:])
+
 
     def _judgment_w_pattern(self, zigzag_points, dict_index2ts, dict_ts2index):
         """判断W形态 (双底)"""
@@ -341,6 +374,8 @@ class WMPatternRecognizer:
                 "end": zigzag_points[-1]['timestamp'],
                 "high": head_val,  # 形态的最高点是颈线
                 "low": min(l_val, r_val),  # 形态的最低点是左右肩中较低的那个
+                "leftTop_price": max(zigzag_points[0]['price'], zigzag_points[4]['price']),
+                "rigthBottom_price": min(zigzag_points[1]['price'], zigzag_points[3]['price'])
             })
             self.w_zigzag_points.append(zigzag_points[-5:])
 
@@ -361,33 +396,58 @@ class WMPatternRecognizer:
     def get_zigzag_points(self):
         return self.zigzag_points
 
-    def get_formatted_m_w_patterns(self, dict_index2ts, dict_ts2index):
+    def get_formatted_m_w_patterns(self, index_to_ts=None, ts_to_index=None):
         """
         返回格式化后的M/W形态数据，包含时间范围和高低点信息。
         需要传入映射关系以便可能处理时间戳或索引。
         """
         formatted_list = []
         for p in self.detected_patterns:
+
             start_ts = p.get('start')
             end_ts = p.get('end')
-            high_price = p.get('high')
-            low_price = p.get('low')
+            # try:
+            #     start_ts_a2 = index_to_ts.get(ts_to_index.get(start_ts)+2)
+            #     end_ts_d2 = index_to_ts.get(ts_to_index.get(end_ts)-2)
+            # except:
+            #     pass
+            start_ts_a2 = start_ts
+            end_ts_d2 = end_ts
+
+
+            high_price = p.get('leftTop_price')
+            low_price = p.get('rigthBottom_price')
 
             # 原始代码中有随机偏移，但在独立算法中通常不建议，
             # 这里直接使用形态的起止时间戳，如果需要随机偏移应由外部可视化逻辑处理。
 
             formatted_list.append({
-                "time": [start_ts, end_ts],
-                "leftTop": {
-                    "time": start_ts,
-                    "price": high_price
-                },
-                "rigthBottom": {
-                    "time": end_ts,
-                    "price": low_price
-                },
-                "value": p.get('value')  # 添加形态类型
+                "truetime":[start_ts, end_ts],
+                "time": [start_ts_a2, end_ts_d2],
+                "list":[{
+                    "leftTop": {
+                        "time": start_ts_a2,
+                        "price": high_price
+                    },
+                    "rightBottom": {
+                        "time": end_ts_d2,
+                        "price": low_price
+                    },
+                    "classType": p.get('value')  # 添加形态类型
+                }]
             })
+            # formatted_list.append({
+            #     "time": [start_ts, end_ts],
+            #     "leftTop": {
+            #         "time": start_ts,
+            #         "price": high_price
+            #     },
+            #     "rigthBottom": {
+            #         "time": end_ts,
+            #         "price": low_price
+            #     },
+            #     "value": p.get('value')  # 添加形态类型
+            # })
         return formatted_list
 
     def get_all_wm_patterns(self):
@@ -437,5 +497,33 @@ class WMPatternRecognizer:
                 "four_timestamp": w_points[3]['timestamp'],
                 "end_timestamp": w_points[-1]['timestamp']
             })
+
+        return all_patterns
+
+    def get_all_none_patterns(self):
+
+        all_patterns = []
+
+        # 处理M形态
+        for m_points in self.none_patterns:
+            # 提取每个点的时间和完整K线数据
+            points_data = [
+                {
+                    "timestamp": point['timestamp'],
+                    "kline_data": point  # 包含kLineId、price、index等完整数据
+                }
+                for point in m_points
+            ]
+
+            all_patterns.append({
+                "pattern_type": "空形态",
+                "points": points_data,
+                "start_timestamp": m_points[0]['timestamp'],
+                "sec_timestamp": m_points[1]['timestamp'],
+                'thi_timestamp': m_points[2]['timestamp'],
+                "four_timestamp": m_points[3]['timestamp'],
+                "end_timestamp": m_points[-1]['timestamp']
+            })
+
 
         return all_patterns
