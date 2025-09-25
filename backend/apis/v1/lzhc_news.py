@@ -72,7 +72,7 @@ async def get_market_news(
             stmt = (
                 select(DqlJinshiMarketNews)
                 .where(DqlJinshiMarketNews.pkId > lastId)
-                .order_by(DqlJinshiMarketNews.pkId.asc())
+                .order_by(DqlJinshiMarketNews.createTime.asc())
                 .limit(pageSize)
             )
             result = await db.execute(stmt)
