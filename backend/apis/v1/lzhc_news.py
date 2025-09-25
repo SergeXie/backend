@@ -64,7 +64,7 @@ async def get_market_news(
     """
     async with async_db_session() as db:
         if lastId is None:
-            stmt = select(DqlJinshiMarketNews).order_by(DqlJinshiMarketNews.pkId.desc()).limit(pageSize)
+            stmt = select(DqlJinshiMarketNews).order_by(DqlJinshiMarketNews.createTime.desc()).limit(pageSize)
             result = await db.execute(stmt)
             rows = result.scalars().all()
 
