@@ -67,7 +67,7 @@ async def get_market_news(
             stmt = select(DqlJinshiMarketNews).order_by(DqlJinshiMarketNews.pkId.desc()).limit(pageSize)
             result = await db.execute(stmt)
             rows = result.scalars().all()
-            rows = list(reversed(rows))  # 翻转成正序返回
+
         else:
             stmt = (
                 select(DqlJinshiMarketNews)
@@ -89,7 +89,5 @@ async def get_market_news(
             )
             for row in rows
         ]
-
-        print("result:{}".format(result))
 
         return await response_base.success(data=result)
