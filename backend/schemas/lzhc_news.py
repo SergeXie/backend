@@ -23,3 +23,21 @@ class EconomicNewsResponse(BaseModel):
         if value is None:
             return None
         return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
+class MarketNewsResponse(BaseModel):
+    pkId: int
+    time: str
+    content: str
+    createTime: Optional[datetime] = None
+    updateTime: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
+    # 把 datetime 转换成字符串
+    @field_serializer("createTime", "updateTime")
+    def serialize_dt(self, value: Optional[datetime]) -> Optional[str]:
+        if value is None:
+            return None
+        return value.strftime("%Y-%m-%d %H:%M:%S")
