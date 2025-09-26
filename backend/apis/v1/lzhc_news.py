@@ -26,11 +26,12 @@ async def get_economic_news(
         stmt = select(DqlJinshiEconomicNews)
 
         if dateValue:
-            stmt = stmt.where(DqlJinshiEconomicNews.time.like(f"{dateValue}%"))
+            stmt = stmt.where(DqlJinshiEconomicNews.time.like(f"{dateValue}%")).order_by(
+                DqlJinshiEconomicNews.time.asc())
 
         if lastId is None:
             # 第一次请求：最新 100 条（按 id DESC）
-            stmt = stmt.order_by(DqlJinshiEconomicNews.createTime.desc()).limit(pageSize)
+            stmt = stmt.order_by(DqlJinshiEconomicNews.time.asc()).limit(pageSize)
             result = await db.execute(stmt)
             rows = result.scalars().all()
         else:
@@ -38,7 +39,7 @@ async def get_economic_news(
             stmt = (
                 select(DqlJinshiEconomicNews)
                 .where(DqlJinshiEconomicNews.pkId > lastId)
-                .order_by(DqlJinshiEconomicNews.createTime.asc())
+                .order_by(DqlJinshiEconomicNews.time.asc())
                 .limit(pageSize)
             )
             result = await db.execute(stmt)
@@ -73,7 +74,7 @@ async def get_market_news(
     """
     async with async_db_session() as db:
         if lastId is None:
-            stmt = select(DqlJinshiMarketNews).order_by(DqlJinshiMarketNews.createTime.desc()).limit(pageSize)
+            stmt = select(DqlJinshiMarketNews).order_by(DqlJinshiMarketNews.time.desc()).limit(pageSize)
             result = await db.execute(stmt)
             rows = result.scalars().all()
 
@@ -81,7 +82,7 @@ async def get_market_news(
             stmt = (
                 select(DqlJinshiMarketNews)
                 .where(DqlJinshiMarketNews.pkId > lastId)
-                .order_by(DqlJinshiMarketNews.createTime.asc())
+                .order_by(DqlJinshiMarketNews.time.asc())
                 .limit(pageSize)
             )
             result = await db.execute(stmt)
