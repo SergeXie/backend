@@ -267,7 +267,7 @@ class DataAnalysisOrganizer:
         self.result_data = result_data
         self.po_high = po_high
         self.po_low = po_low
-        self.titlepeak = titlepeaks
+        self.titlepeak = titlepeak
         self.titlebottol = titlebottol
         self.titlepeak_offset = titlepeak_offset
         self.titlebottol_offset = titlebottol_offset
