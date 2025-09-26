@@ -11,26 +11,35 @@ router = APIRouter()
 
 @router.get("/economicNews")
 async def get_economic_news(
-    lastId: Optional[int] = Query(None, description="上次请求的最后ID")):
+    lastId: Optional[int] = Query(None, description="上次请求的最后ID"),
+    dateValue: Optional[str] = Query(None, description="查询日期，例如 2025-09-26"),
+    pageSize: Optional[int] = 100,
+
+):
     """
     获取经济数据：
-    - 第一次请求：不传 last_id，返回最新 100 条
-    - 后续请求：传 last_id，返回 id > last_id 的 100 条
+    - 如果传 dateValue：返回该日期的全部数据（可结合 lastId 翻页）
+    - 如果不传 dateValue 且不传 lastId：返回最新 pageSize 条
+    - 如果不传 dateValue 但传 lastId：返回 id > lastId 的 pageSize 条
     """
     async with async_db_session() as db:
+        stmt = select(DqlJinshiEconomicNews)
+
+        if dateValue:
+            stmt = stmt.where(DqlJinshiEconomicNews.time.like(f"{dateValue}%"))
+
         if lastId is None:
             # 第一次请求：最新 100 条（按 id DESC）
-            stmt = select(DqlJinshiEconomicNews).order_by(DqlJinshiEconomicNews.pkId.desc()).limit(100)
+            stmt = stmt.order_by(DqlJinshiEconomicNews.createTime.desc()).limit(pageSize)
             result = await db.execute(stmt)
             rows = result.scalars().all()
-            rows = list(reversed(rows))  # 翻转成正序返回
         else:
             # 后续请求：id > last_id
             stmt = (
                 select(DqlJinshiEconomicNews)
                 .where(DqlJinshiEconomicNews.pkId > lastId)
-                .order_by(DqlJinshiEconomicNews.pkId.asc())
-                .limit(100)
+                .order_by(DqlJinshiEconomicNews.createTime.asc())
+                .limit(pageSize)
             )
             result = await db.execute(stmt)
             rows = result.scalars().all()
