@@ -160,7 +160,11 @@ class WMPatternRecognizer:
         self.m_zigzag_points = []
         self.w_zigzag_points = []
 
+        self.all_5point_list = []
+
         self.none_patterns = []
+
+
 
 
     def analyze_zigzag_points(self, zigzag_points, dict_index2ts=None, dict_ts2index=None):
@@ -174,6 +178,8 @@ class WMPatternRecognizer:
         """
         # 只有当zigzag点数量增加且至少有5个点时才进行判断
         if len(zigzag_points) >= 5 :
+            self._add_all_5point(zigzag_points[-4:])
+
             self._judgment_m_pattern(zigzag_points, dict_index2ts, dict_ts2index)
             self._judgment_w_pattern(zigzag_points, dict_index2ts, dict_ts2index)
             maybe_m = self._maybe_m_pattern(zigzag_points[-4:])
@@ -182,6 +188,8 @@ class WMPatternRecognizer:
             self.zigzag_points = zigzag_points
             if not maybe_m and not maybe_w:
                 self.none_patterns.append(zigzag_points[-5:])
+
+
 
     def _maybe_m_pattern(self, zigzag_points):
         fri = zigzag_points[0]
@@ -379,6 +387,33 @@ class WMPatternRecognizer:
             })
             self.w_zigzag_points.append(zigzag_points[-5:])
 
+    def _add_all_5point(self,zigzag_points):
+        points_data = [
+            {
+                "timestamp": point['timestamp'],
+                "kline_data": point  # 包含kLineId、price、index等完整数据
+            }
+            for point in zigzag_points
+        ]
+        self.all_5point_list.append({
+            'points': points_data,
+            "kLineId": zigzag_points[2]['kLineId'],
+            "timestamp": zigzag_points[2]['timestamp'],
+            "price": zigzag_points[2]['price'],
+            "four_price": zigzag_points[3]['price'],
+            "two_price": zigzag_points[1]['price'],
+            "value": "全部形态",
+            "start": zigzag_points[0]['timestamp'],
+            "start_two": zigzag_points[1]['timestamp'],
+            "start_third": zigzag_points[2]['timestamp'],
+            "start_four": zigzag_points[3]['timestamp'],
+            "end": zigzag_points[3]['timestamp'],
+            "kLineId_3": zigzag_points[3]['kLineId'],
+            "start_timestamp": zigzag_points[0]['timestamp'],
+            "end_timestamp": zigzag_points[-1]['timestamp'],
+        })
+
+
 
     def get_pattern_titles(self):
         """返回检测到的M/W形态标题的原始列表。"""
@@ -395,6 +430,9 @@ class WMPatternRecognizer:
 
     def get_zigzag_points(self):
         return self.zigzag_points
+
+    def get_all_5point_list(self):
+        return self.all_5point_list
 
     def get_formatted_m_w_patterns(self, index_to_ts=None, ts_to_index=None):
         """

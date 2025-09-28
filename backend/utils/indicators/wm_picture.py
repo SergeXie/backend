@@ -66,26 +66,28 @@ class ResponseWMPicyureData(bt.Strategy):
 
 
     def next(self):
+
+        # 准备当前K线数据，传递给ZigZagCalculator
+        current_kline_data = {
+            "kLineId": self.data.klineId[0],  # 假设datafeed提供了klineId
+            "timestamp": self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
+            "open": self.data.open[0],
+            "high": self.data.high[0],
+            "low": self.data.low[0],
+            "close": self.data.close[0],
+            "volume": self.data.volume[0],
+        }
+        index = len(self)
+        ts = self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')
+        self.index_to_ts[index] = ts
+        self.ts_to_index[ts] = index
+
+
         if self.Z_from == 'zig':
 
             # 确保数据长度足够
             if len(self) < self.p.inp_depth:
                 return
-
-            # 准备当前K线数据，传递给ZigZagCalculator
-            current_kline_data = {
-                "kLineId": self.data.klineId[0],  # 假设datafeed提供了klineId
-                "timestamp": self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
-                "open": self.data.open[0],
-                "high": self.data.high[0],
-                "low": self.data.low[0],
-                "close": self.data.close[0],
-                "volume": self.data.volume[0],
-            }
-            index = len(self)
-            ts = self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')
-            self.index_to_ts[index] = ts
-            self.ts_to_index[ts] = index
 
             # 调用ZigZag算法类的处理方法
             # process_kline会返回是否产生了新的zigzag点，如果产生，就通知形态识别器

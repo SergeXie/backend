@@ -143,8 +143,6 @@ class ResWMpredictByMathData(bt.Strategy):
         # print(calc_dtw_distance(last_m_kline_df, last_m_kline_df))
         distance = [calc_dtw_distance(last_m_kline_df, i) for i in all_wm_pattern_kline]
         weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
-        print(weight)
-
         m_zigzag_points = [i['points'] for i in all_wm_pattern if "M" in i['pattern_type']]
         weight = [weight[index] for index, i in enumerate(all_wm_pattern) if "M" in i['pattern_type']]
 
