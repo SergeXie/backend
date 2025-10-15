@@ -158,62 +158,74 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
     :param goods:
     :return:
     """
-    print("执行动态K0")
-    # 当前时间（假设需要 +2 小时）
-    now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
-    # now = datetime.datetime.utcnow()
-
-    # 解析周期（以分钟为单位）
-    period_map = {
-        "M1": 1,
-        "M5": 5,
-        "M15": 15,
-        "M30": 30,
-        "H1": 60,
-        "H4": 240,
-        "D1": 1440,
-        "W1": 10080,
-        "MN": 43800
-    }
-
-    # 动态计算时间范围
-    interval_minutes = period_map[period]
-
-    if period == "W1":
-        # 获取上一周的时间范围
-        start_time = now - datetime.timedelta(days=now.weekday() + 1)  # 上一周的周日
-        start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)  # 设置为当天零点
-        end_time = start_time + datetime.timedelta(days=7)  # 上一周的周末
-
-    elif period == "D1":
-        # D1 周期，调整到当天的 00:00:00
-        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_time = start_time + datetime.timedelta(days=1)  # 次日 00:00:00
-
-    elif period == "MN":
-        # 本月的月初和月底
-        start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)  # 月初
-        _, last_day = calendar.monthrange(now.year, now.month)  # 获取本月最后一天
-        end_time = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)  # 月底
-
-    elif period == "H4":
-        now = datetime.datetime.utcnow()
-        # H4处理
-        start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
-        end_time = start_time + datetime.timedelta(minutes=interval_minutes)
-    else:
-        # 其他周期处理
-        start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
-        end_time = start_time + datetime.timedelta(minutes=interval_minutes)
-        print("===")
-        print((now.minute // interval_minutes) * interval_minutes)
-        print(start_time)
-        print(end_time)
-        print("===")
-    print("start_time:", start_time)
-    print("end_time:", end_time)
-
     async with async_db_session() as db:
+
+        print("执行动态K0")
+        # 当前时间（假设需要 +2 小时）
+        now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
+        # now = datetime.datetime.utcnow()
+        select_model_class, result = await select_goods_common(db, goods, model_classes)
+
+        if not select_model_class:
+            return await response_base.fail(msg="数据库表未找到！", data=[])
+
+        stmt = (
+            select(select_model_class.tradeDateTime)
+            .where(
+                select_model_class.platform == result.platform,
+                select_model_class.tradingGoods == result.trading_goods,
+                select_model_class.type == "M1",
+            )
+            .order_by(select_model_class.tradeDateTime.desc())
+            .limit(1)
+        )
+
+        _last_k_time = (await db.execute(stmt)).scalar_one_or_none()
+        print("_last_k_time:{}".format(_last_k_time))
+
+        # 解析周期（以分钟为单位）
+        period_map = {
+            "M1": 1,
+            "M5": 5,
+            "M15": 15,
+            "M30": 30,
+            "H1": 60,
+            "H4": 240,
+            "D1": 1440,
+            "W1": 10080,
+            "MN": 43800
+        }
+
+        # 动态计算时间范围
+        interval_minutes = period_map[period]
+
+        if period == "W1":
+            # 获取上一周的时间范围
+            start_time = _last_k_time - datetime.timedelta(days=_last_k_time.weekday() + 1)  # 上一周的周日
+            start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)  # 设置为当天零点
+            end_time = start_time + datetime.timedelta(days=7)  # 上一周的周末
+
+        elif period == "D1":
+            # D1 周期，调整到当天的 00:00:00
+            start_time = _last_k_time.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_time = start_time + datetime.timedelta(days=1)  # 次日 00:00:00
+
+        elif period == "MN":
+            # 本月的月初和月底
+            start_time = _last_k_time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)  # 月初
+            _, last_day = calendar.monthrange(_last_k_time.year, _last_k_time.month)  # 获取本月最后一天
+            end_time = _last_k_time.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)  # 月底
+
+        elif period == "H4":
+            now = datetime.datetime.utcnow()
+            # H4处理
+            start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
+            end_time = start_time + datetime.timedelta(minutes=interval_minutes)
+        else:
+            # 其他周期处理
+            start_time = _last_k_time.replace(minute=(_last_k_time.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
+            end_time = start_time + datetime.timedelta(minutes=interval_minutes)
+
         # 因M1数据没有更新到FPG-XAUUSD_合成，临时策略用FPG-XAUUSD,后续需要改
         if goods == "FPG-XAUUSD_合成":
             goods = "FPG-XAUUSD"
