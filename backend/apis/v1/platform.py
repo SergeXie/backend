@@ -219,7 +219,7 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
         elif period == "H4":
             now = datetime.datetime.utcnow()
             # H4处理
-            start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
+            start_time = _last_k_time.replace(minute=(_last_k_time.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
             end_time = start_time + datetime.timedelta(minutes=interval_minutes)
         else:
             # 其他周期处理
