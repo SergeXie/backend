@@ -11,6 +11,7 @@ class EconomicNewsResponse(BaseModel):
     prevValue: Optional[str] = None
     expectValue: Optional[str] = None
     publishValue: Optional[str] = None
+    star: Optional[int] = None
     createTime: Optional[datetime] = None
     updateTime: Optional[datetime] = None
 
