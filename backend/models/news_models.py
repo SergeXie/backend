@@ -17,6 +17,7 @@ class DqlJinshiEconomicNews(Base):
     prevValue: Mapped[str] = mapped_column(String(50), nullable=True, comment="前值")
     expectValue: Mapped[str] = mapped_column(String(50), nullable=True, comment="预期值")
     publishValue: Mapped[str] = mapped_column(String(50), nullable=True, comment="公布值")
+    star: Mapped[int] = mapped_column(Integer, nullable=True, comment="(星星影响)")
     createTime: Mapped[str] = mapped_column(
         TIMESTAMP,
         server_default=text("CURRENT_TIMESTAMP"),
