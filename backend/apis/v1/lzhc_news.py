@@ -95,6 +95,7 @@ async def get_economic_news(
             prevValue=row.prevValue,
             expectValue=row.expectValue,
             publishValue=row.publishValue,
+            star=row.star,
             createTime=row.createTime,
             updateTime=row.updateTime,
         )
