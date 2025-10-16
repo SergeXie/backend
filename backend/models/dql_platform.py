@@ -276,6 +276,28 @@ class DqlOrder(Base):
                                                  server_default='CURRENT_TIMESTAMP', comment='创建时间')
 
 
+class DqlOrderholdpoint(Base):
+
+    __tablename__ = 'dql_order_hold_point'
+
+    pkId: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tradeuid: Mapped[str] = mapped_column(String(64), nullable=False, comment='交易策略id')
+    cmd: Mapped[str] = mapped_column(String(64), nullable=False, comment='买卖点')
+    ip: Mapped[str] = mapped_column(String(32), nullable=False, comment='来自哪个服务器')
+    createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
+                                                server_default='CURRENT_TIMESTAMP', comment='创建时间')
+
+
+class DqlOrderhistorypoint(Base):
+
+    __tablename__ = 'dql_order_history_point'
+
+    pkId: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tradeuid: Mapped[str] = mapped_column(String(64), nullable=False, comment='交易策略id')
+    cmd: Mapped[str] = mapped_column(String(64), nullable=False, comment='买卖点')
+    ip: Mapped[str] = mapped_column(String(32), nullable=False, comment='来自哪个服务器')
+    createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
+                                                server_default='CURRENT_TIMESTAMP', comment='创建时间')
 
 
 

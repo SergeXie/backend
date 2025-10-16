@@ -113,7 +113,7 @@ def extract_data_to_statusclass(all_wm_pattern: List[Dict]) -> Tuple[np.ndarray,
 
     y_processed = np.array(y_list)  # (样本数, 3)
 
-    print(f"数据提取完成：共{len(X_processed)}个有效样本，每个样本{max_seq_len}根K线，7维特征")
+    # print(f"数据提取完成：共{len(X_processed)}个有效样本，每个样本{max_seq_len}根K线，7维特征")
     return X_processed, y_processed
 
 def extract_data_to_diffclass(all_wm_pattern: List[Dict]) -> Tuple[np.ndarray, np.ndarray]:
@@ -227,7 +227,7 @@ def extract_data_to_diffclass(all_wm_pattern: List[Dict]) -> Tuple[np.ndarray, n
 
     y_processed = np.array(y_list)  # (样本数, 3)
 
-    print(f"数据提取完成：共{len(X_processed)}个有效样本，每个样本{max_seq_len}根K线，7维特征")
+    # print(f"数据提取完成：共{len(X_processed)}个有效样本，每个样本{max_seq_len}根K线，7维特征")
     return X_processed, y_processed
 # ------------------------------------------------------------------------------
 # 2. 构建LSTM模型
@@ -354,7 +354,7 @@ def extract_xdata(all_wm_pattern: List[Dict]):
         seq_len = x.shape[0]
         X_processed[i, :seq_len, :] = x  # 前seq_len填充真实数据，其余补0
 
-    print(f"数据提取完成：共{len(X_processed)}个有效样本，每个样本{max_seq_len}根K线，7维特征")
+    # print(f"数据提取完成：共{len(X_processed)}个有效样本，每个样本{max_seq_len}根K线，7维特征")
     return X_processed
 
 
