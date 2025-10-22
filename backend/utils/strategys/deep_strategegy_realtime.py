@@ -78,7 +78,7 @@ class DeepRealtimeStrategy(CommonStrategy):
 
         # 调用父类方法 （固定写法）
         super().calculate_values()
-        ss = joblib.load('scalar02')
+        ss = joblib.load('./dataset/scalar02')
         self.closedata_to_lastest_close.append(self.data.close[0])
         # 整理出测试数据的格式，保证长度为100
         self.X_test.append(self.data.close[0])
