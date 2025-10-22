@@ -92,7 +92,7 @@ class deeptmp(bt.Indicator):
 
         # 进行归一化
         X_test = np.array(X_test).reshape(-1, 1)
-        ss = joblib.load('scalar02')
+        ss = joblib.load('./dataset/scalar02')
         X_test = ss.fit_transform(X_test)
         # 调整输入数据的维度
         self.X_test_list.append(X_test)

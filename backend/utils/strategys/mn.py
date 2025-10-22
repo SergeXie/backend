@@ -8,19 +8,23 @@ from utils.public_strategy import CommonStrategy
 
 class MnStrategy(CommonStrategy):
 
-    def __init__(self, indicator_params, goodsId=None, begin_time=None):
+    def __init__(self, indicator_params, goodsId=None, begin_time=None, baseLots=0.1):
         # 调用父类方法 （固定写法）
         super().__init__(goodsId)
         # 接收参数示例
         # ND = indicator_params.get("NumericalDifference")
 
     def next(self):
-        if len(self) % 2 == 0 and len(self) != 0:
+        con = self.data.datetime.datetime(0).timestamp()%120==0
+        if con and len(self) != 0 and self.position:
             self.order = self.close(size=0.1)  # 平仓，以下一日开盘价卖出
-        elif len(self) % 2 == 1 and len(self) != 0:
+        elif con and len(self) != 0:
             self.order = self.sell(size=0.1)
         # 编写策略
         pass
+
+
+
     # def next(self):
     #     if len(self) == self.data.buflen()-1:
     #         self.order = self.close()

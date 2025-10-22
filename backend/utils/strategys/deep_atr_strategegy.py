@@ -42,7 +42,7 @@ class DeepATRStrategy(CommonStrategy):
 
         self.model = train_model(self, self.distribution, old_model_path, new_model_path, from_strategy=True)  # 数据  y的分布  模型路径和名称
         # 编译模型
-        self.scaler = joblib.load('scalar02')
+        self.scaler = joblib.load('./dataset/scalar02')
 
 
         self.dir = 0
@@ -81,7 +81,7 @@ class DeepATRStrategy(CommonStrategy):
         for i in range(-100, 0):
             X_test.append(self.data.close[i])
         X_test = np.array(X_test).reshape(-1, 1)
-        ss = joblib.load('scalar02')
+        ss = joblib.load('./dataset/scalar02')
         X_test = ss.fit_transform(X_test)
         # 调整输入数据的维度
         X_test = np.reshape(X_test, (X_test.shape[1], X_test.shape[0], 1))

@@ -6,10 +6,11 @@ import re
 import string
 import time
 import traceback
-from collections import defaultdict
+from collections import Counter, defaultdict
+
 import pandas as pd
 from cachetools import TTLCache
-from sqlalchemy import select,desc,func
+from sqlalchemy import select, and_, desc, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 from common.log import log
@@ -18,6 +19,7 @@ from database.db_mysql import async_db_session
 from models.dql_platform import DplGoodsTest, DqlIndicators, TradingFPG, TradingBRC5, TradingOnda, TradingFXTM5, \
     TradingIndex, TradingIndex2, TradingFPG2, DqlStrategy, DqlOrder
 from utils.indicators import *
+# from utils.indicators.atr_kmeans import ResponseATRKmeansData
 from utils.indicators.deeplearn_v2 import ResponseDL2Data
 from utils.indicators.deeplearn import ResponseDLData
 from utils.indicators.BBTrend import ResponseBBTrendData
@@ -34,9 +36,11 @@ from utils.indicators.btatr import ResponseATRData
 from utils.indicators.rsi import ResponseRSIData
 from utils.indicators.wm import ResponseWMData
 from utils.indicators.new_m import ResponseWMpredictData
+# from utils.indicators.wm_train import ResponseWMpredictData
 from utils.indicators.wm_predict_bymodel import ResWMpredictByModelData
 from utils.indicators.wm_predict_bymath import ResWMpredictByMathData
 from utils.indicators.wm_picture import ResponseWMPicyureData
+from utils.indicators.packconnection_v2 import ResponsePCDataV2
 from pypinyin import lazy_pinyin, Style
 from typing import List, Dict, Any
 from utils.strategys import reload_strategies
@@ -50,7 +54,6 @@ cache = TTLCache(maxsize=10000, ttl=3600)
 
 limit_num = 1000
 
-BATCH_SIZE = 500  # 批量查重分块大小
 
 # 创建模型类字典
 model_classes = {
@@ -72,7 +75,7 @@ indicator_classes = {
     "ACP": ResponseACPData,
     "AverageTrueRange": ResponseATRStopLossData,
     "PeakTrough": ResponsePeakTroughData,
-    "PeakConnection": ResponsePCData,
+    "PeakConnectionV2": ResponsePCDataV2,
     "CCI": ResponseCCIData,
     "DMA": ResponseDMAData,
     "MACD": ResponseMACDData,

@@ -382,7 +382,6 @@ class ResponsePCData(bt.Strategy):
 
 
     def stop(self):
-        print("self.po_low:{}".format(self.po_low))
         (self.notnallpoint,
          self.title, self.titlepeak, self.titlebottol, self.title_offset,
          self.titlepeak_offset, self.titlebottol_offset, offset_index) = self.data_processor.process_stop_data(self.result_data, self.result_data_original)

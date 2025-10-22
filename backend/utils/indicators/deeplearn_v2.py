@@ -126,7 +126,7 @@ def train_model(self, distribution, old_model_path, new_model_path, from_strateg
     train_prices = self.close_data.reshape(-1, 1)
     # 数据归一化
     train_scaled = train_prices
-    ss = joblib.load('scalar02')
+    ss = joblib.load('./dataset/scalar02')
     train_scaled = ss.fit_transform(train_prices)
 
     # 创建训练数据集

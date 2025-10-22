@@ -77,6 +77,8 @@ async def task_run_backtest(strategy_data_requests, tester_uid, task_name=None):
         cerebro.adddata(data)
         # 加载策略
         # strategys.className 存储的是列表类型
+        indicator_params['Kline_period'] = strategy_data_requests.get("period", None)
+        indicator_params['Kline_goods'] = strategy_data_requests.get("goods", None)
         for class_name in json.loads(strategys.className):
             cerebro.addstrategy(strategy_classes.get(class_name), indicator_params,
                                 goodsId=strategy_data_requests.get("goods", None),

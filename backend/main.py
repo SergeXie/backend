@@ -4,6 +4,7 @@ from common.log import log
 from core.registrar import register_app
 from scheduled_task.backtesting_task import scheduler
 
+
 app = register_app()
 
 RUN_CRON = "--with-cron" in sys.argv
