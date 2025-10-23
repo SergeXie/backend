@@ -28,7 +28,7 @@ from schemas.platorm_strategr_schemas import TestResultRequest, RealOrderFloatin
 from utils.common import get_entities_list, generate_random_string, \
     generate_lazy_pinyin, \
     to_float, format_datetime, select_goods_common, select_kline_data, fetch_indicators, \
-    run_backtest
+    run_backtest, adjust_unpaired_trades
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
 from utils.trader_report_calculate import  normalize_to_float, process_manual_upload, process_auto_upload
@@ -806,9 +806,11 @@ async def indicator_sync_batch_test(request: Request):
             strategy_data_requests["traderReport"] = traderReport
             strategy_data_requests["newReportTemplate"] = backtest_result["newReportTemplate"]
 
-            # 对交易订单 traderResult还在持仓的，进行盈利结算 TODO 暂时保留
-            # traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("endTime"), traderResult, traderReport)
-            # manualBatchTest=1 表示是手动回测调用。记录不需要存储入库
+            # 对交易订单 traderResult还在持仓的，进行盈利结算
+            traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("startTime"),
+                                                        strategy_data_requests.get("endTime"), traderResult)
+
+            print("traderResult:{}".format(traderResult))
             if not strategy_data_requests.get("manualBatchTest", 0):
                 try:
                     # TODO 保存回测所有信息保存策略结果表中
