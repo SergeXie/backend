@@ -1,5 +1,5 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from datetime import datetime, timedelta, time
 
 from common.log import log
@@ -87,11 +87,11 @@ async def daily_task():
         return
     log.info(f"定时回测任务启动: {datetime.now()}")
     async with async_db_session() as db:
+        await db.execute(delete(DqlOrder))
+        await db.commit()
         for period in CYCLES:
             for _goods in goods:
                 begin_time, end_time = await get_next_begin_and_last_workday_end(db, period, _goods)
-                # begin_time = "2025-09-09 10:31:00"
-                # end_time = "2025-09-05 23:59:59"
                 log.info(f"周期：{period} 开始时间：{begin_time}  结束时间：{end_time}")
                 await fetch_period_data(db, period, _goods, strategyUid, begin_time, end_time)
 
@@ -99,5 +99,5 @@ async def daily_task():
 
 scheduler = AsyncIOScheduler()
 
-# scheduler.add_job(daily_task, "cron", hour=6, minute=15, day_of_week='mon-fri')
-scheduler.add_job(daily_task, "interval", minutes=1)  # 用于测试
+scheduler.add_job(daily_task, "cron", hour=6, minute=15, day_of_week='mon-fri')
+# scheduler.add_job(daily_task, "interval", minutes=1)  # 用于测试
