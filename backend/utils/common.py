@@ -758,6 +758,7 @@ async def get_next_tradeid_start(db, goods_id: str, period: str) -> int:
     return int(max_tid) + 1
 
 
+
 async def save_trader_result(traderResult, db, strategyUid, period, _goods, begin_time):
     if not traderResult:
         return
