@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 
 import pandas as pd
 from cachetools import TTLCache
-from sqlalchemy import select, and_, desc, tuple_, update
+from sqlalchemy import select, and_, desc, tuple_, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 from common.log import log
