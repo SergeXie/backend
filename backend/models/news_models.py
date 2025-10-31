@@ -79,3 +79,19 @@ class DqlJinshiHoliday(Base):
     updateTime: Mapped[DateTime] = mapped_column(TIMESTAMP, nullable=False, server_default=func.current_timestamp(), server_onupdate=func.current_timestamp(), comment="记录更新时间")
 
 
+
+class MarketStatistics(Base):
+    __tablename__ = "dql_market_statistics"
+
+    pkId: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    economicNewsUid: Mapped[int] = mapped_column(Integer, nullable=False, comment="金十经济数据表pkId")
+    time: Mapped[str] = mapped_column(String(50), nullable=False, comment="数据发布时间")
+    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="经济指标名称")
+    newsType: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="经济指标类型 1 非农")
+    m5: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="公布后5分钟走势 高开低收")
+    m30: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="公布后30分钟走势 高开低收")
+    h1: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="公布后1小时走势 高开低收")
+    d1: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="公布后1天走势 高开低收")
+    w1: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="公布后1周走势 高开低收")
+    createTime: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, nullable=False)
+    updateTime: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, nullable=False)

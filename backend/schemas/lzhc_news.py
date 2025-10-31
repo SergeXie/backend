@@ -88,3 +88,28 @@ class JinshiHolidayBase(BaseModel):
     class Config:
         from_attributes = True
         orm_mode = True
+
+
+# 非农数据统计
+class MarketStatisticsOut(BaseModel):
+    pkId: int
+    economicNewsUid: int
+    time: str
+    name: str
+    newsType: Optional[str]
+    m5: Optional[str]
+    m30: Optional[str]
+    h1: Optional[str]
+    d1: Optional[str]
+    w1: Optional[str]
+    createTime: datetime
+
+    # 把 datetime 转换成字符串
+    @field_serializer("createTime")
+    def serialize_dt(self, value: Optional[datetime]) -> Optional[str]:
+        if value is None:
+            return None
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+
+    class Config:
+        orm_mode = True
