@@ -7,10 +7,12 @@ import sys
 import traceback
 import shutil
 from collections import defaultdict, namedtuple
+from typing import List
+
 import chardet
 from datetime import datetime
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, Query, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, Query, HTTPException, UploadFile, File, BackgroundTasks, Depends
 from sqlalchemy import select, desc, update, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
@@ -18,14 +20,15 @@ from starlette.responses import Response
 from apis.v1.platform import model_classes
 from common.log import log
 from common.response.response_schema import response_base
-from database.db_mysql import async_db_session
-from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest, DqlOrder, DqlIndicators
+from database.db_mysql import async_db_session, get_db
+from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest, DqlOrder, DqlIndicators, \
+    DqlStrategyIndicatorRel
 from schemas.platorm import DqlIndicatorsModel
 from schemas.platorm_strategr_schemas import TestResultRequest, RealOrderFloatingProfitModel
 from utils.common import get_entities_list, generate_random_string, \
     generate_lazy_pinyin, \
     to_float, format_datetime, select_goods_common, select_kline_data, fetch_indicators, \
-    run_backtest
+    run_backtest, adjust_unpaired_trades
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
 from utils.trader_report_calculate import  normalize_to_float, process_manual_upload, process_auto_upload
@@ -481,19 +484,23 @@ async def fetch_tester_result(request: Request):
                 ))
                 result_goods_digits = goods_digits.scalars().first()
                 indicatorDataList = list()
-                # 根据策略表查询指标数据
-                strategy = (
-                    await db.execute(select(DqlStrategy).where(DqlStrategy.uid == data.strategyUid))).scalars().first()
-                if strategy.indicatorsClassName:
-                    for _indicators in json.loads(strategy.indicatorsClassName):
-                        indicatorData = (await db.execute(select(DqlIndicators).where(
-                            DqlIndicators.className == _indicators))).scalars().first()
-                        if indicatorData:
-                            indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
-                        else:
-                            indicator_dict = None
 
-                        indicatorDataList.append(indicator_dict)
+                # 根据策略中间表查询指标数据
+                strategy_indicator_rels = (
+                    await db.execute(select(DqlStrategyIndicatorRel).where(
+                        DqlStrategyIndicatorRel.sid == data.strategyUid))).scalars().all()
+                for strategy_indicator_rel in strategy_indicator_rels:
+                    # 查指标表
+                    indicatorData = (await db.execute(select(DqlIndicators).where(
+                                    DqlIndicators.uid == strategy_indicator_rel.iid))).scalars().first()
+
+                    if indicatorData:
+                        indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
+                        indicator_dict["parameters"] = json.loads(strategy_indicator_rel.indicatorParameter)
+                    else:
+                        indicator_dict = None
+
+                    indicatorDataList.append(indicator_dict)
 
                 trader_result = json.loads(data.traderResult)
                 data_dict = dict()
@@ -799,51 +806,54 @@ async def indicator_sync_batch_test(request: Request):
             strategy_data_requests["traderReport"] = traderReport
             strategy_data_requests["newReportTemplate"] = backtest_result["newReportTemplate"]
 
-            # 对交易订单 traderResult还在持仓的，进行盈利结算 TODO 暂时保留
-            # traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("endTime"), traderResult, traderReport)
+            # 对交易订单 traderResult还在持仓的，进行盈利结算
+            traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("startTime"),
+                                                        strategy_data_requests.get("endTime"), traderResult)
 
-            try:
-                # TODO 保存回测所有信息保存策略结果表中
-                tester_uid = await create_strategy_record(db, strategy_data_requests, strategy)
+            print("traderResult:{}".format(traderResult))
+            if not strategy_data_requests.get("manualBatchTest", 0):
+                try:
+                    # TODO 保存回测所有信息保存策略结果表中
+                    tester_uid = await create_strategy_record(db, strategy_data_requests, strategy)
 
-                # TODO 更新
-                await db.execute(
-                    update(DqlStrategyTestResult).where(DqlStrategyTestResult.uid == tester_uid).values(
-                        traderResult=json.dumps({"traderResult": traderResult,
-                                                 "traderReport": traderReport,
-                                                 "floatingPointValues": backtest_result["floatingPointValues"],
-                                                 "netAssetValues": backtest_result["netAssetValues"]}),
-                        yieldRate=traderReport.get("yieldRate", 0),
-                        isBursted=traderReport.get("isBursted", 0),
-                        mdr=traderReport.get("mdr", 0),
-                        winRate=traderReport.get("winRate", 0),
-                        pnl=traderReport.get("totalNetProfit", 0),
-                        plr=traderReport.get("plr", 0),
-                        tradeCount=traderReport.get("totalTrades", 0),
-                        maxProfit=traderReport.get("largestProfit", 0),
-                        maxLoss=traderReport.get("largestLoss", 0),
-                        avgProfit=traderReport.get("avgProfit", 0),
-                        maxFUR=traderReport.get("maxFUR", 0),
-                        score=traderReport.get("totalTrades", 0),
-                        paramsStrName=strategy_data_requests.get("paramsStrName", 0),
-                        calculationStatus=1  # 计算回测结果状态
+                    # TODO 更新
+                    await db.execute(
+                        update(DqlStrategyTestResult).where(DqlStrategyTestResult.uid == tester_uid).values(
+                            traderResult=json.dumps({"traderResult": traderResult,
+                                                     "traderReport": traderReport,
+                                                     "floatingPointValues": backtest_result["floatingPointValues"],
+                                                     "netAssetValues": backtest_result["netAssetValues"]}),
+                            yieldRate=traderReport.get("yieldRate", 0),
+                            isBursted=traderReport.get("isBursted", 0),
+                            mdr=traderReport.get("mdr", 0),
+                            winRate=traderReport.get("winRate", 0),
+                            pnl=traderReport.get("totalNetProfit", 0),
+                            plr=traderReport.get("plr", 0),
+                            tradeCount=traderReport.get("totalTrades", 0),
+                            maxProfit=traderReport.get("largestProfit", 0),
+                            maxLoss=traderReport.get("largestLoss", 0),
+                            avgProfit=traderReport.get("avgProfit", 0),
+                            maxFUR=traderReport.get("maxFUR", 0),
+                            score=traderReport.get("totalTrades", 0),
+                            paramsStrName=strategy_data_requests.get("paramsStrName", 0),
+                            calculationStatus=1  # 计算回测结果状态
 
+                        )
                     )
-                )
-                await db.commit()
+                    await db.commit()
 
-            except Exception as e:
-                info = traceback.format_exc()
-                log.error("策略结果插入数据库失败信息：{}".format(info))
-                log.error("请求参数信息：{}".format(strategy_data_requests))
-                await db.rollback()  # 如果发生异常，回滚事务
-                raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+                except Exception as e:
+                    info = traceback.format_exc()
+                    log.error("策略结果插入数据库失败信息：{}".format(info))
+                    log.error("请求参数信息：{}".format(strategy_data_requests))
+                    await db.rollback()  # 如果发生异常，回滚事务
+                    raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-            finally:
-                await db.close()
+                finally:
+                    await db.close()
 
-            strategy_data_requests["testerUids"] = tester_uid
-            strategy_data_requests["createTime"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                strategy_data_requests["testerUids"] = tester_uid
+                strategy_data_requests["createTime"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
             result_data.append(strategy_data_requests)
 
@@ -875,6 +885,7 @@ async def indicator_async_batch_test(request: Request):
             task_run_backtest.send(strategy_data_requests, tester_uid, task_name="async")
 
         return await response_base.success(data=result_data)
+
 
 
 @router.get("/delete", name="策略删除")

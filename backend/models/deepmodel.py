@@ -15,7 +15,7 @@ def get_data(period=""):
     limit = 500
     # 连接到数据库
     conn = pymysql.connect(
-        host='192.168.0.126',
+        host='192.168.1.126',
         user='cmdb',
         password='cmdb123456',
         database='dql'

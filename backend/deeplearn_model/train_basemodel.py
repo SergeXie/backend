@@ -13,7 +13,7 @@ def train_model(self, distribution, model_path):
     train_prices = np.array(df['close'].values)
     train_prices = train_prices.reshape(-1, 1)
     # 数据归一化
-    ss = joblib.load('scalar02')
+    ss = joblib.load('./dataset/scalar02')
     train_scaled = ss.fit_transform(train_prices)
 
     # train_scaled1 = self.scaler.transform(train_prices)

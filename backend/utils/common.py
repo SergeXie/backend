@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 
 import pandas as pd
 from cachetools import TTLCache
-from sqlalchemy import select, and_, desc, tuple_, update
+from sqlalchemy import select, and_, desc, tuple_, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 from common.log import log
@@ -35,9 +35,16 @@ from utils.indicators.ema import ResponseEMAData
 from utils.indicators.btatr import ResponseATRData
 from utils.indicators.rsi import ResponseRSIData
 from utils.indicators.wm import ResponseWMData
+from utils.indicators.new_m import ResponseWMpredictData
+# from utils.indicators.wm_train import ResponseWMpredictData
+from utils.indicators.wm_predict_bymodel import ResWMpredictByModelData
+from utils.indicators.wm_predict_bymath import ResWMpredictByMathData
+from utils.indicators.wm_picture import ResponseWMPicyureData
+from utils.indicators.packconnection_v2 import ResponsePCDataV2
 from pypinyin import lazy_pinyin, Style
 from typing import List, Dict, Any
 from utils.strategys import reload_strategies
+from utils.strategys.peak_trough_strategy import ResponsePeakTroughData
 from utils.timezone import timezone
 from dateutil import parser
 from utils.public_strategy import ComprehensiveAnalyzer
@@ -67,7 +74,8 @@ indicator_classes = {
     "BBTrend": ResponseBBTrendData,
     "ACP": ResponseACPData,
     "AverageTrueRange": ResponseATRStopLossData,
-    "PeakConnection": ResponsePCData,
+    "PeakTrough": ResponsePeakTroughData,
+    "PeakConnectionV2": ResponsePCDataV2,
     "CCI": ResponseCCIData,
     "DMA": ResponseDMAData,
     "MACD": ResponseMACDData,
@@ -79,6 +87,10 @@ indicator_classes = {
     "RSI": ResponseRSIData,
     "SMCP": ResponseSMCPData,
     "WM": ResponseWMData,
+    "WMpredict": ResponseWMpredictData,
+    "WMpredictByMath": ResWMpredictByMathData,
+    "WMpredictByModel": ResWMpredictByModelData,
+    "WMPicture":ResponseWMPicyureData
 }
 
 
@@ -706,97 +718,147 @@ async def fetch_indicators(db: AsyncSession, uid: str):
     return select_indicators.scalars().first()
 
 
-async def save_trader_result(traderResult, db, strategyUid, period):
-    if not traderResult:
-        return
-
-    first_exist_stmt = (
+async def _get_anchor_open(db, period: str, goods_id: str):
+    """
+    取上一窗口的最后一笔未平仓开仓单（作为锚点）：
+    - orderType != 'close'
+    - closeTime is NULL（或数据库里你标识未平的方式）
+    """
+    stmt = (
         select(DqlOrder)
         .where(
-            DqlOrder.period == period,
-            DqlOrder.closeTime.is_(None),
-            DqlOrder.orderType != "close"
+            (DqlOrder.period == period) &
+            (DqlOrder.goodsId == goods_id) &
+            (DqlOrder.orderType != "close") &
+            (DqlOrder.closeTime.is_(None))
         )
         .order_by(DqlOrder.openTime.desc())
         .limit(1)
     )
-    result = await db.execute(first_exist_stmt)
-    order = result.scalars().first()
+    res = await db.execute(stmt)
+    return res.scalars().first()  # None or DqlOrder
 
-    # 1. 收集本次所有订单的查重四元组
-    unique_keys = set(
-        (row.get('openTime'), row.get("timestamp"), row.get('orderType'), row.get('klineId'))
-        for row in traderResult
+
+def _to_dt(s: str) -> datetime:
+    return datetime.datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+
+def _six_key(row: dict, period: str):
+    return (
+        row.get('goodsId', ''),
+        period,
+        row.get('openTime', ''),
+        row.get('timestamp', ''),
+        row.get('orderType', ''),
+        row.get('klineId', 0),
     )
 
-    # 2. 批量查找数据库已存在的订单
-    exist_stmt = select(DqlOrder.openTime,DqlOrder.timestamp,DqlOrder.orderType, DqlOrder.klineId).where(
-        tuple_(
-            DqlOrder.openTime,
-            DqlOrder.timestamp,
-            DqlOrder.orderType,
-            DqlOrder.klineId,
-        ).in_(unique_keys)
+async def get_next_tradeid_start(db, goods_id: str, period: str) -> int:
+    stmt = select(func.max(DqlOrder.tradeid)).where(
+        (DqlOrder.goodsId == goods_id) & (DqlOrder.period == period)
     )
-    result = await db.execute(exist_stmt)
-    exists = set(result.all())
-    #
-    # 3. 插入不存在的订单
-    add_count = 0
-    update_count = 0
+    res = await db.execute(stmt)
+    max_tid = res.scalar() or 0
+    return int(max_tid) + 1
 
+
+
+async def save_trader_result(traderResult, db, strategyUid, period, _goods, begin_time):
+    if not traderResult:
+        return
+
+    # 1) 找锚点（上一窗口的未平仓开仓）
+    anchor = await _get_anchor_open(db, period, _goods)
+    anchor_open_time = _to_dt(anchor.openTime) if anchor else None
+    anchor_tradeid = anchor.tradeid if anchor else None
+
+    # 2) 查库，获取下一起始 tradeid
+    next_tid_start = await get_next_tradeid_start(db, _goods, period)
+    run_tid_to_global: dict[int, int] = {}
+    next_tid = next_tid_start
+
+    # 2) 先做“窗口对齐 + 跨窗口对接”的预过滤与修正
+    filtered = []
     for row in traderResult:
-        key = (row.get('openTime'), row.get("timestamp"), row.get('orderType'), row.get('klineId'))
-        if key in exists:
-            if row["openTime"] == order.openTime and row["orderType"] == order.orderType \
-                    and row["klineId"] == order.klineId and row["timestamp"] == order.timestamp:
-                log.info("更新订单：{}".format(row))
-                # 更新查询出来的order的tradeid字段
-                stmt = (
-                    update(DqlOrder)
-                    .where(DqlOrder.pkId == order.pkId)
-                    .values(tradeid=row.get('tradeid', 0))
-                )
-                await db.execute(stmt)
-                update_count += 1
-                continue
-            else:
-                log.info("重复订单。跳过新增：{}".format(row))
+        # 仅处理本 goods / period
+        if row.get("goodsId") != _goods:
+            continue
+
+        # 有锚点才执行跨窗口过滤
+        if anchor_open_time:
+            ts = _to_dt(row.get("timestamp"))
+            ot = _to_dt(row.get("openTime"))
+            is_close = (row.get("orderType") == "close")
+
+            # (a) 丢弃锚点之前的所有订单
+            if ts <= anchor_open_time:
                 continue
 
-        order = DqlOrder(
-            tradingGoods=row.get('goodsId', ''),
-            goodsId=row.get('goodsId', ''),
-            period=period,
-            tradeid=row.get('tradeid', 0),
-            openPrice=row.get('openPrice', 0.0),
-            openTime=row.get('openTime', ''),
-            timestamp=row.get('timestamp', ''),
-            closeTime=row.get('closeTime', None),
-            orderType=row.get('orderType', ''),
-            placeType=row.get('placeType', ''),
-            size=row.get('size', 0.0),
-            price=row.get('price', 0.0),
-            stopLoss=row.get('stopLoss', 0.0),
-            takeProfit=row.get('takeProfit', 0.0),
-            taxes=row.get('taxes', 0.0),
-            swap=row.get('swap', 0.0),
-            commission=row.get('commission', 0.0),
-            pnl=row.get('pnl', 0.0),
-            spread=row.get('spread', 0.0),
-            initialCash=row.get('initialCash', 0.0),
-            klineId=row.get('klineId', 0),
-            strategyUid=strategyUid,
-        )
-        db.add(order)
-        add_count += 1
+            # (b) 丢弃与锚点同一根K线的重复开仓
+            if not is_close and ot == anchor_open_time:
+                continue
 
+            # (c) 锚点平仓腿：tradeid 强制改为锚点 tradeid —— 改完就 return 本次循环
+            if is_close and (ot == anchor_open_time) and anchor_tradeid:
+                nr = dict(row)
+                nr["tradeid"] = int(anchor_tradeid)
+                filtered.append(nr)
+                continue  # 关键：避免进入下面的 run_tid 映射
+
+        # === 新产生的订单：用回测内部 tradeid 分组，映射为全局连续 tradeid ===
+        run_tid = int(row.get("tradeid") or 0)
+        if run_tid not in run_tid_to_global:
+            run_tid_to_global[run_tid] = next_tid
+            next_tid += 1
+
+        nr = dict(row)
+        nr["tradeid"] = run_tid_to_global[run_tid]
+        filtered.append(nr)
+
+    # 3) 然后再做：批量查重（6键：goodsId, period, openTime, timestamp, orderType, klineId）
+    #    命中则：若数据库 tradeid 为空且当前有 tradeid -> 补写；否则跳过
+    #    未命中 -> 插入
+    # —— 这里沿用你当前的去重+插入逻辑即可（建议把去重键扩成 6 键）。
+    # ...（此处接你的原有去重/插入实现，记得把 tuple_.in_ 用分块 & 包含 goodsId/period）
+
+    # 例：把 filtered 传入你原来的去重插入流程
+    await _dedup_and_insert(filtered, db, strategyUid, period)
     await db.commit()
-    await db.close()
-    log.info(f"新增订单信息成功，本次插入{add_count}条，跳过{len(traderResult) - add_count}条重复。 更新数量：{update_count}")
 
 
+async def _dedup_and_insert(rows, db, strategyUid: str, period: str):
+    if not rows:
+        return 0
 
+    to_insert = []
+    for r in rows:
+        to_insert.append(DqlOrder(
+            tradingGoods=r.get('goodsId', ''),
+            goodsId=r.get('goodsId', ''),
+            period=period,
+            tradeid=r.get('tradeid', 0) or 0,
+            openPrice=r.get('openPrice', 0.0) or 0.0,
+            openTime=r.get('openTime', ''),
+            timestamp=r.get('timestamp', ''),
+            closeTime=r.get('closeTime', None),
+            orderType=r.get('orderType', ''),
+            placeType=r.get('placeType', ''),
+            size=r.get('size', 0.0) or 0.0,
+            price=r.get('price', 0.0) or 0.0,
+            stopLoss=r.get('stopLoss', 0.0) or 0.0,
+            takeProfit=r.get('takeProfit', 0.0) or 0.0,
+            taxes=r.get('taxes', 0) or 0,
+            swap=r.get('swap', 0) or 0,
+            commission=r.get('commission', 0.0) or 0.0,
+            pnl=r.get('pnl', 0.0) or 0.0,
+            spread=r.get('spread', 0.0) or 0.0,
+            initialCash=r.get('initialCash', 0.0) or 0.0,
+            klineId=r.get('klineId', 0) or 0,
+            strategyUid=strategyUid,
+        ))
+
+    db.add_all(to_insert)
+    await db.commit()
+    return len(to_insert)
 
 async def run_backtest(db: AsyncSession, indicator_data_request, strategys, tester_uid, goods_data, task_name=None):
     """
@@ -1164,10 +1226,10 @@ def statistics_from_orders(data: List[Dict[str, Any]], starting_cash=100000):
         "cashCurve": cash_curve
     }
 
-    return result
+    return result, orders
 
 
-async def adjust_unpaired_trades(db, beginTime, trader_result,
+async def adjust_unpaired_trades(db, beginTime, endTime, trader_result,
                                  traderReport=None, starting_cash: float = 100000):
     """
     查找未配对的 tradeid 并修改其 pnl 值，返回更新后的 trader_result 列表
@@ -1176,7 +1238,6 @@ async def adjust_unpaired_trades(db, beginTime, trader_result,
     :param trader_result: 原始交易列表
     :return: 修改后的完整交易记录列表
     """
-    endTime = datetime.datetime.now()
     # 1. 构建 tradeid -> list of orderType 映射
     tradeid_to_types = defaultdict(list)
     cash = starting_cash

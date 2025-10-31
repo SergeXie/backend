@@ -124,6 +124,22 @@ class DqlIndicators(Base):
     weights: Mapped[int] = mapped_column(Integer, nullable=False, comment='指标权重')
 
 
+class DqlStrategyIndicatorRel(Base):
+    """
+    指标表
+    """
+    __tablename__ = 'dql_strategy_indicator_rel'
+
+    pkId: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sid: Mapped[str] = mapped_column(String(64), nullable=False, comment='策略id')
+    iid: Mapped[str] = mapped_column(String(64), nullable=False, comment='关联指标id')
+    indicatorName: Mapped[str] = mapped_column(String(32), nullable=False, comment='指标名称')
+    indicatorParameter: Mapped[str] = mapped_column(String(1024), nullable=False, comment='指标参数')
+    createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
+                                                server_default='CURRENT_TIMESTAMP', comment='创建时间')
+
+
+
 class DqlStrategy(Base):
     """
     策略表
@@ -133,7 +149,7 @@ class DqlStrategy(Base):
 
     pkId: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     uid: Mapped[str] = mapped_column(String(64), nullable=False, comment='唯一标识符')
-    indicatorsClassName: Mapped[str] = mapped_column(String(64), nullable=False, comment='指标类名 自定义策略的为空')
+    # indicatorsClassName: Mapped[str] = mapped_column(String(64), nullable=False, comment='指标类名 自定义策略的为空')
     name: Mapped[str] = mapped_column(String(32), nullable=False, comment='策略名称')
     className: Mapped[str] = mapped_column(String(32), nullable=False, comment='策略名称')
     description: Mapped[str] = mapped_column(String(255), nullable=False, comment='指标备注')
@@ -260,6 +276,28 @@ class DqlOrder(Base):
                                                  server_default='CURRENT_TIMESTAMP', comment='创建时间')
 
 
+class DqlOrderholdpoint(Base):
+
+    __tablename__ = 'dql_order_hold_point'
+
+    pkId: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tradeuid: Mapped[str] = mapped_column(String(64), nullable=False, comment='交易策略id')
+    cmd: Mapped[str] = mapped_column(String(64), nullable=False, comment='买卖点')
+    ip: Mapped[str] = mapped_column(String(32), nullable=False, comment='来自哪个服务器')
+    createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
+                                                server_default='CURRENT_TIMESTAMP', comment='创建时间')
+
+
+class DqlOrderhistorypoint(Base):
+
+    __tablename__ = 'dql_order_history_point'
+
+    pkId: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tradeuid: Mapped[str] = mapped_column(String(64), nullable=False, comment='交易策略id')
+    cmd: Mapped[str] = mapped_column(String(64), nullable=False, comment='买卖点')
+    ip: Mapped[str] = mapped_column(String(32), nullable=False, comment='来自哪个服务器')
+    createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
+                                                server_default='CURRENT_TIMESTAMP', comment='创建时间')
 
 
 

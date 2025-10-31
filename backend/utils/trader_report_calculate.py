@@ -1,7 +1,6 @@
 import json
 import traceback
 from datetime import datetime
-import backtrader as bt
 import pandas as pd
 from dateutil import parser
 from sqlalchemy import select
@@ -10,8 +9,8 @@ from models.dql_platform import DqlStrategyTestResult, TradingStrategy, DqlIndic
 from utils.common import format_datetime, to_float, match_filter_data, match_ratio, generate_random_string, \
     fetch_trading_data, PandasData, indicator_classes, model_classes, fetch_indicators, select_goods_common, \
     calculate_trade_metrics, calculate_consecutive_win_loss, calculate_plr, calculate_mdr, calculate_max_fur
-from utils.public_strategy import ComprehensiveAnalyzer
-
+from datetime import datetime
+from types import SimpleNamespace
 
 def calculate_additional_metrics(account_list):
     # 交易单数
@@ -660,7 +659,7 @@ async def process_manual_upload(soup, data_json, strategy,
             leverage=500,
             calculationStatus=1,
             newReportTemplate=json.dumps(newReportTemplate),
-            traderReportType=2
+            traderReportType=1  # 统一为自动上传类型
         )
         db.add(add_strategy_record)
         await db.commit()
@@ -731,3 +730,194 @@ async def process_auto_upload(soup, db, grouped_transactions, startTime, endTime
                     await db.rollback()  # 如果发生异常，回滚事务
                     await db.close()
 
+
+class ManualComprehensiveAnalyzer:
+    # 假设类里已有这些属性
+    precision_format = ".3f"
+    max_equity = 0.0
+    max_position_size = 0
+    total_commission = 0.0
+    total_slippage = 0.0
+
+    def _period_minutes(self, period: str) -> int:
+        """将周期字符串转成分钟数：M1/M5/M15/M30/H1/H4/D1/W1/MN"""
+        p = period.upper()
+        if p.startswith("M") and p != "MN":
+            return int(p[1:])                     # M1/M5/M15/M30
+        if p == "H1":
+            return 60
+        if p == "H4":
+            return 240
+        if p == "D1":
+            return 1440
+        if p == "W1":
+            return 10080
+        if p == "MN":
+            # 月线无法稳定换算成分钟，给 0，下面会特殊处理
+            return 0
+        # 默认当做分钟
+        try:
+            return int(p)
+        except Exception:
+            return 0
+
+    def _calc_barlen(self, open_time: str | None, close_time: str | None, period: str) -> float:
+        """根据 openTime/closeTime 和周期估算 bar 数；closeTime 为空时返回 0"""
+        if not open_time or not close_time:
+            return 0.0
+        try:
+            ot = datetime.fromisoformat(open_time.replace(" ", "T"))
+            ct = datetime.fromisoformat(close_time.replace(" ", "T"))
+            minutes = (ct - ot).total_seconds() / 60.0
+            per_min = self._period_minutes(period)
+            if per_min <= 0:
+                return 0.0
+            return max(0.0, minutes / per_min)
+        except Exception:
+            return 0.0
+
+    def _normalize_trades(self, trader_result: list[dict]):
+        """
+        将 list[dict] 规范成含属性的对象列表，且只保留已平仓（orderType == 'close' 且 closeTime != None）的记录。
+        同时区分多空：placeType == 'buy' 视为多单，'sell' 视为空单。
+        """
+        longs, shorts = [], []
+        for row in trader_result:
+            pnl = float(row.get("pnl", 0.0))
+            barlen = self._calc_barlen(row.get("openTime"), row.get("closeTime"), row.get("period", "M30"))
+
+            trade_obj = SimpleNamespace(
+                pnl=pnl,
+                barlen=barlen,
+                raw=row,  # 原始字典，以备需要
+            )
+
+            place = (row.get("placeType") or "").lower()
+            if place == "buy":
+                longs.append(trade_obj)
+            elif place == "sell":
+                shorts.append(trade_obj)
+            else:
+                # 未知方向，默认计入总表但不分多空（下面 overall 会用 longs+shorts 汇总，这里忽略即可）
+                pass
+        return longs, shorts
+
+    def get_analysis_from_result(self, trader_result: list[dict]) -> dict:
+        """
+        直接接收 traderResult(list[dict]) 来做统计分析。
+        """
+        def calculate_stats(trades):
+            total_pnl = sum(t.pnl for t in trades)
+            gross_profit = sum(t.pnl for t in trades if t.pnl > 0)
+            gross_loss = sum(t.pnl for t in trades if t.pnl <= 0)  # 负数或0
+            count_total = len(trades)
+            count_won = sum(1 for t in trades if t.pnl > 0)
+            count_lost = sum(1 for t in trades if t.pnl <= 0)
+            avg_pnl = (total_pnl / count_total) if count_total > 0 else 0.0
+            avg_won = (gross_profit / count_won) if count_won > 0 else 0.0
+            avg_lost = (gross_loss / count_lost) if count_lost > 0 else 0.0  # 注意是负值或0
+
+            max_pnl = max([t.pnl for t in trades], default=0.0)
+            max_lost = min([t.pnl for t in trades], default=0.0)  # 最小的盈亏即最大亏损（负数）
+
+            # 盈亏比（总、平均）
+            profit_loss_ratio = (gross_profit / -gross_loss) if gross_loss != 0 else 0.0
+            avg_profit_ratio = (avg_won / -avg_lost) if avg_lost != 0 else 0.0
+            avg_profit_loss_ratio = (avg_won / (avg_won + -avg_lost)) if (avg_won + -avg_lost) != 0 else 0.0
+
+            # 单笔极值占比
+            max_profit_ratio = (max_pnl / gross_profit) if gross_profit != 0 else 0.0
+            max_loss_ratio = (max_lost / gross_loss) if gross_loss != 0 else 0.0
+            net_profit_loss_ratio = (total_pnl / max_lost) if max_lost != 0 else 0.0
+
+            # 连胜/连亏
+            max_consecutive_wins = current_wins = 0
+            max_consecutive_losses = current_losses = 0
+            for t in trades:
+                if t.pnl > 0:
+                    current_wins += 1
+                    max_consecutive_wins = max(max_consecutive_wins, current_wins)
+                    current_losses = 0
+                else:
+                    current_losses += 1
+                    max_consecutive_losses = max(max_consecutive_losses, current_losses)
+                    current_wins = 0
+
+            # 周期统计
+            avg_holding_period = (sum(t.barlen for t in trades) / count_total) if count_total else 0.0
+
+            total_profit_period = sum(t.barlen for t in trades if t.pnl > 0)
+            avg_profit_period = (total_profit_period / count_won) if count_won else 0.0
+
+            total_loss_period = sum(t.barlen for t in trades if t.pnl <= 0)
+            avg_loss_period = (total_loss_period / count_lost) if count_lost else 0.0
+
+            # 持平单（pnl == 0）
+            count_breakeven = sum(1 for t in trades if t.pnl == 0)
+            total_breakeven_period = sum(t.barlen for t in trades if t.pnl == 0)
+            avg_breakeven_period = (total_breakeven_period / count_breakeven) if count_breakeven else 0.0
+
+            f = self.precision_format
+            return {
+                # 第一列
+                'totalPnl': float(format(total_pnl, f)),                 # 净利润
+                'grossProfit': float(format(gross_profit, f)),          # 总盈利
+                'grossLoss': float(format(gross_loss, f)),              # 总亏损（负数）
+                "profitLossRatio": float(format(profit_loss_ratio, f)), # 总盈利/总亏损(绝对值)
+
+                # 第二列
+                'countTotal': count_total,                              # 交易笔数
+                "profitRatio": float(format(profit_loss_ratio, f)),     # 与上同名概念，这里保留你的字段
+                'countWon': count_won,                                  # 盈利笔数
+                'countLost': count_lost,                                # 亏损/持平 笔数
+                "avgCount": count_breakeven,                            # 持平笔数（原来你写0，这里给真实数量）
+
+                # 第三列
+                # 'avg_pnl': float(format(avg_pnl, f)),                 # 如需可打开
+                'avgProfitRatio': float(format(avg_profit_ratio, f)),   # 平均盈利/平均亏损(绝对值)
+                'avgWon': float(format(avg_won, f)),                    # 平均盈利
+                'avgLost': float(format(avg_lost, f)),                  # 平均亏损（负数）
+                'avgProfitLossRatio': float(format(avg_profit_loss_ratio, f)),  # 平均盈利/(平均盈利+|平均亏损|)
+
+                # 第四列
+                'maxPnl': float(format(max_pnl, f)),                    # 最大盈利
+                'maxLost': float(format(max_lost, f)),                  # 最大亏损（负数）
+                'maxProfitRatio': float(format(max_profit_ratio, f)),   # 最大盈利/总盈利
+                'maxLossRatio': float(format(max_loss_ratio, f)),       # 最大亏损/总亏损
+                'netProfitLossRatio': float(format(net_profit_loss_ratio, f)),  # 净盈利/最大亏损(负数)
+
+                # 第五列
+                'maxConsecutiveWins': float(format(max_consecutive_wins, f)),   # 最大连赢
+                'maxConsecutiveLosses': float(format(max_consecutive_losses, f)),# 最大连亏
+
+                # 第六列（周期）
+                'avgLoldingPeriod': float(format(avg_holding_period, f)),       # 平均持仓bar数
+                'avgProfitPeriod': float(format(avg_profit_period, f)),         # 平均盈利bar数
+                'avgLossPeriod': float(format(avg_loss_period, f)),             # 平均亏损bar数
+                'avgBreakevenPeriod': float(format(avg_breakeven_period, f)),   # 平均持平bar数
+
+                # 第七列（沿用你类的成员）
+                "maxEquity": float(format(self.max_equity, f)),         # 最大使用资金
+                "maxPositionSize": self.max_position_size,              # 最大持仓手数
+                "totalCosts": self.total_commission + self.total_slippage,  # 成本合计
+
+                # 第八列
+                "analysis": float(format((total_pnl / self.max_equity) if self.max_equity else 0.0, f)),  # 收益率
+                "annualizedReturn": 0.0,
+                "EffectiveYield": 0.0,
+                "AverageProfitMonth": 0.0,
+            }
+
+        # --- 入口：把 trader_result 规范化为多空两组 ---
+        long_trades, short_trades = self._normalize_trades(trader_result)
+
+        # --- 计算 ---
+        long_stats = calculate_stats(long_trades)
+        short_stats = calculate_stats(short_trades)
+        overall_stats = calculate_stats(long_trades + short_trades)
+
+        return {
+            'overall': overall_stats,
+            'long': long_stats,
+            'short': short_stats
+        }

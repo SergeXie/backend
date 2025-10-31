@@ -6,13 +6,14 @@ import uuid
 from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 from fastapi import APIRouter, Query
-from sqlalchemy import select, and_, update
+from sqlalchemy import select, and_, update, func
 from starlette.requests import Request
 from starlette.responses import Response
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult, DqlOrder
+from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult, DqlOrder, \
+    DqlStrategyIndicatorRel
 from schemas.base import ErrorModel
 from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData, DqlIndicatorsModel
 from services.indicatory_service import get_indicator_data_async
@@ -23,11 +24,36 @@ from utils.prod_backtrader import MyStrategy
 from utils.timezone import timezone
 import pandas as pd
 from utils.indicators import *
-
+from utils.trader_report_calculate import ManualComprehensiveAnalyzer
 
 router = APIRouter()
 
 executor = ProcessPoolExecutor(max_workers=multiprocessing.cpu_count())  # 可调并发数
+
+
+@router.get("/getKlineCount", name="获取K线时间段数量")
+async def get_kline_count(goods: str, period: str, beginTime: str, endTime: str):
+    async with async_db_session() as db:
+        select_model_class, result = await select_goods_common(db, goods, model_classes)
+
+        if not select_model_class:
+            return await response_base.fail(msg="数据库表未找到！", data=[])
+
+        stmt = (
+            select(func.count())
+            .select_from(select_model_class)
+            .where(
+                select_model_class.tradingGoods == result.trading_goods,
+                select_model_class.platform == result.platform,
+                select_model_class.type == period,
+                select_model_class.tradeDateTime.between(beginTime, endTime)  # 含头含尾
+            )
+        )
+
+        res = await db.execute(stmt)
+        total = res.scalar_one()
+
+        return await response_base.success(data={"total": total})
 
 
 @router.get("/selectAllGoods", name="查询所有平台品种列表",
@@ -56,8 +82,6 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
     :param endTime: 结束时间
     :param strategyUid: 策略uid
     """
-    print("beginTime:{}".format(beginTime))
-    print("endTime:{}".format(endTime))
     async with async_db_session() as db:
         order_strategy = (await db.execute(select(DqlOrder).where(DqlOrder.strategyUid == strategyUid))).scalars().first()
         if not order_strategy:
@@ -82,15 +106,19 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
             return await response_base.fail(msg="时间范围内不存在实时回测报告", data=[])
 
         strategy = (await db.execute(select(DqlStrategy).where(DqlStrategy.uid == strategyUid))).scalars().first()
+
+        strategy_indicator_rels = (await db.execute(select(
+            DqlStrategyIndicatorRel).where(DqlStrategyIndicatorRel.sid == strategyUid))).scalars().first()
         indicatorDataList = list()
-        for _indicator in json.loads(strategy.indicatorsClassName):
-            indicatorData = (await db.execute(select(DqlIndicators).where(
-                DqlIndicators.className == _indicator))).scalars().first()
-            if indicatorData:
-                indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
-            else:
-                indicator_dict = None
-            indicatorDataList.append(indicator_dict)
+        indicatorData = (await db.execute(select(DqlIndicators).where(
+            DqlIndicators.uid == strategy_indicator_rels.iid))).scalars().first()
+        if indicatorData:
+            indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
+            indicator_dict["parameters"] = json.loads(strategy_indicator_rels.indicatorParameter)
+        else:
+            indicator_dict = None
+
+        indicatorDataList.append(indicator_dict)
 
         digits = (await db.execute(
             select(DplGoodsTest.digits).where(DplGoodsTest.goods == goods)
@@ -107,15 +135,17 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                 d[field] = d[field].strftime('%Y-%m-%d %H:%M:%S')
         data.append(d)
 
-    traderResult = await adjust_unpaired_trades(db, beginTime, data)
-    trader_report = statistics_from_orders(traderResult)
+    traderResult = await adjust_unpaired_trades(db, beginTime, endTime, data)
+    trader_report, orders = statistics_from_orders(traderResult)
+    analyzer = ManualComprehensiveAnalyzer()
+    newReportTemplate = analyzer.get_analysis_from_result(orders)
     result_data = [{"goods": goods, "period": period, "startTime": beginTime, "endTime": endTime,
                     "name": strategy.name, "initialCash": 100000, "digits": digits, "parameter": None,
                     "paramsStrName": None, "account": None, "userName": None, "currency": "USD", "spread": 0,
                     "strategyUid": strategyUid,"testerUids": strategyUid, "traderReportType": 3,
                     "netAssetValues": trader_report["cashCurve"], "parameterList": json.loads(strategy.parameters),
                     "traderResult": traderResult, "traderReport": trader_report,
-                    "indicatorData": indicatorDataList}]
+                    "indicatorData": indicatorDataList, "newReportTemplate": newReportTemplate}]
 
     return await response_base.success(data=result_data)
 
@@ -128,58 +158,74 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
     :param goods:
     :return:
     """
-    print("执行动态K0")
-    # 当前时间（假设需要 +2 小时）
-    now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
-    # now = datetime.datetime.utcnow()
-
-    # 解析周期（以分钟为单位）
-    period_map = {
-        "M1": 1,
-        "M5": 5,
-        "M15": 15,
-        "M30": 30,
-        "H1": 60,
-        "H4": 240,
-        "D1": 1440,
-        "W1": 10080,
-        "MN": 43800
-    }
-
-    # 动态计算时间范围
-    interval_minutes = period_map[period]
-
-    if period == "W1":
-        # 获取上一周的时间范围
-        start_time = now - datetime.timedelta(days=now.weekday() + 1)  # 上一周的周日
-        start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)  # 设置为当天零点
-        end_time = start_time + datetime.timedelta(days=7)  # 上一周的周末
-
-    elif period == "D1":
-        # D1 周期，调整到当天的 00:00:00
-        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_time = start_time + datetime.timedelta(days=1)  # 次日 00:00:00
-
-    elif period == "MN":
-        # 本月的月初和月底
-        start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)  # 月初
-        _, last_day = calendar.monthrange(now.year, now.month)  # 获取本月最后一天
-        end_time = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)  # 月底
-
-    elif period == "H4":
-        # H4处理
-        start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
-        end_time = start_time + datetime.timedelta(minutes=interval_minutes)
-
-    else:
-        # 其他周期处理
-        start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
-        end_time = start_time + datetime.timedelta(minutes=interval_minutes)
-
-    print("start_time:", start_time)
-    print("end_time:", end_time)
-
     async with async_db_session() as db:
+
+        print("执行动态K0")
+        # 当前时间（假设需要 +2 小时）
+        now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
+        # now = datetime.datetime.utcnow()
+        # select_model_class, result = await select_goods_common(db, goods, model_classes)
+        #
+        # if not select_model_class:
+        #     return await response_base.fail(msg="数据库表未找到！", data=[])
+        #
+        # stmt = (
+        #     select(select_model_class.tradeDateTime)
+        #     .where(
+        #         select_model_class.platform == result.platform,
+        #         select_model_class.tradingGoods == result.trading_goods,
+        #         select_model_class.type == "M1",
+        #     )
+        #     .order_by(select_model_class.tradeDateTime.desc())
+        #     .limit(1)
+        # )
+        #
+        # _last_k_time = (await db.execute(stmt)).scalar_one_or_none()
+        # print("_last_k_time:{}".format(_last_k_time))
+
+        # 解析周期（以分钟为单位）
+        period_map = {
+            "M1": 1,
+            "M5": 5,
+            "M15": 15,
+            "M30": 30,
+            "H1": 60,
+            "H4": 240,
+            "D1": 1440,
+            "W1": 10080,
+            "MN": 43800
+        }
+
+        # 动态计算时间范围
+        interval_minutes = period_map[period]
+
+        if period == "W1":
+            # 获取上一周的时间范围
+            start_time = now - datetime.timedelta(days=now.weekday() + 1)  # 上一周的周日
+            start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)  # 设置为当天零点
+            end_time = start_time + datetime.timedelta(days=7)  # 上一周的周末
+
+        elif period == "D1":
+            # D1 周期，调整到当天的 00:00:00
+            start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_time = start_time + datetime.timedelta(days=1)  # 次日 00:00:00
+
+        elif period == "MN":
+            # 本月的月初和月底
+            start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)  # 月初
+            _, last_day = calendar.monthrange(now.year, now.month)  # 获取本月最后一天
+            end_time = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)  # 月底
+
+        elif period == "H4":
+            now = datetime.datetime.utcnow()
+            # H4处理
+            start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
+            end_time = start_time + datetime.timedelta(minutes=interval_minutes)
+        else:
+            # 其他周期处理
+            start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
+            end_time = start_time + datetime.timedelta(minutes=interval_minutes)
+
         # 因M1数据没有更新到FPG-XAUUSD_合成，临时策略用FPG-XAUUSD,后续需要改
         if goods == "FPG-XAUUSD_合成":
             goods = "FPG-XAUUSD"
@@ -644,6 +690,15 @@ async def indicator_after_kline(request: Request):
 
 
 @router.post("/indicatorGoodsPeriodKLines", name="获取指标时段数据")
+async def indicator_goods_kline(request: Request):
+    """
+    :param request:
+    :return:
+    """
+    return await get_indicator_data_async(request, "PeriodKLines", executor, name=None)
+
+
+@router.post("/indicatorGoodsPeriodKLinesCopy", name="获取指标时段数据")
 async def indicator_goods_kline(request: Request):
     """
     :param request:

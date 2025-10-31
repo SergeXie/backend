@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import traceback
@@ -18,7 +19,7 @@ from starlette.requests import Request
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import TradingStrategy, DqlStrategy, DplGoodsTest
+from models.dql_platform import TradingStrategy, DqlStrategy, DplGoodsTest, DqlOrderholdpoint, DqlOrderhistorypoint
 from utils.common import generate_random_string
 from fastapi import APIRouter, Query
 from urllib.parse import parse_qs
@@ -122,6 +123,19 @@ strategy_classes = reload_strategies()
 strategy_clientid_dict = dict()  # 策略与订阅者的对应字典
 # 更新订阅者
 
+import socket
+# 创建一个临时socket连接外部服务器来获取主要IPv4
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    # 不会实际建立连接，仅用于获取本地IP
+    s.connect(("8.8.8.8", 80))
+    local_ip = s.getsockname()[0]
+    print("本机IPv4地址:", local_ip)
+except Exception:
+    print("无法获取IP地址，默认使用回环地址: 127.0.0.1")
+finally:
+    s.close()
+
 diaoqucishu = 500
 period_Conversion_Seconds_dict = {
     'M1': 5,
@@ -179,6 +193,7 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
 
         cerebro.broker.set_cash(indicator_data_request.get("initialCash", 10000000))
         result = cerebro.run(stdstats=True, tradehistory=True)
+        # print('查看结果',result)
 
         # traderResult, traderReport = result[0].get_analysis()
         trader_return = result[0].get_analysis()
@@ -187,6 +202,7 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
         order_point = trader_return.get('order_point', [])
 
         if task_name == "async":
+
             await db.execute(
                 update(DqlStrategyTestResult).where(DqlStrategyTestResult.uid == tester_uid).values(
                     traderResult=json.dumps({"traderResult": traderResult, "traderReport": traderReport}),
@@ -319,58 +335,51 @@ async def send_websocket(websocket, data):
 
 
 # 保存历史订单
-def strategy_history_order(tradeUid, order_point=None):
-    if order_point is None:
-        # 如果存在就加载文件
-        if os.path.exists('static/strategy_history_order_pickle.pkl'):
-            with open('static/strategy_history_order_pickle.pkl', 'rb') as f:
-                strategy_history_order_pickle = pickle.load(f)
-        return strategy_history_order_pickle
-
-    else:
-        strategy_history_order_pickle = {}
-        # 如果存在就加载文件
-        if os.path.exists('static/strategy_history_order_pickle.pkl'):
-            with open('static/strategy_history_order_pickle.pkl', 'rb') as f:
-                strategy_history_order_pickle = pickle.load(f)
-        if tradeUid in strategy_history_order_pickle.keys():
-            old_order_point = strategy_history_order_pickle[tradeUid]
-            index = find_last_index(order_point, old_order_point)
-            # index = order_point.index(old_order_point[-1])
-            new_order_points = order_point[index + 1:]
-            old_order_point = old_order_point + new_order_points
-            strategy_history_order_pickle[tradeUid] = old_order_point
-        else:
-            strategy_history_order_pickle[tradeUid] = order_point
-        # 更新
-        with open('static/strategy_history_order_pickle.pkl', 'wb') as f:
-            pickle.dump(strategy_history_order_pickle, f)
+async def strategy_history_order(tradeUid, order_point=None):
+    tmp = order_point.copy()
+    tmp['datatime'] = tmp['datatime'].isoformat()
+    async with async_db_session() as db:
+        new_order = DqlOrderhistorypoint(
+            tradeuid=tradeUid,
+            cmd=json.dumps(tmp),
+            ip=local_ip,
+            createTime=datetime.now()  # 传入当前时间
+        )
+        db.add(new_order)
+        await db.flush()
+        await db.commit()
 
 # 保存持有订单
-def strategy_hold_order(tradeUid, order_point, goods):
-    strategy_hold_order_pickle = {}
-    # 如果存在就加载文件
-    if os.path.exists('static/strategy_hold_order_pickle.pkl'):
-        with open('static/strategy_hold_order_pickle.pkl', 'rb') as f:
-            strategy_hold_order_pickle = pickle.load(f)
-    history_order = {}
-    if tradeUid in strategy_hold_order_pickle.keys():
-        history_order = strategy_hold_order_pickle[tradeUid]
-    # 使用tmp，来补充订单id和产品名称
-    tmp = order_point[-1].copy()
-    tmp['goods'] = goods
+async def strategy_hold_order(tradeUid, order_point, goods):
+    async with async_db_session() as db:
+        # 查询策略
+        result = await db.execute(
+            select(DqlOrderholdpoint)
+            .where(DqlOrderholdpoint.tradeuid == tradeUid)
+            .where(DqlOrderholdpoint.ip == local_ip)
+        )
+        history_orders = result.scalars().all()  # 获取所有结果
+        history_order = history_orders[-1] if history_orders else None  # 取最后一条
+        # print('数据库', history_order)
+        tmp = order_point[-1].copy()
+        tmp['goods'] = goods
+        tmp['datatime'] = tmp['datatime'].isoformat()
+        if history_order:
+            history_order.cmd = json.dumps(tmp)
+            history_order.createTime = datetime.now()
+            # 提交事务以保存到数据库
+            await db.commit()
+        else:
+            # 创建实例
+            new_order = DqlOrderholdpoint(
+                tradeuid=tradeUid,
+                cmd=json.dumps(tmp),
+                ip=local_ip,
+                createTime=datetime.now()  # 传入当前时间
+            )
+            db.add(new_order)
+            await db.commit()
 
-    if len(history_order) != 0:
-        for order in order_point:
-            if order.get('orderId') == history_order.get('orderId') and order.get('order_type') == 'close':
-                strategy_hold_order_pickle[tradeUid] = {}
-                break
-        strategy_hold_order_pickle[tradeUid] = tmp
-    else:
-        strategy_hold_order_pickle[tradeUid] = tmp
-
-    with open('static/strategy_hold_order_pickle.pkl', 'wb') as f:
-        pickle.dump(strategy_hold_order_pickle, f)
 
 class OrderType(Enum):
     buy = 'Buy'
@@ -397,7 +406,8 @@ def get_strategy_str(tradeUid, new_order_point, new_data, CMD=None):
     opentime = new_order_point.get('datatime','')  # k线时间
     exp = '' # 过期时间
     symbol = new_data.get("goods", '')  # 产品
-    price = new_order_point.get('price','')  # 价格
+    # price = new_order_point.get('price','')  # 价格
+    price = 0
     sl = 0  # 止损
     tp = 0  # 止盈
     lots = new_order_point.get('size',0)  # 手数
@@ -423,7 +433,6 @@ async def send_forex_updates(data):
         last_order_point = []
         last_latest_Kline_datetime = ''
         # data = json.loads(data)
-
         tradeUid = data.get("tradeUid", 0)
         parameter = data.get("parameter", None)
         period = data.get("period", None)
@@ -442,6 +451,7 @@ async def send_forex_updates(data):
         else:
             moni = False
         while keep_running:
+            print('轮询中')
             try:
                 async with async_db_session() as db:
                     # 根据品种或者品种表的手数和盈亏倍率
@@ -450,78 +460,59 @@ async def send_forex_updates(data):
                     goods_data = dp_goods_data.scalars().first()
                     # 根据uid寻找策略
                     strategy = await fetch_indicators(db, strategyUid)
-                    print('strategys.className',strategy.className)
+
+                    # print('strategys.className',strategy.className)
                     # 计算策略结果
                     backtest_result = await run_backtest(db, new_data, strategy, 0, goods_data, task_name="sync", ismoni=moni)
                     order_point = backtest_result.get('order_point', [])  # 获取买卖点的字典
                     latest_Kline_datetime = str(backtest_result.get('last_datetime', []))  # 最新k线时间
                     latest_Kline_datetime = datetime.strptime(latest_Kline_datetime, '%Y-%m-%d %H:%M:%S')
 
-                # print('@@@@@@', last_order_point)
-                # print('@@@@@@', order_point)
+                # print('@@@@@@', last_order_point[-1:])
+                # print('@@@@@@', order_point[-1:])
                 # print(order_point)
-                strategy_hold_order(tradeUid, order_point, goods)
+                await strategy_hold_order(tradeUid, order_point, goods)
                 # 判断有没有买卖点
                 if order_point_judge(last_order_point, order_point):
-                    index = find_last_index(order_point, last_order_point)
-                    # index = order_point.index(last_order_point[-1])
-                    new_order_points = order_point[index+1:]
+                    index = find_last_index(order_point, last_order_point, from_w='轮询计算')
+                    print(index)
+
+                    if index == -1:
+                        last_order_point = order_point
+                        continue
+                    new_order_points = order_point[index:]
                     # 保存出现的买卖点
-                    strategy_history_order(tradeUid, order_point)
+
                     for new_order_point in new_order_points:
-                        # print('*'*5,new_order_point)
+                        print('*****',new_order_point)
+                        await strategy_history_order(tradeUid, new_order_point)
                         if new_order_point.get('order_type') == 'buy' or new_order_point.get('order_type') == 'sell': # 开仓
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Open')
-                            # print('开仓',tmp)
+                            print('开仓',tmp)
                             await send_tradeUid(tradeUid, tmp)
-
                         elif new_order_point.get('order_type') == 'close':  # 关仓
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Close')
-                            # print('关仓', tmp)
+                            print('关仓', tmp)
                             await send_tradeUid(tradeUid, tmp)
-
                         elif new_order_point.get('order_type') == 'buy_limit' or new_order_point.get('order_type') == 'sell_limit':  # 关仓
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Open')
                             # print('挂单', tmp)
                             await send_tradeUid(tradeUid, tmp)
-
                         elif new_order_point.get('order_type') == 'modify_buy' or new_order_point.get('order_type') == 'modify_sell':  # 关仓
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Modify')
                             # print('挂单', tmp)
                             await send_tradeUid(tradeUid, tmp)
 
-
                         print('产生买卖点')
                         # 持单的保存
-
-
                 sleep_seconds = period_Conversion_Seconds_dict.get(period)  # 通过周期获取休眠时间
-                # 判断数据有没有更新
-                if last_latest_Kline_datetime != '':
-
-                    dt_object = latest_Kline_datetime + timedelta(seconds=sleep_seconds)  # 用于判断当前时间的下一个k线是不是节假日
-                    # 检查是否周末
-                    is_weekend = dt_object.weekday() >= 5
-                    # 检查是否假日(美国)
-                    is_holiday = dt_object in holidays.US()
-                    # 检查是否休市
-                    start_time = time(0, 0, 0)  # 00:00:00
-                    end_time = time(1, 0, 0)  # 01:00:00
-                    is_close = start_time <= dt_object.time() < end_time
-
-                    # 如果不是节假日 且 两次最后k线的相同
-                    if latest_Kline_datetime == last_latest_Kline_datetime and not any([is_weekend, is_holiday, is_close]):
-                        # await send_tradeUid(tradeUid, "数据未更新")
-                        print("数据未更新")
-
-                # 记录上一个买卖点 和 上一个策略计算种的最后一根K线
                 last_order_point = order_point
                 last_latest_Kline_datetime = latest_Kline_datetime
             except OperationalError as e:
                 log.error(f"数据库断开，捕获到 OperationalError: {e}")
 
             # 设置轮询间隔
-            if tradeUid in ['NTRXAUM1S0002', 'NTRXAUM5S0004']:
+            if tradeUid in ['NTRXAUM5S0004']:
                 # print('进行模拟输出',order_point_judge(last_order_point, order_point))
                 # print(order_point)
                 for i in order_point:
@@ -603,18 +594,23 @@ async def websocket_endpoint(websocket: WebSocket):
                         await send_websocket(websocket, f"tradeUid={tradeUid}&cmd=connect&code=404&message=策略不存在&timeStamp={int(datetime.now().timestamp())}")
 
             elif cmd == 'heartbeat':
-                with open('static/strategy_hold_order_pickle.pkl', 'rb') as f:
-                    strategy_hold_order_pickle = pickle.load(f)
                 # print('心跳', inverse_dict.get(websocket))
                 if not inverse_dict.get(websocket) is None:
                     # 用户订阅的策略列表 形状为['NTRXAUM1S000', 'NTRXAUM1S0001']
                     User_Subscription_Strategy = inverse_dict.get(websocket)
-                    hold = []
-                    print(User_Subscription_Strategy)
                     for i in User_Subscription_Strategy:
-                        if i in strategy_hold_order_pickle.keys():
-                            tmp = get_strategy_str(i, strategy_hold_order_pickle[i], strategy_hold_order_pickle[i], CMD='HeartBeat')
-                            await send_websocket(websocket,  tmp)
+                        async with async_db_session() as db:
+                            result = await db.execute(
+                                select(DqlOrderholdpoint)
+                                .where(DqlOrderholdpoint.tradeuid == i)
+                                .where(DqlOrderholdpoint.ip == local_ip)
+                            )
+                            history_orders = json.loads(result.scalars().all()[-1].cmd)  # 获取所有结果
+                            # print('这里',history_orders)
+                            if history_orders:
+                                tmp = get_strategy_str(i, history_orders, history_orders, CMD='HeartBeat')
+                                await send_websocket(websocket, tmp)
+
 
                     # await send_websocket(websocket, base+'|'.join(str(i) for i in hold))
                 # else:
@@ -635,6 +631,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except OperationalError as e:
         log.error(f"捕获到 OperationalError: {e}")
     except Exception as e:
+        print(e)
         log.error(f"捕获到异常: {e}")
 
 
@@ -714,48 +711,6 @@ async def fetch_trading_data(db, goods, period, model_classes,
                 detail = await db.execute(details_data)
                 # 组织数据结构
                 results = detail.scalars().all()
-                if os.path.exists('static/strategy_history_order_pickle.pkl'):
-                    with open('static/strategy_history_order_pickle.pkl', 'rb') as f:
-                        strategy_history_order_pickle = pickle.load(f)
-                    if tradeUid in strategy_history_order_pickle.keys():
-                        order_point = strategy_history_order_pickle[tradeUid]
-                        begin_time = order_point[-1].get('datatime')
-                        print('begin_time', begin_time)
-                        # start_time = datetime.datetime.strptime(begin_time, '%Y-%m-%d %H:%M:%S')
-                        # previous_working_day = (pd.Timestamp(start_time)).to_pydatetime()
-                        # previous_working_day_str = previous_working_day.strftime('%Y-%m-%d')
-                        details_data1 = select(select_model_class).where(
-                            select_model_class.tradingGoods == result.trading_goods,
-                            select_model_class.platform == result.platform,
-                            select_model_class.type == period,
-                            select_model_class.tradeDateTime < begin_time
-                        ).order_by(desc(select_model_class.tradeDateTime)).limit(3000)
-
-                        detail1 = await db.execute(details_data1)
-                        # 组织数据结构
-                        results1 = detail1.scalars().all()
-                        details_data2 = select(select_model_class).where(
-                            select_model_class.tradingGoods == result.trading_goods,
-                            select_model_class.platform == result.platform,
-                            select_model_class.type == period,
-                            select_model_class.tradeDateTime >= begin_time
-                        ).order_by(desc(select_model_class.tradeDateTime))
-
-                        detail2 = await db.execute(details_data2)
-                        # 组织数据结构
-                        results2 = detail2.scalars().all()
-                        results = results1 + results2
-                    # else:
-                    #     details_data = select(select_model_class).where(
-                    #         select_model_class.tradingGoods == result.trading_goods,
-                    #         select_model_class.platform == result.platform,
-                    #         select_model_class.type == period,
-                    #     ).order_by(desc(select_model_class.tradeDateTime)).limit(3000)
-                    #
-                    #     detail = await db.execute(details_data)
-                    #     # 组织数据结构
-                    #     results = detail.scalars().all()
-
             else:
                 results = []
 
@@ -766,7 +721,7 @@ async def fetch_trading_data(db, goods, period, model_classes,
                  "klineId": x.pkId, "spread": x.spread, "digits": x.digits} for x in results]
 
             result_list = sorted(results_data_list, key=lambda x: x['datetime'])
-            print(len(result_list))
+            # print(len(result_list))
 
             return result_list
 
@@ -777,16 +732,20 @@ async def fetch_trading_data(db, goods, period, model_classes,
         return []
 
 
-def find_last_index(order_point, last_order_point):
+def find_last_index(order_point, last_order_point, from_w=None):
     """
     :param order_point: 新买卖点记录
     :param last_order_point: 旧买卖点记录
     :return: 返回last_order_point最后一个在，新的买卖点记录中的位置，如果没有返回-1
     """
     last_order_point = last_order_point[-1]
+    print(f'find_last_index这里,来自{from_w}',last_order_point,)
 
     order_point_l = [[i['datatime'], i['order_type']] for i in order_point]
     last_order_point_l = [last_order_point['datatime'], last_order_point['order_type']]
+
+    print(order_point_l[-5:])
+    # return order_point_l.index(last_order_point_l)
     try:
         return order_point_l.index(last_order_point_l)
     except:
@@ -800,7 +759,7 @@ def order_point_judge(last_order_point, order_point):
     # 条件2可以覆盖条件1的场景
     condition1 = last_order_point[-1]['datatime'] != order_point[-1]['datatime']
     condition2 = last_order_point[-1]['datatime'] < order_point[-1]['datatime']
-    print('条件', condition1, condition2)
+    print('条件', condition1, condition2,len(order_point))
     if condition1 and condition2:
         return True
     else:
