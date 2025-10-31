@@ -6,8 +6,10 @@ from fastapi import APIRouter, Query
 from sqlalchemy import select, and_
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.news_models import DqlJinshiEconomicNews, DqlJinshiMarketNews, DqlJinshiHoliday, DqlJinshiEvent
-from schemas.lzhc_news import EconomicNewsResponse, MarketNewsResponse, JinshiEventBase, JinshiHolidayBase
+from models.news_models import DqlJinshiEconomicNews, DqlJinshiMarketNews, DqlJinshiHoliday, DqlJinshiEvent, \
+    MarketStatistics
+from schemas.lzhc_news import EconomicNewsResponse, MarketNewsResponse, JinshiEventBase, JinshiHolidayBase, \
+    MarketStatisticsOut
 from utils.enum.period_enum import PeriodEnum
 
 router = APIRouter()
@@ -264,5 +266,33 @@ async def get_market_news_by_period(
             )
             for row in rows
         ]
+
+        return await response_base.success(data=result)
+
+
+@router.get("/marketStatistics/", name="经济数据统计")
+async def get_market_statistics(economicNewsUid: int = Query(..., description="金十经济数据日历pkId")):
+    async with async_db_session() as db:
+        result = await db.execute(
+            select(MarketStatistics).where(MarketStatistics.economicNewsUid == economicNewsUid)
+        )
+        record = result.scalars().first()
+        if not record:
+            return await response_base.fail(msg="数据库表未找到！", data=[])
+
+        # 返回Vo对象，响应时会自动解析json
+        result = MarketStatisticsOut(
+            pkId=record.pkId,
+            economicNewsUid=record.economicNewsUid,
+            time=record.time,
+            name=record.name,
+            newsType=record.newsType,
+            m5=record.m5,
+            m30=record.m30,
+            h1=record.h1,
+            d1=record.d1,
+            w1=record.w1,
+            createTime=record.createTime,
+        )
 
         return await response_base.success(data=result)
