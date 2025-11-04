@@ -426,13 +426,12 @@ def get_strategy_str(tradeUid, new_order_point, new_data, CMD=None):
     elif CMD == 'Connect':
         return base + 'Code=200'
 
-
+sigal = False
 # 买卖点轮询计算
 async def send_forex_updates(data):
     try:
         last_order_point = []
         last_latest_Kline_datetime = ''
-        # data = json.loads(data)
         tradeUid = data.get("tradeUid", 0)
         parameter = data.get("parameter", None)
         period = data.get("period", None)
@@ -441,18 +440,26 @@ async def send_forex_updates(data):
 
         MagicCode = random.randint(10000000, 99999999)
 
-        new_data = {"parameter":parameter,
-                    "period":period,
-                    "goods": goods,
-                    "tradeUid": data.get("tradeUid", 0)}
+        new_data = {
+            "parameter": parameter,
+            "period": period,
+            "goods": goods,
+            "tradeUid": data.get("tradeUid", 0)
+        }
 
         if tradeUid == 'NTRXAUM1S000':
             moni = True
         else:
             moni = False
+
         while keep_running:
-            print('轮询中')
+            # 关键修改：在循环内部增加try-except，捕获本轮循环中的所有异常
             try:
+                global sigal
+                if tradeUid == 'NTRXAUM1S0002' and sigal:
+                    print(NTRXAUM1S0002)
+                print('轮询中', tradeUid, sigal)
+
                 async with async_db_session() as db:
                     # 根据品种或者品种表的手数和盈亏倍率
                     dp_goods_data = await db.execute(select(DplGoodsTest).where(
@@ -461,16 +468,13 @@ async def send_forex_updates(data):
                     # 根据uid寻找策略
                     strategy = await fetch_indicators(db, strategyUid)
 
-                    # print('strategys.className',strategy.className)
                     # 计算策略结果
-                    backtest_result = await run_backtest(db, new_data, strategy, 0, goods_data, task_name="sync", ismoni=moni)
+                    backtest_result = await run_backtest(db, new_data, strategy, 0, goods_data, task_name="sync",
+                                                         ismoni=moni)
                     order_point = backtest_result.get('order_point', [])  # 获取买卖点的字典
                     latest_Kline_datetime = str(backtest_result.get('last_datetime', []))  # 最新k线时间
                     latest_Kline_datetime = datetime.strptime(latest_Kline_datetime, '%Y-%m-%d %H:%M:%S')
 
-                # print('@@@@@@', last_order_point[-1:])
-                # print('@@@@@@', order_point[-1:])
-                # print(order_point)
                 await strategy_hold_order(tradeUid, order_point, goods)
                 # 判断有没有买卖点
                 if order_point_judge(last_order_point, order_point):
@@ -480,69 +484,125 @@ async def send_forex_updates(data):
                     if index == -1:
                         last_order_point = order_point
                         continue
+                    if index != len(last_order_point):
+                        index += 1
                     new_order_points = order_point[index:]
                     # 保存出现的买卖点
 
                     for new_order_point in new_order_points:
-                        print('*****',new_order_point)
+                        print('*****', new_order_point)
                         await strategy_history_order(tradeUid, new_order_point)
-                        if new_order_point.get('order_type') == 'buy' or new_order_point.get('order_type') == 'sell': # 开仓
+                        if new_order_point.get('order_type') in ['buy', 'sell']:  # 开仓
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Open')
-                            print('开仓',tmp)
+                            print('开仓', tmp)
                             await send_tradeUid(tradeUid, tmp)
                         elif new_order_point.get('order_type') == 'close':  # 关仓
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Close')
                             print('关仓', tmp)
                             await send_tradeUid(tradeUid, tmp)
-                        elif new_order_point.get('order_type') == 'buy_limit' or new_order_point.get('order_type') == 'sell_limit':  # 关仓
+                        elif new_order_point.get('order_type') in ['buy_limit', 'sell_limit']:  # 挂单开仓
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Open')
-                            # print('挂单', tmp)
                             await send_tradeUid(tradeUid, tmp)
-                        elif new_order_point.get('order_type') == 'modify_buy' or new_order_point.get('order_type') == 'modify_sell':  # 关仓
+                        elif new_order_point.get('order_type') in ['modify_buy', 'modify_sell']:  # 挂单修改
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Modify')
-                            # print('挂单', tmp)
                             await send_tradeUid(tradeUid, tmp)
 
                         print('产生买卖点')
-                        # 持单的保存
+
                 sleep_seconds = period_Conversion_Seconds_dict.get(period)  # 通过周期获取休眠时间
                 last_order_point = order_point
                 last_latest_Kline_datetime = latest_Kline_datetime
+
             except OperationalError as e:
                 log.error(f"数据库断开，捕获到 OperationalError: {e}")
-
-            # 设置轮询间隔
-            if tradeUid in ['NTRXAUM5S0004']:
-                # print('进行模拟输出',order_point_judge(last_order_point, order_point))
-                # print(order_point)
-                for i in order_point:
-                    if i.get('order_type') == 'buy' or i.get('order_type') == 'sell':  # 开仓
-                        tmp = get_strategy_str(tradeUid, i, new_data, CMD='Open')
-                        await send_tradeUid(tradeUid, tmp)
-                    elif i.get('order_type') == 'close':  # 关仓
-                        tmp = get_strategy_str(tradeUid, i, new_data, CMD='Close')
-                        await send_tradeUid(tradeUid, tmp)
-                    elif i.get('order_type') == 'buy_limit' or i.get('order_type') == 'sell_limit':  # 关仓
-                        tmp = get_strategy_str(tradeUid, i, new_data, CMD='Open')
-                        await send_tradeUid(tradeUid, tmp)
-                    elif i.get('order_type') == 'modify_buy' or i.get('order_type') == 'modify_sell':  # 关仓
-                        tmp = get_strategy_str(tradeUid, i, new_data, CMD='Modify')
-                        await send_tradeUid(tradeUid, tmp)
-                    await asyncio.sleep(1)
-                await asyncio.sleep(0)
-            else:
-                if tradeUid == 'NTRXAUM1S000':
-                    await asyncio.sleep(0.5)
+            # 关键修改：新增except捕获循环内的所有其他异常
+            except Exception as e:
+                info = traceback.format_exc()
+                log.error(f"本轮轮询出错（不影响继续循环）：{info}")
+                print(f"本轮错误信息：{info}")
+            # 关键修改：无论是否报错，都执行休眠，保证循环继续
+            finally:
+                if tradeUid in ['NTRXAUM5S0004']:
+                    for i in order_point:
+                        if i.get('order_type') in ['buy', 'sell']:
+                            tmp = get_strategy_str(tradeUid, i, new_data, CMD='Open')
+                            await send_tradeUid(tradeUid, tmp)
+                        elif i.get('order_type') == 'close':
+                            tmp = get_strategy_str(tradeUid, i, new_data, CMD='Close')
+                            await send_tradeUid(tradeUid, tmp)
+                        elif i.get('order_type') in ['buy_limit', 'sell_limit']:
+                            tmp = get_strategy_str(tradeUid, i, new_data, CMD='Open')
+                            await send_tradeUid(tradeUid, tmp)
+                        elif i.get('order_type') in ['modify_buy', 'modify_sell']:
+                            tmp = get_strategy_str(tradeUid, i, new_data, CMD='Modify')
+                            await send_tradeUid(tradeUid, tmp)
+                        await asyncio.sleep(1)
+                    await asyncio.sleep(0)
                 else:
-                    await asyncio.sleep(sleep_seconds)
-    except:
+                    if tradeUid == 'NTRXAUM1S000':
+                        await asyncio.sleep(0.5)
+                    else:
+                        # 避免sleep_seconds未定义导致的错误
+                        await asyncio.sleep(sleep_seconds if 'sleep_seconds' in locals() else 1)
+
+    except Exception as e:
         info = traceback.format_exc()
-        log.error("策略轮询出错：{}".format(info))
-        print("错误信息：{}".format(info))
-        return Response(status_code=500, content="系统错误!")
+        log.error(f"函数初始化阶段出错（循环外错误）：{info}")
+        print(f"初始化错误信息：{info}")
+
+# 在现有全局变量基础上添加
+active_tasks = {}  # 存储 tradeUid 与对应轮询任务的映射
+
+@router.post("/restartPolling", name="重启轮询任务")
+async def restart_polling(trade_uid: str):
+    """通过 tradeUid 重启对应的轮询任务"""
+    try:
+        # 1. 停止现有任务（如果存在）
+        if trade_uid in active_tasks:
+            task = active_tasks[trade_uid]
+            if not task.done():
+                task.cancel()  # 取消任务
+                await asyncio.sleep(0.1)  # 等待任务终止
+            del active_tasks[trade_uid]
+            log.info(f"已停止轮询任务: {trade_uid}")
+
+        # 2. 查询策略信息，准备重启参数
+        async with async_db_session() as db:
+            query = select(TradingStrategy).where(TradingStrategy.tradeUid == trade_uid)
+            strategy = await db.execute(query)
+            result = strategy.scalars().first()
+            if not result:
+                return await response_base.fail(msg="策略不存在")
+
+            # 3. 重启轮询任务
+            data_dict = {
+                "parameter": json.loads(result.parameter),
+                "period": result.period,
+                "goods": result.goods,
+                "uid": result.strategyUid,
+                "tradeUid": result.tradeUid
+            }
+            new_task = asyncio.create_task(send_forex_updates(data_dict))
+            active_tasks[trade_uid] = new_task
+            log.info(f"已重启轮询任务: {trade_uid}")
+            return await response_base.success(msg="轮询已重启")
+
+    except Exception as e:
+        log.error(f"重启轮询失败: {traceback.format_exc()}")
+        return await response_base.fail(msg=f"重启失败: {str(e)}")
 
 
+@router.get("/stop", name="出问题")
+def stop():
+    print('停止轮询')
+    global sigal
+    sigal = True
 
+@router.get("/open", name="出问题")
+def stop():
+    print('继续轮询')
+    global sigal
+    sigal = False
 
 @router.websocket("/wss")
 async def websocket_endpoint(websocket: WebSocket):
@@ -584,7 +644,8 @@ async def websocket_endpoint(websocket: WebSocket):
                             if tradeUid == 'NTRXAUM1S000':
                                 diaoqucishu = 3000
 
-                            asyncio.create_task(send_forex_updates(data_dict))
+                            new_task = asyncio.create_task(send_forex_updates(data_dict))
+                            active_tasks[data_dict["tradeUid"]] = new_task
                             # await send_forex_updates(data_dict)
                             print("&"*30)
                         else:
@@ -759,7 +820,7 @@ def order_point_judge(last_order_point, order_point):
     # 条件2可以覆盖条件1的场景
     condition1 = last_order_point[-1]['datatime'] != order_point[-1]['datatime']
     condition2 = last_order_point[-1]['datatime'] < order_point[-1]['datatime']
-    print('条件', condition1, condition2,len(order_point))
+    # print('条件', condition1, condition2,len(order_point))
     if condition1 and condition2:
         return True
     else:

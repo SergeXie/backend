@@ -197,7 +197,7 @@ class CommonStrategy(bt.Strategy):
 
         self.trade_ref_dict = {}
 
-        print("line的总长度：", self.data0.buflen())
+        # print("line的总长度：", self.data0.buflen())
 
     def calculate_values(self):
         """
