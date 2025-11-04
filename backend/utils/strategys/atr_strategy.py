@@ -29,7 +29,7 @@ class ATRStrategy(CommonStrategy):
             self.need_closr = True
         self.start_date = datetime.datetime.strptime(begin_time, '%Y-%m-%d %H:%M:%S')  # 设置开始日期
 
-        print("self.need_closr:{}".format(self.need_closr))
+        # print("self.need_closr:{}".format(self.need_closr))
 
     def next(self):
         """
