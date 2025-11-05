@@ -113,10 +113,11 @@ async def get_economic_news(
             updateTime=row.updateTime,
         )
         for row in rows
+
     ]
 
     data = {"economic": result, "event": events_data, "holiday": holiday_data,
-            "pageNo": pageNo, "pageSize": pageSize, "total": total,}
+            "pageNo": pageNo, "pageSize": pageSize, "total": total}
 
     return await response_base.success(data=data)
 

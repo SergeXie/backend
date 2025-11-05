@@ -32,7 +32,7 @@ class MarketNewsResponse(BaseModel):
     content: str
     createTime: Optional[datetime] = None
     updateTime: Optional[datetime] = None
-    preds: int
+    preds: Optional[int] = 0
 
     class Config:
         orm_mode = True
