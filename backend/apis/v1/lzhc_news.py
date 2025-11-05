@@ -1,9 +1,8 @@
 from datetime import datetime, timedelta
-from typing import Optional, List
-
+from typing import Optional
 import requests
 from fastapi import APIRouter, Query
-from sqlalchemy import select, and_, outerjoin
+from sqlalchemy import select, and_, outerjoin, func
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
 from models.news_models import DqlJinshiEconomicNews, DqlJinshiMarketNews, DqlJinshiHoliday, DqlJinshiEvent, \
@@ -38,7 +37,9 @@ def get_event_by_date(date_value: str):
 async def get_economic_news(
     lastId: Optional[int] = Query(None, description="上次请求的最后ID"),
     dateValue: Optional[str] = Query(None, description="查询日期，例如 2025-09-26"),
-    pageSize: Optional[int] = 100,
+    pageNo: Optional[int] = Query(1, description="当前页码，从1开始"),
+    pageSize: Optional[int] = Query(100, description="每页条数"),
+    keyword: Optional[str] = Query(None, description="日历搜索关键字")
 
 ):
     """
@@ -50,26 +51,36 @@ async def get_economic_news(
     async with async_db_session() as db:
         stmt = select(DqlJinshiEconomicNews)
 
+        # ===== 1️ 构建查询条件 =====
+        conditions = []
+
+        # 日期过滤
         if dateValue:
-            stmt = stmt.where(DqlJinshiEconomicNews.time.like(f"{dateValue}%")).order_by(
-                DqlJinshiEconomicNews.time.asc())
+            conditions.append(DqlJinshiEconomicNews.time.like(f"{dateValue}%"))
 
-        if lastId is None:
-            # 第一次请求：最新 100 条（按 id DESC）
-            stmt = stmt.order_by(DqlJinshiEconomicNews.time.asc()).limit(pageSize)
-            result = await db.execute(stmt)
-            rows = result.scalars().all()
+        # 关键字搜索
+        if keyword:
+            conditions.append(DqlJinshiEconomicNews.name.like(f"%{keyword}%"))
 
-        else:
-            # 后续请求：id > last_id
-            stmt = (
-                select(DqlJinshiEconomicNews)
-                .where(DqlJinshiEconomicNews.pkId > lastId)
-                .order_by(DqlJinshiEconomicNews.time.asc())
-                .limit(pageSize)
-            )
-            result = await db.execute(stmt)
-            rows = result.scalars().all()
+        # 应用查询条件
+        if conditions:
+            stmt = stmt.where(*conditions)
+
+        # ===== 2️ 分页逻辑 =====
+        # 计算 offset
+        offset = (pageNo - 1) * pageSize
+        stmt = stmt.order_by(DqlJinshiEconomicNews.time.asc()).offset(offset).limit(pageSize)
+
+        # ===== 3️ 执行查询 =====
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+
+        # ===== 4️ 统计总数（用于前端分页） =====
+        count_stmt = select(func.count()).select_from(DqlJinshiEconomicNews)
+        if conditions:
+            count_stmt = count_stmt.where(*conditions)
+        total_result = await db.execute(count_stmt)
+        total = total_result.scalar() or 0
 
         # 查询事件|假期 数据
         jinshi_event = select(DqlJinshiEvent).where(DqlJinshiEvent.eventTime.like(f"{dateValue}%")).order_by(
@@ -103,9 +114,9 @@ async def get_economic_news(
         )
         for row in rows
     ]
-    print(result)
 
-    data = {"economic": result, "event": events_data, "holiday": holiday_data}
+    data = {"economic": result, "event": events_data, "holiday": holiday_data,
+            "pageNo": pageNo, "pageSize": pageSize, "total": total,}
 
     return await response_base.success(data=data)
 
