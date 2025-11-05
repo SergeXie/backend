@@ -162,7 +162,7 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
 
         print("执行动态K0")
         # 当前时间（假设需要 +2 小时）
-        now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
+        now = datetime.datetime.utcnow() + datetime.timedelta(hours=2) # 冬令时 UTC+2 夏令时 UTC+3
         # now = datetime.datetime.utcnow()
         # select_model_class, result = await select_goods_common(db, goods, model_classes)
         #
@@ -225,6 +225,9 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
             # 其他周期处理
             start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
             end_time = start_time + datetime.timedelta(minutes=interval_minutes)
+            print("end_time")
+            print(start_time)
+            print(end_time)
 
         # 因M1数据没有更新到FPG-XAUUSD_合成，临时策略用FPG-XAUUSD,后续需要改
         if goods == "FPG-XAUUSD_合成":
@@ -331,7 +334,6 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
             # 再次执行查询
             detail = await db.execute(select_k_time)
             latest_data = detail.scalars().first()
-            print(latest_data)
             if latest_data:
                 lineData = {
                     "pkId": latest_data.pkId,
