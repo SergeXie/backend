@@ -69,7 +69,7 @@ async def get_economic_news(
         # ===== 2️ 分页逻辑 =====
         # 计算 offset
         offset = (pageNo - 1) * pageSize
-        stmt = stmt.order_by(DqlJinshiEconomicNews.time.asc()).offset(offset).limit(pageSize)
+        stmt = stmt.order_by(DqlJinshiEconomicNews.time.desc()).offset(offset).limit(pageSize)
 
         # ===== 3️ 执行查询 =====
         result = await db.execute(stmt)
