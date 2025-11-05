@@ -3,11 +3,11 @@ from typing import Optional, List
 
 import requests
 from fastapi import APIRouter, Query
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, outerjoin
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
 from models.news_models import DqlJinshiEconomicNews, DqlJinshiMarketNews, DqlJinshiHoliday, DqlJinshiEvent, \
-    MarketStatistics
+    MarketStatistics, DqlJinshiNewsClass
 from schemas.lzhc_news import EconomicNewsResponse, MarketNewsResponse, JinshiEventBase, JinshiHolidayBase, \
     MarketStatisticsOut
 from utils.enum.period_enum import PeriodEnum
@@ -112,29 +112,61 @@ async def get_economic_news(
 
 @router.get("/marketNews", name="快讯")
 async def get_market_news(
-    lastId: Optional[int] = Query(None, description="上次请求的最后ID"), pageSize: Optional[int] = 100):
+        lastId: Optional[int] = Query(None, description="上次请求的最后ID"),
+        pageSize: Optional[int] = 100,
+        keyword: Optional[str] = Query(None, description="快讯内容搜索关键字")
+        ):
     """
-    获取市场快讯数据：
+    获取市场快讯数据 （带预测信息）：
     - 第一次请求：不传 last_id，返回最新 100 条
     - 后续请求：传 last_id，返回 id > last_id 的 100 条
+    - 支持关键字搜索 (keyword)
+    - 每条快讯包含 preds（利多/利空标识）
+
     """
     async with async_db_session() as db:
-        if lastId is None:
-            stmt = select(DqlJinshiMarketNews).order_by(DqlJinshiMarketNews.time.desc()).limit(pageSize)
-            result = await db.execute(stmt)
-            rows = result.scalars().all()
+        # ===== 1️ 查询快讯主表 =====
+        market = DqlJinshiMarketNews
 
+        # ===== 1️ 构建基础查询条件 =====
+        conditions = []
+        if keyword:
+            # 模糊匹配 content（可加更多字段）
+            conditions.append(market.content.like(f"%{keyword}%"))
+
+        # ===== 2️ 主表查询 =====
+        if lastId is None:
+            stmt = (
+                select(market)
+                .where(*conditions) if conditions else select(market)
+            )
+            stmt = stmt.order_by(market.pkId.desc()).limit(pageSize)
         else:
             stmt = (
-                select(DqlJinshiMarketNews)
-                .where(DqlJinshiMarketNews.pkId > lastId)
-                .order_by(DqlJinshiMarketNews.time.desc())
+                select(market)
+                .where(market.pkId > lastId)
+                .order_by(market.pkId.asc())
                 .limit(pageSize)
             )
-            result = await db.execute(stmt)
-            rows = result.scalars().all()
+            if conditions:
+                stmt = stmt.where(*conditions)
 
-        # 返回Vo对象，响应时会自动解析json
+        result = await db.execute(stmt)
+        market_rows = result.scalars().all()
+
+        if not market_rows:
+            return await response_base.success(data=[])
+
+        # 提取快讯ID
+        market_ids = [row.pkId for row in market_rows]
+
+        # ===== 3 查询预测表 =====
+        news_class = DqlJinshiNewsClass
+        stmt2 = select(news_class.newsId, news_class.preds).where(news_class.newsId.in_(market_ids))
+        result2 = await db.execute(stmt2)
+        preds_map = {r.newsId: r.preds for r in result2.all()}
+
+        # ===== 4 拼接结果 =====
         result = [
             MarketNewsResponse(
                 pkId=row.pkId,
@@ -142,8 +174,9 @@ async def get_market_news(
                 content=row.content,
                 createTime=row.createTime,
                 updateTime=row.updateTime,
+                preds=preds_map.get(row.pkId, 0)  # 默认0表示未预测
             )
-            for row in rows
+            for row in market_rows
         ]
 
         return await response_base.success(data=result)

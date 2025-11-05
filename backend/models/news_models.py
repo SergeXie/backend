@@ -95,3 +95,28 @@ class MarketStatistics(Base):
     w1: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="公布后1周走势 高开低收")
     createTime: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, nullable=False)
     updateTime: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, nullable=False)
+
+
+class DqlJinshiNewsClass(Base):
+
+    __tablename__ = "dql_jinshi_news_class"
+    pkId: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, comment="自增ID")
+    time: Mapped[str] = mapped_column(String(50), nullable=False, comment="数据发布时间")
+    content: Mapped[str] = mapped_column(Text, nullable=False, comment="快讯内容")
+    preds: Mapped[int] = mapped_column(Integer, nullable=False, comment="1为利多黄金，-1为利空黄金 0为已处理")
+    newsId: Mapped[int] = mapped_column(Integer, nullable=False, comment="关联快讯id")
+
+    createTime: Mapped[str] = mapped_column(
+        TIMESTAMP,
+        server_default=text("CURRENT_TIMESTAMP"),
+        comment="记录创建时间"
+    )
+    updateTime: Mapped[str] = mapped_column(
+        TIMESTAMP,
+        server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+        comment="记录最后更新时间"
+    )
+
+
+
+
