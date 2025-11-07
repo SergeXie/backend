@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 import requests
 from fastapi import APIRouter, Query
+from pydantic import Field
 from sqlalchemy import select, and_, outerjoin, func
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
@@ -139,7 +140,8 @@ async def get_economic_news(
 async def get_market_news(
         lastId: Optional[int] = Query(None, description="上次请求的最后ID"),
         pageSize: Optional[int] = 100,
-        keyword: Optional[str] = Query(None, description="快讯内容搜索关键字")
+        keyword: Optional[str] = Query(None, description="快讯内容搜索关键字"),
+        isPredict: Optional[int] = Query(0, description="是否经过预测过的快讯，0=全部快讯，1=预测快讯")
         ):
     """
     获取市场快讯数据 （带预测信息）：
@@ -152,44 +154,78 @@ async def get_market_news(
     async with async_db_session() as db:
         # ===== 1️ 查询快讯主表 =====
         market = DqlJinshiMarketNews
-
+        news_class = DqlJinshiNewsClass
+        model = news_class if isPredict else market
         # ===== 1️ 构建基础查询条件 =====
         conditions = []
         if keyword:
             # 模糊匹配 content（可加更多字段）
-            conditions.append(market.content.like(f"%{keyword}%"))
+            conditions.append(model.content.like(f"%{keyword}%"))
 
-        # ===== 2️ 主表查询 =====
-        if lastId is None:
-            stmt = (
-                select(market)
-                .where(*conditions) if conditions else select(market)
-            )
-            stmt = stmt.order_by(market.pkId.desc()).limit(pageSize)
+        if isPredict:
+            # 预测快讯表
+            # ===== 2️ 主表查询 =====
+            if lastId is None:
+                # 初次查询
+                if conditions:
+                    stmt = (
+                        select(news_class)
+                        .where(and_(*conditions, news_class.preds.in_([1, -1])))
+                        .order_by(news_class.pkId.desc())
+                        .limit(pageSize)
+                    )
+                else:
+                    stmt = (
+                        select(news_class)
+                        .where(news_class.preds.in_([1, -1]))
+                        .order_by(news_class.pkId.desc())
+                        .limit(pageSize)
+                    )
+
+            else:
+                # 翻页查询
+                stmt = (
+                    select(news_class)
+                    .where(and_(news_class.pkId > lastId, news_class.preds == 100))
+                    .order_by(news_class.pkId.asc())
+                    .limit(pageSize)
+                )
+                if conditions:
+                    stmt = stmt.where(and_(*conditions))
+
+            result = await db.execute(stmt)
+            market_rows = result.scalars().all()
         else:
-            stmt = (
-                select(market)
-                .where(market.pkId > lastId)
-                .order_by(market.pkId.asc())
-                .limit(pageSize)
-            )
-            if conditions:
-                stmt = stmt.where(*conditions)
+            # ===== 2️ 主表查询 =====
+            if lastId is None:
+                stmt = (
+                    select(market)
+                    .where(*conditions) if conditions else select(market)
+                )
+                stmt = stmt.order_by(market.pkId.desc()).limit(pageSize)
+            else:
+                stmt = (
+                    select(market)
+                    .where(market.pkId > lastId)
+                    .order_by(market.pkId.asc())
+                    .limit(pageSize)
+                )
+                if conditions:
+                    stmt = stmt.where(*conditions)
 
-        result = await db.execute(stmt)
-        market_rows = result.scalars().all()
+            result = await db.execute(stmt)
+            market_rows = result.scalars().all()
 
-        if not market_rows:
-            return await response_base.success(data=[])
+            if not market_rows:
+                return await response_base.success(data=[])
 
-        # 提取快讯ID
-        market_ids = [row.pkId for row in market_rows]
+            # 提取快讯ID
+            market_ids = [row.pkId for row in market_rows]
 
-        # ===== 3 查询预测表 =====
-        news_class = DqlJinshiNewsClass
-        stmt2 = select(news_class.newsId, news_class.preds).where(news_class.newsId.in_(market_ids))
-        result2 = await db.execute(stmt2)
-        preds_map = {r.newsId: r.preds for r in result2.all()}
+            # ===== 3 查询预测表 =====
+            stmt2 = select(news_class.newsId, news_class.preds).where(news_class.newsId.in_(market_ids))
+            result2 = await db.execute(stmt2)
+            preds_map = {r.newsId: r.preds for r in result2.all()}
 
         # ===== 4 拼接结果 =====
         result = [
@@ -199,7 +235,7 @@ async def get_market_news(
                 content=row.content,
                 createTime=row.createTime,
                 updateTime=row.updateTime,
-                preds=preds_map.get(row.pkId, 0)  # 默认0表示未预测
+                preds=row.preds if isPredict else preds_map.get(row.pkId, 0) # 默认0表示未预测
             )
             for row in market_rows
         ]
