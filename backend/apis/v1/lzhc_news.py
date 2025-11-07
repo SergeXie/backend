@@ -82,6 +82,17 @@ async def get_economic_news(
         total_result = await db.execute(count_stmt)
         total = total_result.scalar() or 0
 
+        # ===== 查询哪些经济数据有周期统计 =====
+        pk_ids = [r.pkId for r in rows]
+        if pk_ids:
+            stat_stmt = select(MarketStatistics.economicNewsUid).where(
+                MarketStatistics.economicNewsUid.in_(pk_ids)
+            )
+            stat_result = await db.execute(stat_stmt)
+            has_stats_ids = {r[0] for r in stat_result.fetchall()}  # 集合方便判断
+        else:
+            has_stats_ids = set()
+
         # 查询事件|假期 数据
         jinshi_event = select(DqlJinshiEvent).where(DqlJinshiEvent.eventTime.like(f"{dateValue}%")).order_by(
                 DqlJinshiEvent.eventTime.asc()).limit(pageSize)
@@ -111,6 +122,8 @@ async def get_economic_news(
             star=row.star,
             createTime=row.createTime,
             updateTime=row.updateTime,
+            isPeriodicStatistics=1 if row.pkId in has_stats_ids else 0,
+
         )
         for row in rows
 
@@ -323,7 +336,7 @@ async def get_market_statistics(economicNewsUid: int = Query(..., description="�
         )
         record = result.scalars().first()
         if not record:
-            return await response_base.fail(msg="数据库表未找到！", data=[])
+            return await response_base.fail(msg="数据未找到！", data=[])
 
         # 返回Vo对象，响应时会自动解析json
         result = MarketStatisticsOut(
