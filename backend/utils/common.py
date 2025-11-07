@@ -444,11 +444,11 @@ async def get_entities_list(entity_type, pageNo=1, pageSize=100, orderBy=0, keyW
 # 封装成一个异步函数，然后在需要使用的地方直接调用该函数
 async def fetch_trading_data(db, goods, period, model_classes,
                              begin_time=None, end_time=None,
-                             lineId=0, name=None, period_tuple=None, class_name=None):
+                             lineId=0, name=None, period_tuple=None, class_name=None,
+                             isSystemIndicatorQuery=None, KlineNumber=None):
+
     # 需要使用到begintime的策略，即数据开始时间会影响
-    need_begintime_class = ['atr_strategy.ATRStrategy',
-                            'atr_strategyv1.ATRStrategy',
-                            'bbtrend.BBTrendStrategy']
+    need_begintime_class = ['atr_strategy.ATRStrategy','atr_strategyv1.ATRStrategy', 'bbtrend.BBTrendStrategy']
 
     try:
         result_data = cache.get(period_tuple)
@@ -465,6 +465,8 @@ async def fetch_trading_data(db, goods, period, model_classes,
 
         if begin_time and end_time:
             print("时段数据 开始执行时间：{}".format(datetime.datetime.now()))
+            print(need_begintime_class)
+            print(class_name)
             # 根据交易品种表的 table_name 字段查找主表，拿到交易历史数据后加入到backtrader的数据源中（开始时间 - 结束时间）
             if class_name is None:
                 class_name = ['None']
@@ -476,7 +478,6 @@ async def fetch_trading_data(db, goods, period, model_classes,
 
                 # 减去一个工作日
                 previous_working_day = (pd.Timestamp(start_time) - pd.offsets.BDay()).to_pydatetime()
-
                 # 格式化回字符串
                 previous_working_day_str = previous_working_day.strftime('%Y-%m-%d')
 
@@ -487,19 +488,26 @@ async def fetch_trading_data(db, goods, period, model_classes,
                     select_model_class.tradeDateTime.between(previous_working_day_str, end_time)
                 ).order_by(select_model_class.tradeDateTime.desc())
 
-                print("previous_working_day_str:{}".format(previous_working_day_str))
-                print("end_time:{}".format(end_time))
-
             else:
                 print('正常时间检测')
+                if isSystemIndicatorQuery == -1:
+                    print("isSystemIndicatorQuery：{}".format(isSystemIndicatorQuery))
+                    # 对特定的指标特定查询，从起始时间再剪一天
+                    start_time = parser.parse(begin_time)
+                    # 减去一个工作日
+                    previous_working_day = (pd.Timestamp(start_time) - pd.offsets.BDay()).to_pydatetime()
+                    # 格式化回字符串
+                    previous_working_day_str = previous_working_day.strftime('%Y-%m-%d')
+                else:
+                    previous_working_day_str = begin_time
+
                 # 正常根据起始时间至结束时间查询
                 query = select(select_model_class).where(
                     select_model_class.tradingGoods == result.trading_goods,
                     select_model_class.platform == result.platform,
                     select_model_class.type == period,
-                    select_model_class.tradeDateTime.between(begin_time, end_time)
+                    select_model_class.tradeDateTime.between(previous_working_day_str, end_time)
                     ).order_by(select_model_class.tradeDateTime.desc())
-
 
             details = await db.execute(query)
 
