@@ -14,7 +14,7 @@ class EconomicNewsResponse(BaseModel):
     star: Optional[int] = Field(None, description="重要性星级")
     createTime: Optional[datetime] = Field(None, description="创建时间")
     updateTime: Optional[datetime] = Field(None, description="更新时间")
-    isPeriodicStatistics: int = Field(0, description="是否存在周期统计，1=存在，0=不存在")
+    isPeriodicStatistics: Optional[int] = Field(0, description="是否存在周期统计，1=存在，0=不存在")
 
 
     class Config:
