@@ -39,13 +39,17 @@ async def get_indicator_data_async(request: Request, data_type: str, executor, n
                         "begin_time": request_item.get("beginTime"),
                         "end_time": request_item.get("endTime")
                     }.items())
+
+                # 查询指标数据
                 trading_data = await fetch_trading_data(db, request_item.get("goods", None),
                                                         period,
                                                         model_classes, lineId=request_item.get("lineId", 0),
                                                         name=name,
                                                         begin_time=request_item.get("beginTime", None),
                                                         end_time=request_item.get("endTime", None),
-                                                        period_tuple=period_tuple)
+                                                        period_tuple=period_tuple,
+                                                        isSystemIndicatorQuery=request_item.get("isSystemIndicatorQuery", 1),
+                                                        KlineNumber=request_item.get("KlineNumber", 100))
                 if not trading_data:
                     continue
                 # 获取当前正在运行的事件循环（FastAPI 的异步主循环）

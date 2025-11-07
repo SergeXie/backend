@@ -4,16 +4,18 @@ from typing import Optional
 
 
 class EconomicNewsResponse(BaseModel):
-    pkId: int
-    time: str
-    name: str
-    affects: Optional[str] = None
-    prevValue: Optional[str] = None
-    expectValue: Optional[str] = None
-    publishValue: Optional[str] = None
-    star: Optional[int] = None
-    createTime: Optional[datetime] = None
-    updateTime: Optional[datetime] = None
+    pkId: int = Field(..., description="主键ID")
+    time: str = Field(..., description="发布时间")
+    name: str = Field(..., description="经济指标名称")
+    affects: Optional[str] = Field(None, description="影响方向")
+    prevValue: Optional[str] = Field(None, description="前值")
+    expectValue: Optional[str] = Field(None, description="预期值")
+    publishValue: Optional[str] = Field(None, description="公布值")
+    star: Optional[int] = Field(None, description="重要性星级")
+    createTime: Optional[datetime] = Field(None, description="创建时间")
+    updateTime: Optional[datetime] = Field(None, description="更新时间")
+    isPeriodicStatistics: Optional[int] = Field(0, description="是否存在周期统计，1=存在，0=不存在")
+
 
     class Config:
         orm_mode = True  # 允许 Pydantic 从 ORM 对象读取数据
