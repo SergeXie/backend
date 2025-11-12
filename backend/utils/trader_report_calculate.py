@@ -723,7 +723,7 @@ async def process_auto_upload(soup, db, grouped_transactions, startTime, endTime
                         traderReportType=1
                     )
                     db.add(add_strategy_record)
-                    log.info(f"周期:{trading_strategy_datas.period} 交易报告提交成功")
+                    log.info(f"周期:{trading_strategy_datas.period} 交易报告提交成功  品种：{trading_strategy_datas.goods}")
                 except Exception as e:
                     info = traceback.format_exc()
                     log.error("交易报告提交失败：{}".format(info))
