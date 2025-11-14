@@ -106,6 +106,7 @@ class MarketStatisticsOut(BaseModel):
     d1: Optional[str]
     w1: Optional[str]
     createTime: datetime
+    summary: Optional[dict]
 
     # 把 datetime 转换成字符串
     @field_serializer("createTime")
