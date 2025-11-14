@@ -38,6 +38,8 @@ def get_event_by_date(date_value: str):
 async def get_economic_news(
     lastId: Optional[int] = Query(None, description="上次请求的最后ID"),
     dateValue: Optional[str] = Query(None, description="查询日期，例如 2025-09-26"),
+    startTime: Optional[str] = Query(None, description="开始时间，例如 2025-09-26 00:00:00"),
+    endTime: Optional[str] = Query(None, description="结束时间，例如 2025-09-26 23:59:59"),
     pageNo: Optional[int] = Query(1, description="当前页码，从1开始"),
     pageSize: Optional[int] = Query(100, description="每页条数"),
     keyword: Optional[str] = Query(None, description="日历搜索关键字")
@@ -47,16 +49,29 @@ async def get_economic_news(
     获取经济数据：
     - 如果传 dateValue：返回该日期的全部数据（可结合 lastId 翻页）
     - 如果不传 dateValue 且不传 lastId：返回最新 pageSize 条
+    - 支持按 startTime ~ endTime 查询时间段
     - 如果不传 dateValue 但传 lastId：返回 id > lastId 的 pageSize 条
     """
     async with async_db_session() as db:
-        stmt = select(DqlJinshiEconomicNews)
+        # ===== 1️⃣ 参数校验 =====
+        if (startTime or endTime) and not keyword:
+            return await response_base.fail(msg="时间段查询必须提供关键字搜索")
 
+        stmt = select(DqlJinshiEconomicNews)
         # ===== 1️ 构建查询条件 =====
         conditions = []
 
+        # 日期筛选优先级：时间段 > 单日
+        if startTime and endTime:
+            conditions.append(
+                and_(
+                    DqlJinshiEconomicNews.time >= startTime,
+                    DqlJinshiEconomicNews.time < endTime,
+                )
+            )
+
         # 日期过滤
-        if dateValue:
+        elif dateValue:
             conditions.append(DqlJinshiEconomicNews.time.like(f"{dateValue}%"))
 
         # 关键字搜索
@@ -80,6 +95,7 @@ async def get_economic_news(
         count_stmt = select(func.count()).select_from(DqlJinshiEconomicNews)
         if conditions:
             count_stmt = count_stmt.where(*conditions)
+
         total_result = await db.execute(count_stmt)
         total = total_result.scalar() or 0
 
