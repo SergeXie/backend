@@ -380,6 +380,54 @@ async def get_market_news_by_period(
         return await response_base.success(data=result)
 
 
+def summarize_period(values: list[str]):
+    """ values: ['open,high,low,close', ...] """
+
+    records = []
+    for v in values:
+        if v and "," in v:
+            try:
+                o, h, l, c = map(float, v.split(","))
+                records.append((o, h, l, c))
+            except:
+                continue
+
+    total = len(records)
+    if total == 0:
+        return None
+
+    up = down = flat = 0
+    up_changes = []
+    down_changes = []
+    ranges = []
+
+    for o, h, l, c in records:
+        change = c - o
+        ranges.append(h - l)
+
+        if change > 0:
+            up += 1
+            up_changes.append(change)
+        elif change < 0:
+            down += 1
+            down_changes.append(change)
+        else:
+            flat += 1
+
+    return {
+        "total": total,  # 总次数
+        "upCount": up,  # 涨次数
+        "downCount": down,  # 跌次数
+        "flatCount": 0,  # 持平次数
+        "upProb": round(up / total, 3),   # 涨概率 = up/total
+        "downProb": round(down / total, 3),  # 跌概率 = 16/40
+        "flatProb": 0,
+        "avgUpPoints": round(sum(up_changes) / len(up_changes), 3) if up_changes else 0, # 平均上涨点数（美元）
+        "avgDownPoints": round(sum(down_changes) / len(down_changes), 3) if down_changes else 0, # 平均下跌点数（美元）
+        "avgRange": round(sum(ranges) / len(ranges), 3),  # 平均波动 high-low
+    }
+
+
 @router.get("/marketStatistics/", name="经济数据统计")
 async def get_market_statistics(economicNewsUid: int = Query(..., description="金十经济数据日历pkId")):
     async with async_db_session() as db:
@@ -389,6 +437,31 @@ async def get_market_statistics(economicNewsUid: int = Query(..., description="�
         record = result.scalars().first()
         if not record:
             return await response_base.fail(msg="数据未找到！", data=[])
+
+        # 根据 newsType 查询全表数据
+        result2 = await db.execute(
+            select(MarketStatistics).where(MarketStatistics.newsType == record.newsType)
+        )
+        all_same_type = result2.scalars().all()
+
+        # 取出各周期字段列表
+        def extract(field):
+            return [getattr(r, field) for r in all_same_type if getattr(r, field)]
+
+        m5_values = extract("m5")
+        m30_values = extract("m30")
+        h1_values = extract("h1")
+        d1_values = extract("d1")
+        w1_values = extract("w1")
+
+        # ④ 计算统计
+        summary = {
+            "m5": summarize_period(m5_values),
+            "m30": summarize_period(m30_values),
+            "h1": summarize_period(h1_values),
+            "d1": summarize_period(d1_values),
+            "w1": summarize_period(w1_values),
+        }
 
         # 返回Vo对象，响应时会自动解析json
         result = MarketStatisticsOut(
@@ -403,6 +476,8 @@ async def get_market_statistics(economicNewsUid: int = Query(..., description="�
             d1=record.d1,
             w1=record.w1,
             createTime=record.createTime,
+            summary=summary,  # 新增：周期统计结果
+
         )
 
         return await response_base.success(data=result)
