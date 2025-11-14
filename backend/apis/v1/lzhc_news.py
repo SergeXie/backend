@@ -418,10 +418,10 @@ def summarize_period(values: list[str]):
         "total": total,  # 总次数
         "upCount": up,  # 涨次数
         "downCount": down,  # 跌次数
-        "flatCount": flat,  # 持平次数
+        "flatCount": 0,  # 持平次数
         "upProb": round(up / total, 3),   # 涨概率 = up/total
         "downProb": round(down / total, 3),  # 跌概率 = 16/40
-        "flatProb": round(flat / total, 3),  # 持平概率
+        "flatProb": 0,
         "avgUpPoints": round(sum(up_changes) / len(up_changes), 3) if up_changes else 0, # 平均上涨点数（美元）
         "avgDownPoints": round(sum(down_changes) / len(down_changes), 3) if down_changes else 0, # 平均下跌点数（美元）
         "avgRange": round(sum(ranges) / len(ranges), 3),  # 平均波动 high-low
