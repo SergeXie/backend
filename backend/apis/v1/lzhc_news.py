@@ -393,6 +393,7 @@ def summarize_period(values: list[str]):
                 continue
 
     total = len(records)
+    print("total:{}".format(total))
     if total == 0:
         return None
 
@@ -422,7 +423,7 @@ def summarize_period(values: list[str]):
         "upProb": round(up / total, 3),   # 涨概率 = up/total
         "downProb": round(down / total, 3),  # 跌概率 = 16/40
         "flatProb": 0,
-        "avgUpPoints": round(sum(up_changes) / len(up_changes), 3) if up_changes else 0, # 平均上涨点数（美元）
+        "avgUpPoints": round(sum(up_changes) / len(up_changes), 3) if up_changes else 0,  # 平均上涨点数（美元）
         "avgDownPoints": round(sum(down_changes) / len(down_changes), 3) if down_changes else 0, # 平均下跌点数（美元）
         "avgRange": round(sum(ranges) / len(ranges), 3),  # 平均波动 high-low
     }
@@ -453,6 +454,9 @@ async def get_market_statistics(economicNewsUid: int = Query(..., description="�
         h1_values = extract("h1")
         d1_values = extract("d1")
         w1_values = extract("w1")
+
+        print("m5_values:{}".format(m5_values))
+        print(len(m5_values))
 
         # ④ 计算统计
         summary = {
