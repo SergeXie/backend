@@ -33,6 +33,7 @@ class DplGoodsTest(Base):
 
     pkid: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     goods: Mapped[str] = mapped_column(VARCHAR(64), comment='平台-交易品种')
+    utc: Mapped[int] = mapped_column(Integer, comment='平台-utc时间')
     goodType: Mapped[str] = mapped_column(VARCHAR(64), comment='品种类型')
     table_name: Mapped[str] = mapped_column(VARCHAR(32), comment='平台表名')
     trading_goods: Mapped[str] = mapped_column(VARCHAR(64), unique=True, index=True, comment='交易品种')
@@ -102,6 +103,9 @@ class TradingIndex(BaseTrading):
 class TradingIndex2(BaseTrading):
     __tablename__ = 'dql_trading_index2'
 
+
+class TradingY20(BaseTrading):
+    __tablename__ = 'dql_trading_y20'
 
 class DqlIndicators(Base):
     """

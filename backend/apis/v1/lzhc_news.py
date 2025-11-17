@@ -382,7 +382,6 @@ async def get_market_news_by_period(
 
 def summarize_period(values: list[str]):
     """ values: ['open,high,low,close', ...] """
-
     records = []
     for v in values:
         if v and "," in v:
@@ -393,7 +392,6 @@ def summarize_period(values: list[str]):
                 continue
 
     total = len(records)
-    print("total:{}".format(total))
     if total == 0:
         return None
 
@@ -406,10 +404,10 @@ def summarize_period(values: list[str]):
         change = c - o
         ranges.append(h - l)
 
-        if change > 0:
+        if change >= 0:
             up += 1
             up_changes.append(change)
-        elif change < 0:
+        elif change <= 0:
             down += 1
             down_changes.append(change)
         else:
@@ -454,9 +452,6 @@ async def get_market_statistics(economicNewsUid: int = Query(..., description="�
         h1_values = extract("h1")
         d1_values = extract("d1")
         w1_values = extract("w1")
-
-        print("m5_values:{}".format(m5_values))
-        print(len(m5_values))
 
         # ④ 计算统计
         summary = {

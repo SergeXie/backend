@@ -17,7 +17,7 @@ from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
 from models.dql_platform import DplGoodsTest, DqlIndicators, TradingFPG, TradingBRC5, TradingOnda, TradingFXTM5, \
-    TradingIndex, TradingIndex2, TradingFPG2, DqlStrategy, DqlOrder
+    TradingIndex, TradingIndex2, TradingFPG2, DqlStrategy, DqlOrder, TradingY20
 from utils.indicators import *
 # from utils.indicators.atr_kmeans import ResponseATRKmeansData
 from utils.indicators.deeplearn_v2 import ResponseDL2Data
@@ -63,7 +63,8 @@ model_classes = {
     "dql_trading_onda": TradingOnda,
     "dql_trading_fxtm5": TradingFXTM5,
     "dql_trading_index": TradingIndex,
-    "dql_trading_index2": TradingIndex2
+    "dql_trading_index2": TradingIndex2,
+    "dql_trading_y20": TradingY20
     # 在这里添加更多的模型类
 }
 
