@@ -262,8 +262,10 @@ async def get_market_news(
                     stmt = stmt.where(*conditions)
                     count_stmt = count_stmt.where(and_(*conditions))
 
-            total_result = await db.execute(count_stmt)
-            total = total_result.scalar() or 0
+            if startTime and endTime:
+                total_result = await db.execute(count_stmt)
+                total = total_result.scalar() or 0
+            else: total = 0
 
             result = await db.execute(stmt)
             market_rows = result.scalars().all()
