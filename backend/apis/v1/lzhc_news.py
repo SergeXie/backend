@@ -155,9 +155,12 @@ async def get_economic_news(
 @router.get("/marketNews", name="快讯")
 async def get_market_news(
         lastId: Optional[int] = Query(None, description="上次请求的最后ID"),
+        pageNo: Optional[int] = Query(1, description="当前页码，从1开始"),
         pageSize: Optional[int] = 100,
         keyword: Optional[str] = Query(None, description="快讯内容搜索关键字"),
-        isPredict: Optional[int] = Query(0, description="是否经过预测过的快讯，0=全部快讯，1=预测快讯")
+        isPredict: Optional[int] = Query(0, description="是否经过预测过的快讯，0=全部快讯，1=预测快讯"),
+        startTime: Optional[str] = Query(None, title="开始时间"),
+        endTime: Optional[str] = Query(None, title="结束时间")
         ):
     """
     获取市场快讯数据 （带预测信息）：
@@ -172,11 +175,22 @@ async def get_market_news(
         market = DqlJinshiMarketNews
         news_class = DqlJinshiNewsClass
         model = news_class if isPredict else market
+
+        offset = (pageNo - 1) * pageSize
+
         # ===== 1️ 构建基础查询条件 =====
         conditions = []
         if keyword:
             # 模糊匹配 content（可加更多字段）
             conditions.append(model.content.like(f"%{keyword}%"))
+
+        if startTime and endTime:
+            conditions.append(
+                and_(
+                    model.time >= startTime,
+                    model.time < endTime
+                )
+            )
 
         if isPredict:
             # 预测快讯表
@@ -187,30 +201,43 @@ async def get_market_news(
                     stmt = (
                         select(news_class)
                         .where(and_(*conditions, news_class.preds.in_([1, -1])))
-                        .order_by(news_class.pkId.desc())
-                        .limit(pageSize)
+                        .order_by(news_class.pkId.desc()).offset(offset).limit(pageSize)
                     )
+
+                    count_stmt = select(func.count()).select_from(news_class).where(
+                        and_(*conditions, news_class.preds.in_([1, -1])))
+
                 else:
                     stmt = (
                         select(news_class)
                         .where(news_class.preds.in_([1, -1]))
-                        .order_by(news_class.pkId.desc())
-                        .limit(pageSize)
+                        .order_by(news_class.pkId.desc()).offset(offset).limit(pageSize)
                     )
+
+                    count_stmt = select(func.count()).select_from(news_class).where(
+                        news_class.preds.in_([1, -1]))
 
             else:
                 # 翻页查询
                 stmt = (
                     select(news_class)
-                    .where(and_(news_class.pkId > lastId, news_class.preds == 100))
-                    .order_by(news_class.pkId.asc())
-                    .limit(pageSize)
+                    .where(and_(news_class.pkId > lastId, news_class.preds.in_([1, -1])))
+                    .order_by(news_class.pkId.asc()).offset(offset).limit(pageSize)
                 )
+
+                count_stmt = select(func.count()).select_from(news_class).where(
+                    and_(news_class.pkId > lastId, news_class.preds.in_([1, -1])))
+
                 if conditions:
                     stmt = stmt.where(and_(*conditions))
+                    count_stmt = count_stmt.where(and_(*conditions))
+
+            total_result = await db.execute(count_stmt)
+            total = total_result.scalar() or 0
 
             result = await db.execute(stmt)
             market_rows = result.scalars().all()
+
         else:
             # ===== 2️ 主表查询 =====
             if lastId is None:
@@ -218,16 +245,25 @@ async def get_market_news(
                     select(market)
                     .where(*conditions) if conditions else select(market)
                 )
-                stmt = stmt.order_by(market.pkId.desc()).limit(pageSize)
+                stmt = stmt.order_by(market.pkId.desc()).offset(offset).limit(pageSize)
+
+                count_stmt = select(func.count()).select_from(market).where(*conditions)
+
             else:
                 stmt = (
                     select(market)
                     .where(market.pkId > lastId)
-                    .order_by(market.pkId.asc())
-                    .limit(pageSize)
+                    .order_by(market.pkId.asc()).offset(offset).limit(pageSize)
                 )
+
+                count_stmt = select(func.count()).select_from(market).where(market.pkId > lastId)
+
                 if conditions:
                     stmt = stmt.where(*conditions)
+                    count_stmt = count_stmt.where(and_(*conditions))
+
+            total_result = await db.execute(count_stmt)
+            total = total_result.scalar() or 0
 
             result = await db.execute(stmt)
             market_rows = result.scalars().all()
@@ -256,7 +292,8 @@ async def get_market_news(
             for row in market_rows
         ]
 
-        return await response_base.success(data=result)
+        return {"code": 200,"message": "Success","pageNo": pageNo,"pageSize": pageSize,
+                "data": result, "total": total}
 
 
 @router.get("/periodMarketNews", name="时间段内的市场快讯")
