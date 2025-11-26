@@ -155,6 +155,8 @@ class WMPatternRecognizer:
         self._last_processed_zigzag_len = 0  # 跟踪已处理的zigzag点数量，避免重复判断
         self.zigzag_points = []
         self.maybe_detected_patterns = []  # 存储可能的M/W形态结果
+        self.is_non_standard_maybe_w_patterns = []  #非标准的形态
+        self.is_non_standard_maybe_m_patterns = []
         self.maybe_w = []
         self.maybe_m = []
         self.m_zigzag_points = []
@@ -197,20 +199,24 @@ class WMPatternRecognizer:
         thi = zigzag_points[2]
         fou = zigzag_points[3]
 
+        h = sec['hloc'][0]
+        l = sec['hloc'][1]
+        mid = (h + l) / 2
+
         con1 = fri['price'] < thi['price'] < fou['price']< sec['price']
         con2 = (thi['index'] - fri['index']) > 20
         con5 = True
         if self.maybe_detected_patterns and zigzag_points[2]['timestamp'] == self.maybe_detected_patterns[-1]['timestamp']:
             con5 = False
 
+        points_data = [
+            {
+                "timestamp": point['timestamp'],
+                "kline_data": point  # 包含kLineId、price、index等完整数据
+            }
+            for point in zigzag_points
+        ]
         if con1 and con2 and con5:
-            points_data = [
-                {
-                    "timestamp": point['timestamp'],
-                    "kline_data": point  # 包含kLineId、price、index等完整数据
-                }
-                for point in zigzag_points
-            ]
             self.maybe_detected_patterns.append({
                 "timestamp": zigzag_points[2]['timestamp'],
                 "price": zigzag_points[2]['price'],
@@ -222,13 +228,19 @@ class WMPatternRecognizer:
                 "end": zigzag_points[-1]['timestamp'],
                 "kLineId": zigzag_points[2]['kLineId'],
             })
+            value_str = "可能M形态"
+            if fou['hloc'][0] > mid:
+                value_str = 'M1形态'
+            elif fou['hloc'][0] < mid:
+                value_str = 'M2形态'
+            # print(value_str)
             self.maybe_m.append({
                 'points': points_data,
                 "timestamp": zigzag_points[2]['timestamp'],
                 "price": zigzag_points[2]['price'],
                 "four_price": zigzag_points[3]['price'],
                 "two_price": zigzag_points[1]['price'],
-                "value": "可能M形态",
+                "value": value_str,
                 "start": zigzag_points[0]['timestamp'],
                 "start_two": zigzag_points[1]['timestamp'],
                 "start_third": zigzag_points[2]['timestamp'],
@@ -237,10 +249,13 @@ class WMPatternRecognizer:
                 "kLineId": zigzag_points[2]['kLineId'],
                 "kLineId_3": zigzag_points[3]['kLineId'],
                 "start_timestamp": zigzag_points[0]['timestamp'],
-                "end_timestamp": zigzag_points[-1]['timestamp']
+                "end_timestamp": zigzag_points[-1]['timestamp'],
+                "leftTop_price": max(zigzag_points[1]['price'], zigzag_points[3]['price']),
+                "rigthBottom_price": zigzag_points[0]['price'],
             })
             return True
         else:
+
             return False
 
     def _maybe_w_pattern(self, zigzag_points):
@@ -249,22 +264,24 @@ class WMPatternRecognizer:
         thi = zigzag_points[2]
         fou = zigzag_points[3]
 
-        con1 = sec['price'] < fou['price'] < thi['price']< fri['price']
+        h = sec['hloc'][0]
+        l = sec['hloc'][1]
+        mid = (h + l) / 2
 
+        con1 = sec['price'] < fou['price'] < thi['price']< fri['price']
         con2 = (thi['index'] - fri['index']) > 20
 
         con5 = True
         if self.maybe_detected_patterns and zigzag_points[2]['timestamp'] == self.maybe_detected_patterns[-1]['timestamp']:
             con5 = False
-
+        points_data = [
+            {
+                "timestamp": point['timestamp'],
+                "kline_data": point  # 包含kLineId、price、index等完整数据
+            }
+            for point in zigzag_points
+        ]
         if con1 and con2 and con5:
-            points_data = [
-                {
-                    "timestamp": point['timestamp'],
-                    "kline_data": point  # 包含kLineId、price、index等完整数据
-                }
-                for point in zigzag_points
-            ]
             self.maybe_detected_patterns.append({
                 "kLineId": zigzag_points[2]['kLineId'],
                 "timestamp": zigzag_points[2]['timestamp'],
@@ -276,6 +293,12 @@ class WMPatternRecognizer:
                 "start_two": zigzag_points[1]['timestamp'],
                 "end": zigzag_points[3]['timestamp'],
             })
+            value_str = "可能W形态"
+            if fou['hloc'][1] < mid:
+                value_str = 'W1形态'
+            elif fou['hloc'][1] > mid:
+                value_str = 'W2形态'
+            # print(value_str)
             self.maybe_w.append({
                 'points': points_data,
                 "kLineId": zigzag_points[2]['kLineId'],
@@ -283,7 +306,7 @@ class WMPatternRecognizer:
                 "price": zigzag_points[2]['price'],
                 "four_price": zigzag_points[3]['price'],
                 "two_price": zigzag_points[1]['price'],
-                "value": "可能W形态",
+                "value": value_str,
                 "start": zigzag_points[0]['timestamp'],
                 "start_two": zigzag_points[1]['timestamp'],
                 "start_third": zigzag_points[2]['timestamp'],
@@ -292,9 +315,12 @@ class WMPatternRecognizer:
                 "kLineId_3": zigzag_points[3]['kLineId'],
                 "start_timestamp": zigzag_points[0]['timestamp'],
                 "end_timestamp": zigzag_points[-1]['timestamp'],
+                "leftTop_price": zigzag_points[0]['price'],
+                "rigthBottom_price": min(zigzag_points[1]['price'], zigzag_points[3]['price'])
             })
             return True
         else:
+
             return False
 
     def _judgment_m_pattern(self, zigzag_points, dict_index2ts, dict_ts2index):
@@ -303,7 +329,14 @@ class WMPatternRecognizer:
         # 这里的zigzag_points[-5:]是最近的5个点
         # 原始代码的M形态定义：l_d_val -> l_val -> head_val -> r_val -> r_d_val
         # 对应zigzag_points: [-5] -> [-4] -> [-3] -> [-2] -> [-1]
+        fri = zigzag_points[-5]
+        sec = zigzag_points[-4]
+        thi = zigzag_points[-3]
+        fou = zigzag_points[-2]
 
+        h = sec['hloc'][0]
+        l = sec['hloc'][1]
+        mid = (h + l) / 2
         if len(zigzag_points) < 5:
             return
 
@@ -325,13 +358,26 @@ class WMPatternRecognizer:
         if self.detected_patterns and zigzag_points[-3]['timestamp'] == self.detected_patterns[-1]['timestamp']:
             con5 = False
 
+        points_data = [
+            {
+                "timestamp": point['timestamp'],
+                "kline_data": point  # 包含kLineId、price、index等完整数据
+            }
+            for point in zigzag_points[-5:]
+        ]
         if con1 and con3 and con4 and con5:
+            value_str = "M形态"
+            if fou['hloc'][0] > mid:
+                value_str = 'M1形态'
+            elif fou['hloc'][0] < mid:
+                value_str = 'M2形态'
             self.detected_patterns.append({
+                'points': points_data,
                 "kLineId": zigzag_points[-3]['kLineId'],
                 "timestamp": zigzag_points[-3]['timestamp'],
                 "price": zigzag_points[-3]['price'],
                 "four_price": zigzag_points[-2]['price'],
-                "value": "M形态",
+                "value": value_str,
                 "start": zigzag_points[-5]['timestamp'],
                 "start_two": zigzag_points[-4]['timestamp'],
                 "end": zigzag_points[-1]['timestamp'],
@@ -341,6 +387,34 @@ class WMPatternRecognizer:
                 "rigthBottom_price": min(zigzag_points[0]['price'], zigzag_points[4]['price']),
             })
             self.m_zigzag_points.append(zigzag_points[-5:])
+        else:
+            no_con1 = fou['hloc'][0] > sec['hloc'][0]
+            no_con2 = max(fou['hloc'][2], fou['hloc'][3]) < sec['hloc'][0]
+            no_con3 = fri['price'] < thi['price'] and fri['price'] < sec['price']
+            # 不重复判断，避免连续识别相同的形态
+            no_con5 = True
+            if self.is_non_standard_maybe_m_patterns and zigzag_points[-3]['timestamp'] == self.is_non_standard_maybe_m_patterns[-1]['timestamp']:
+                no_con5 = False
+            if no_con1 and no_con2 and no_con3 and no_con5:
+                self.is_non_standard_maybe_m_patterns.append({
+                    'points': points_data,
+                    "timestamp": zigzag_points[-3]['timestamp'],
+                    "price": zigzag_points[-2]['price'],
+                    "four_price": zigzag_points[-2]['price'],
+                    "two_price": zigzag_points[-4]['price'],
+                    "value": 'M3形态',
+                    "start": zigzag_points[-5]['timestamp'],
+                    "start_two": zigzag_points[-4]['timestamp'],
+                    "start_third": zigzag_points[-3]['timestamp'],
+                    "start_four": zigzag_points[-2]['timestamp'],
+                    "end": zigzag_points[-1]['timestamp'],
+                    "kLineId": zigzag_points[-3]['kLineId'],
+                    "kLineId_3": zigzag_points[-2]['kLineId'],
+                    "start_timestamp": zigzag_points[-5]['timestamp'],
+                    "end_timestamp": zigzag_points[-1]['timestamp'],
+                    "leftTop_price": max(zigzag_points[-4]['price'], zigzag_points[-2]['price']),
+                    "rigthBottom_price": zigzag_points[-5]['price'],
+                })
 
 
     def _judgment_w_pattern(self, zigzag_points, dict_index2ts, dict_ts2index):
@@ -348,7 +422,15 @@ class WMPatternRecognizer:
         # W形态需要至少5个点: H-D-L-D-H (或 L-D-L-D-L)
         # 原始代码的W形态定义：l_d_val -> l_val -> head_val -> r_val -> r_d_val
         # 对应zigzag_points: [-5] -> [-4] -> [-3] -> [-2] -> [-1]
+        fri = zigzag_points[-5]
+        sec = zigzag_points[-4]
+        thi = zigzag_points[-3]
+        fou = zigzag_points[-2]
 
+
+        h = sec['hloc'][0]
+        l = sec['hloc'][1]
+        mid = (h + l) / 2
         if len(zigzag_points) < 5:
             return
 
@@ -369,14 +451,26 @@ class WMPatternRecognizer:
         con5 = True
         if self.detected_patterns and zigzag_points[-3]['timestamp'] == self.detected_patterns[-1]['timestamp']:
             con5 = False
-
+        points_data = [
+            {
+                "timestamp": point['timestamp'],
+                "kline_data": point  # 包含kLineId、price、index等完整数据
+            }
+            for point in zigzag_points[-5:]
+        ]
         if con1 and con3 and con4 and con5:
+            value_str = "W形态"
+            if fou['hloc'][1] < mid:
+                value_str = 'W1形态'
+            elif fou['hloc'][1] > mid:
+                value_str = 'W2形态'
             self.detected_patterns.append({
+                'points': points_data,
                 "kLineId": zigzag_points[-3]['kLineId'],
                 "timestamp": zigzag_points[-3]['timestamp'],
                 "price": zigzag_points[-3]['price'],
                 "four_price": zigzag_points[-2]['price'],
-                "value": "W形态",
+                "value": value_str,
                 "start": zigzag_points[-5]['timestamp'],
                 "start_two": zigzag_points[-4]['timestamp'],
                 "end": zigzag_points[-1]['timestamp'],
@@ -386,6 +480,34 @@ class WMPatternRecognizer:
                 "rigthBottom_price": min(zigzag_points[1]['price'], zigzag_points[3]['price'])
             })
             self.w_zigzag_points.append(zigzag_points[-5:])
+        else:
+            no_con1 = fou['hloc'][1] < sec['hloc'][1]
+            no_con2 = min(fou['hloc'][2], fou['hloc'][3]) > sec['hloc'][1]
+            no_con3 = thi['price']< fri['price'] and sec['price']< fri['hloc'][2]
+            no_con5 = True
+            if self.is_non_standard_maybe_w_patterns and zigzag_points[-3]['timestamp'] == self.is_non_standard_maybe_w_patterns[-1]['timestamp']:
+                no_con5 = False
+            if no_con1 and no_con2 and no_con3 and no_con5:
+                # print('W3形态')
+                self.is_non_standard_maybe_w_patterns.append({
+                    'points': points_data,
+                    "timestamp": zigzag_points[-3]['timestamp'],
+                    "price": zigzag_points[-3]['price'],
+                    "four_price": zigzag_points[-2]['price'],
+                    "two_price": zigzag_points[-4]['price'],
+                    "value": 'W3形态',
+                    "start": zigzag_points[-5]['timestamp'],
+                    "start_two": zigzag_points[-4]['timestamp'],
+                    "start_third": zigzag_points[-3]['timestamp'],
+                    "start_four": zigzag_points[-2]['timestamp'],
+                    "end": zigzag_points[-1]['timestamp'],
+                    "kLineId": zigzag_points[-3]['kLineId'],
+                    "kLineId_3": zigzag_points[-2]['kLineId'],
+                    "start_timestamp": zigzag_points[-5]['timestamp'],
+                    "end_timestamp": zigzag_points[-1]['timestamp'],
+                    "leftTop_price": zigzag_points[-5]['price'],
+                    "rigthBottom_price": min(zigzag_points[-4]['price'], zigzag_points[-2]['price'])
+                })
 
     def _add_all_5point(self,zigzag_points):
         points_data = [
@@ -419,11 +541,20 @@ class WMPatternRecognizer:
         """返回检测到的M/W形态标题的原始列表。"""
         return self.detected_patterns
 
+    def get_non_standard_m_patterns(self):
+        return self.is_non_standard_maybe_m_patterns
+
+    def get_non_standard_w_patterns(self):
+        return self.is_non_standard_maybe_w_patterns
+
     def get_maybe_detected_patterns(self):
         return self.maybe_detected_patterns
 
     def get_maybe_m_patterns(self):
         return self.maybe_m
+
+    def get_maybe_classification(self):
+        return self.detected_patterns + self.is_non_standard_maybe_m_patterns + self.is_non_standard_maybe_w_patterns
 
     def get_maybe_w_patterns(self):
         return self.maybe_w

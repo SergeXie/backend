@@ -11,26 +11,28 @@ class DLPredictError(RuntimeError):
 
 def call_dl_api(
     url: str,
+    task: str,
     goods: str,
     period: str,
     begin_time: str,
     end_time: str,
     time_periodssf: List[int],
-    limit: int = 500,
-    is_desc: bool = True,
     timeout: float = 120.0,
 ) -> Tuple[List[float], List[float], Dict[str, Any]]:
     """
     调用 DL API，返回 (prices, probabilities, raw_body)
     """
     payload = {
+        "task": task,
         "goods": goods,
         "period": period,
         "beginTime": begin_time,
         "endTime": end_time,
-        "TimePeriodssf": time_periodssf,
-        "limit": limit,
-        "isDesc": is_desc,
+        "data": {
+            "TimePeriodssf": time_periodssf,
+            # 未来如果有其他任务特定的参数，也应该放在这里
+            # "other_param": value
+        },
     }
 
     resp = requests.post(url, json=payload, timeout=timeout)
