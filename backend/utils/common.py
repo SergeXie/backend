@@ -35,6 +35,7 @@ from utils.indicators.ema import ResponseEMAData
 from utils.indicators.btatr import ResponseATRData
 from utils.indicators.rsi import ResponseRSIData
 from utils.indicators.wm import ResponseWMData
+from utils.indicators.wm_m30_pattern_analysis import ResponseWMM30Data
 from utils.indicators.new_m import ResponseWMpredictData
 # from utils.indicators.wm_train import ResponseWMpredictData
 from utils.indicators.wm_predict_bymodel import ResWMpredictByModelData
@@ -48,6 +49,7 @@ from utils.strategys.peak_trough_strategy import ResponsePeakTroughData
 from utils.timezone import timezone
 from dateutil import parser
 from utils.public_strategy import ComprehensiveAnalyzer
+
 
 # 创建一个带有过期时间的缓存，设置每个缓存条目的过期时间为 60 秒
 cache = TTLCache(maxsize=10000, ttl=3600)
@@ -91,7 +93,8 @@ indicator_classes = {
     "WMpredict": ResponseWMpredictData,
     "WMpredictByMath": ResWMpredictByMathData,
     "WMpredictByModel": ResWMpredictByModelData,
-    "WMPicture":ResponseWMPicyureData
+    "WMPicture":ResponseWMPicyureData,
+    "WMM30": ResponseWMM30Data,
 }
 
 
