@@ -17,7 +17,7 @@ class EconomicDataAnalyzer:
             prior: float,  # 前值 (上一次的报告值)
             forecast: float,  # 预期值 (市场普遍预测值)
             actual: float  # 实际值 (本次报告的实际值)
-    ) -> Tuple[float, ScoreDescription]:
+    ) -> Tuple[float, ScoreDescription, str]:
         """
         计算经济数据（如失业人数，越低越好）的市场影响数值评分（-10 到 +10）。
         同时返回对应的描述。
@@ -69,16 +69,31 @@ class EconomicDataAnalyzer:
 
         if final_score >= 7.5:
             description: ScoreDescription = '爆好 (Massive Beat) / 强多'
+            direction = "强于利空黄金"
+            increase = "涨"
+
         elif final_score >= 2.5:
             description = '强于预期 (Better than Expected) / 弱多'
+            direction = "利空黄金"
+            increase = "涨"
+
         elif final_score <= -7.5:
             description = '爆冷 (Massive Miss) / 强空'
+            direction = "强于利多黄金"
+            increase = "跌"
+
         elif final_score <= -2.5:
             description = '差于预期 (Worse than Expected) / 弱空'
+            direction = "利多黄金"
+            increase = "跌"
         else:
             description = '持平 (In Line) / 中性'
+            direction = "低波动"
 
-        return final_score, description
+        # description 方向一致性
+        # direction 方向
+        # final_score Impact Level
+        return final_score, description, direction
 
     @classmethod
     # 定义强弱等级
@@ -90,6 +105,7 @@ class EconomicDataAnalyzer:
             name: str = "指标"  # 可选：用于输出提示的指标名称
     ) -> StrengthRating:
         """
+        返回方向一致性字段
         根据失业人数/失业率等“越低越好”的指标数据，评估市场强弱。
 
         评估标准：
@@ -132,3 +148,9 @@ class EconomicDataAnalyzer:
         else:
             print("判断依据: 未满足强多或强空的双重条件。")
             return '一般 (Moderate/Neutral)'
+    @classmethod
+    def safe_float(cls, v):
+        try:
+            return float(v)
+        except:
+            return None

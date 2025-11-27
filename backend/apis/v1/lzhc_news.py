@@ -2,17 +2,18 @@ from datetime import datetime, timedelta
 from typing import Optional
 import requests
 from fastapi import APIRouter, Query
-from pydantic import Field
-from sqlalchemy import select, and_, outerjoin, func
+from sqlalchemy import select, and_, func, distinct
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
 from models.news_models import DqlJinshiEconomicNews, DqlJinshiMarketNews, DqlJinshiHoliday, DqlJinshiEvent, \
-    MarketStatistics, DqlJinshiNewsClass
+    MarketStatistics, DqlJinshiNewsClass, DqlCalendarTag, DqlNewsTagRelation
 from schemas.lzhc_news import EconomicNewsResponse, MarketNewsResponse, JinshiEventBase, JinshiHolidayBase, \
     MarketStatisticsOut
+from utils.economic_data_analyzer import EconomicDataAnalyzer
 from utils.enum.period_enum import PeriodEnum
 
 router = APIRouter()
+
 
 def get_event_by_date(date_value: str):
     """
@@ -34,6 +35,53 @@ def get_event_by_date(date_value: str):
     return resp.json()
 
 
+def summarize_period(values: list[str]):
+    """ values: ['open,high,low,close', ...] """
+    records = []
+    for v in values:
+        if v and "," in v:
+            try:
+                o, h, l, c = map(float, v.split(","))
+                records.append((o, h, l, c))
+            except:
+                continue
+
+    total = len(records)
+    if total == 0:
+        return None
+
+    up = down = flat = 0
+    up_changes = []
+    down_changes = []
+    ranges = []
+
+    for o, h, l, c in records:
+        change = c - o
+        ranges.append(h - l)
+
+        if change >= 0:
+            up += 1
+            up_changes.append(change)
+        elif change <= 0:
+            down += 1
+            down_changes.append(change)
+        else:
+            flat += 1
+
+    return {
+        "total": total,  # 总次数
+        "upCount": up,  # 涨次数
+        "downCount": down,  # 跌次数
+        "flatCount": 0,  # 持平次数
+        "upProb": round(up / total, 3),   # 涨概率 = up/total
+        "downProb": round(down / total, 3),  # 跌概率 = 16/40
+        "flatProb": 0,
+        "avgUpPoints": round(sum(up_changes) / len(up_changes), 3) if up_changes else 0,  # 平均上涨点数（美元）
+        "avgDownPoints": round(sum(down_changes) / len(down_changes), 3) if down_changes else 0, # 平均下跌点数（美元）
+        "avgRange": round(sum(ranges) / len(ranges), 3),  # 平均波动 high-low
+    }
+
+
 @router.get("/economicNews", name="日历数据")
 async def get_economic_news(
     lastId: Optional[int] = Query(None, description="上次请求的最后ID"),
@@ -42,8 +90,8 @@ async def get_economic_news(
     endTime: Optional[str] = Query(None, description="结束时间，例如 2025-09-26 23:59:59"),
     pageNo: Optional[int] = Query(1, description="当前页码，从1开始"),
     pageSize: Optional[int] = Query(100, description="每页条数"),
-    keyword: Optional[str] = Query(None, description="日历搜索关键字")
-
+    keyword: Optional[str] = Query(None, description="日历搜索关键字"),
+    tag: Optional[str] = Query(None, description="日历标签"),
 ):
     """
     获取经济数据：
@@ -53,13 +101,27 @@ async def get_economic_news(
     - 如果不传 dateValue 但传 lastId：返回 id > lastId 的 pageSize 条
     """
     async with async_db_session() as db:
-        # ===== 1️⃣ 参数校验 =====
+        # ===== 1️ 参数校验 =====
         if (startTime or endTime) and not keyword:
             return await response_base.fail(msg="时间段查询必须提供关键字搜索")
 
         stmt = select(DqlJinshiEconomicNews)
         # ===== 1️ 构建查询条件 =====
         conditions = []
+        newsIds = []
+
+        # 日历标签
+        if tag:
+            dql_calendar_tag = await db.execute(select(DqlCalendarTag).where(DqlCalendarTag.tagName == tag))
+            tag_result = dql_calendar_tag.scalars().first()
+            # 查询关联表
+            news_tag_relation = await db.execute(select(DqlNewsTagRelation.newsId).where(
+                DqlNewsTagRelation.tagId == tag_result.pkId))
+
+            news_tag_relation_results = news_tag_relation.scalars().all()
+
+            newsIds = [x for x in news_tag_relation_results]
+            conditions.append(DqlJinshiEconomicNews.pkId.in_(newsIds))
 
         # 日期筛选优先级：时间段 > 单日
         if startTime and endTime:
@@ -99,8 +161,19 @@ async def get_economic_news(
         total_result = await db.execute(count_stmt)
         total = total_result.scalar() or 0
 
-        # ===== 查询哪些经济数据有周期统计 =====
         pk_ids = [r.pkId for r in rows]
+
+        if not tag:
+            # ====查询标签日历关联表的标签名称 根据经济日历id来查====
+            news_tag_relation = await db.execute(select(DqlNewsTagRelation.tagName,
+                                                        DqlNewsTagRelation.newsId).where(
+                DqlNewsTagRelation.newsId.in_(pk_ids)))
+            # key 是 newsId value 是标签名
+            news_tag_list = [{r[1]:r[0]} for r in news_tag_relation.fetchall()]  # 集合方便判断
+        else:
+            news_tag_list = list
+
+        # ===== 查询哪些经济数据有周期统计 =====
         if pk_ids:
             stat_stmt = select(MarketStatistics.economicNewsUid).where(
                 MarketStatistics.economicNewsUid.in_(pk_ids)
@@ -127,26 +200,64 @@ async def get_economic_news(
         holiday_data = [JinshiHolidayBase.from_orm(holiday).dict() for holiday in jinshi_holiday_rows]
 
     # 返回Vo对象，响应时会自动解析json
-    result = [
-        EconomicNewsResponse(
-            pkId=row.pkId,
-            time=row.time,
-            name=row.name,
-            affects=row.affects,
-            prevValue=row.prevValue,
-            expectValue=row.expectValue,
-            publishValue=row.publishValue,
-            star=row.star,
-            createTime=row.createTime,
-            updateTime=row.updateTime,
-            isPeriodicStatistics=1 if row.pkId in has_stats_ids else 0,
+    result_data = []
+    tagName = None
+    for row in rows:
+        prior = EconomicDataAnalyzer.safe_float(row.prevValue)  # 前值
+        forecast = EconomicDataAnalyzer.safe_float(row.expectValue)  # 预期值
+        actual = EconomicDataAnalyzer.safe_float(row.publishValue)  # 公布值
+        print("prior:{} forecast:{} actual:{}".format(prior, forecast, actual))
+        final_score = None
+        description = None
+        strength = None
+        direction = None
 
+        # 针对统计表中的日历进行计算
+        if row.pkId in has_stats_ids:
+            if prior is not None and forecast is not None and actual is not None:
+
+                final_score, description, direction = EconomicDataAnalyzer.calculate_impact_score(
+                    prior, forecast, actual
+                )  # :contentReference[oaicite:1]{index=1}
+
+                strength = EconomicDataAnalyzer.evaluate_strength(
+                    prior, forecast, actual
+                )  # :contentReference[oaicite:2]{index=2}
+
+                print("final_score:{}".format(final_score))
+                print("description:{}".format(description))
+                print("strength:{}".format(strength))
+
+        # 如果经济日历ID，存在关联表中的newsIds，那么显示标签名
+        if row.pkId in newsIds:
+            tagName = tag
+        else:
+            for data in news_tag_list:
+                tagName = data.get(row.pkId)
+
+        result_data.append(
+            EconomicNewsResponse(
+                pkId=row.pkId,
+                time=row.time,
+                name=row.name,
+                affects=row.affects,
+                prevValue=row.prevValue,
+                expectValue=row.expectValue,
+                publishValue=row.publishValue,
+                star=row.star,
+                createTime=row.createTime,
+                updateTime=row.updateTime,
+                isPeriodicStatistics=1 if row.pkId in has_stats_ids else 0,
+                tag=tagName,
+                # 新增三个返回字段
+                finalScore=final_score,
+                direction=direction,
+                scoreDescription=description,
+                evaluateStrengthText=strength,
+            )
         )
-        for row in rows
 
-    ]
-
-    data = {"economic": result, "event": events_data, "holiday": holiday_data,
+    data = {"economic": result_data, "event": events_data, "holiday": holiday_data,
             "pageNo": pageNo, "pageSize": pageSize, "total": total}
 
     return await response_base.success(data=data)
@@ -419,53 +530,6 @@ async def get_market_news_by_period(
         return await response_base.success(data=result)
 
 
-def summarize_period(values: list[str]):
-    """ values: ['open,high,low,close', ...] """
-    records = []
-    for v in values:
-        if v and "," in v:
-            try:
-                o, h, l, c = map(float, v.split(","))
-                records.append((o, h, l, c))
-            except:
-                continue
-
-    total = len(records)
-    if total == 0:
-        return None
-
-    up = down = flat = 0
-    up_changes = []
-    down_changes = []
-    ranges = []
-
-    for o, h, l, c in records:
-        change = c - o
-        ranges.append(h - l)
-
-        if change >= 0:
-            up += 1
-            up_changes.append(change)
-        elif change <= 0:
-            down += 1
-            down_changes.append(change)
-        else:
-            flat += 1
-
-    return {
-        "total": total,  # 总次数
-        "upCount": up,  # 涨次数
-        "downCount": down,  # 跌次数
-        "flatCount": 0,  # 持平次数
-        "upProb": round(up / total, 3),   # 涨概率 = up/total
-        "downProb": round(down / total, 3),  # 跌概率 = 16/40
-        "flatProb": 0,
-        "avgUpPoints": round(sum(up_changes) / len(up_changes), 3) if up_changes else 0,  # 平均上涨点数（美元）
-        "avgDownPoints": round(sum(down_changes) / len(down_changes), 3) if down_changes else 0, # 平均下跌点数（美元）
-        "avgRange": round(sum(ranges) / len(ranges), 3),  # 平均波动 high-low
-    }
-
-
 @router.get("/marketStatistics/", name="经济数据统计")
 async def get_market_statistics(economicNewsUid: int = Query(..., description="金十经济数据日历pkId")):
     async with async_db_session() as db:
@@ -519,3 +583,14 @@ async def get_market_statistics(economicNewsUid: int = Query(..., description="�
         )
 
         return await response_base.success(data=result)
+
+
+@router.get("/calendarTags/", name="日历标签")
+async def get_tag_list():
+    async with async_db_session() as db:
+
+        stmt = select(DqlCalendarTag.tagName)
+        result = await db.execute(stmt)
+        tags = [row[0] for row in result.fetchall()]
+
+        return await response_base.success(data=tags)
