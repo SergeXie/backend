@@ -18,6 +18,7 @@ class DqlJinshiEconomicNews(Base):
     expectValue: Mapped[str] = mapped_column(String(50), nullable=True, comment="预期值")
     publishValue: Mapped[str] = mapped_column(String(50), nullable=True, comment="公布值")
     star: Mapped[int] = mapped_column(Integer, nullable=True, comment="(星星影响)")
+    tag: Mapped[str] = mapped_column(String(50), nullable=True, comment="标签（黄金/原油）")
     createTime: Mapped[str] = mapped_column(
         TIMESTAMP,
         server_default=text("CURRENT_TIMESTAMP"),
@@ -117,6 +118,30 @@ class DqlJinshiNewsClass(Base):
         comment="记录最后更新时间"
     )
 
+
+class DqlCalendarTag(Base):
+    """
+    经济日历标签表
+    """
+    __tablename__ = "dql_calendar_tag"
+
+    pkId: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, comment="自增ID")
+    tagName: Mapped[str] = mapped_column(String(50), unique=True, comment="标签名称：黄金、原油等")
+    createTime: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, nullable=False)
+    updateTime: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, nullable=False)
+
+
+class DqlNewsTagRelation(Base):
+    """
+    经济新闻（日历）标签关联表
+    """
+    __tablename__ = "dql_economic_news_tag_relation"
+
+    pkId: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, comment="自增ID")
+    newsId: Mapped[int] = mapped_column(Integer)
+    tagId: Mapped[int] = mapped_column(Integer)
+    tagName: Mapped[str] = mapped_column(String(50), unique=True, comment="标签名称：黄金、原油等")
+    createTime: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, nullable=False)
 
 
 
