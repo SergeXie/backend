@@ -9,6 +9,7 @@ from models.news_models import DqlJinshiEconomicNews, DqlJinshiMarketNews, DqlJi
 from schemas.lzhc_news import EconomicNewsResponse, MarketNewsResponse, JinshiEventBase, JinshiHolidayBase, \
     MarketStatisticsOut
 from utils.Jinshi_calendar_utils import Jin10CalendarUtils
+from utils.calendar_market_statistics import MarketStatisticsObject
 from utils.economic_data_analyzer import EconomicDataAnalyzer
 from utils.enum.period_enum import PeriodEnum
 
@@ -466,12 +467,19 @@ async def get_market_news_by_period(
 @router.get("/marketStatistics/", name="经济数据统计")
 async def get_market_statistics(economicNewsUid: int = Query(..., description="金十经济数据日历pkId")):
     async with async_db_session() as db:
-        result = await db.execute(
+        # 查询 dql_jinshi_economic_news 表
+        economic_news = await db.execute(
             select(MarketStatistics).where(MarketStatistics.economicNewsUid == economicNewsUid)
         )
-        record = result.scalars().first()
+        record = economic_news.scalars().first()
         if not record:
-            return await response_base.fail(msg="数据未找到！", data=[])
+            return await response_base.fail(msg="日历数据未找到！", data=[])
+
+        # 根据 record 拿到日历发布时间time
+        time_str = record.time
+        name = record.name
+
+        data_period = await MarketStatisticsObject.get_statistics(db, name, time_str)
 
         # 根据 newsType 查询全表数据
         result2 = await db.execute(
@@ -488,8 +496,8 @@ async def get_market_statistics(economicNewsUid: int = Query(..., description="�
         h1_values = extract("h1")
         d1_values = extract("d1")
         w1_values = extract("w1")
-
-        # ④ 计算统计
+        #
+        # # ④ 计算统计
         summary = {
             "m5": Jin10CalendarUtils.summarize_period(m5_values),
             "m30": Jin10CalendarUtils.summarize_period(m30_values),
@@ -498,18 +506,18 @@ async def get_market_statistics(economicNewsUid: int = Query(..., description="�
             "w1": Jin10CalendarUtils.summarize_period(w1_values),
         }
 
-        # 返回Vo对象，响应时会自动解析json
+        # # 返回Vo对象，响应时会自动解析json
         result = MarketStatisticsOut(
             pkId=record.pkId,
             economicNewsUid=record.economicNewsUid,
             time=record.time,
             name=record.name,
             newsType=record.newsType,
-            m5=record.m5,
-            m30=record.m30,
-            h1=record.h1,
-            d1=record.d1,
-            w1=record.w1,
+            m5=data_period.get("m5"),
+            m30=data_period.get("m30"),
+            h1=data_period.get("h1"),
+            d1=data_period.get("d1"),
+            w1=data_period.get("w1"),
             createTime=record.createTime,
             summary=summary,  # 新增：周期统计结果
 
