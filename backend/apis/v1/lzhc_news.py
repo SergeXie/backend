@@ -1,85 +1,18 @@
 from datetime import datetime, timedelta
 from typing import Optional
-import requests
 from fastapi import APIRouter, Query
-from sqlalchemy import select, and_, func, distinct
+from sqlalchemy import select, and_, func
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
 from models.news_models import DqlJinshiEconomicNews, DqlJinshiMarketNews, DqlJinshiHoliday, DqlJinshiEvent, \
     MarketStatistics, DqlJinshiNewsClass, DqlCalendarTag, DqlNewsTagRelation
 from schemas.lzhc_news import EconomicNewsResponse, MarketNewsResponse, JinshiEventBase, JinshiHolidayBase, \
     MarketStatisticsOut
+from utils.Jinshi_calendar_utils import Jin10CalendarUtils
 from utils.economic_data_analyzer import EconomicDataAnalyzer
 from utils.enum.period_enum import PeriodEnum
 
 router = APIRouter()
-
-
-def get_event_by_date(date_value: str):
-    """
-    通过 dateValue (YYYY-MM-DD) 获取财经日历数据
-    """
-    # 解析日期
-    dt = datetime.strptime(date_value, "%Y-%m-%d %H:%M")
-    year = dt.year
-    month = dt.month
-    day = dt.day
-
-    # 拼接 URL
-    url = f"https://cdn-rili.jin10.com/web_data/{year}/daily/{month:02d}/{day:02d}/event.json"
-    print(f"请求 URL: {url}")
-
-    # 请求数据
-    resp = requests.get(url)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def summarize_period(values: list[str]):
-    """ values: ['open,high,low,close', ...] """
-    records = []
-    for v in values:
-        if v and "," in v:
-            try:
-                o, h, l, c = map(float, v.split(","))
-                records.append((o, h, l, c))
-            except:
-                continue
-
-    total = len(records)
-    if total == 0:
-        return None
-
-    up = down = flat = 0
-    up_changes = []
-    down_changes = []
-    ranges = []
-
-    for o, h, l, c in records:
-        change = c - o
-        ranges.append(h - l)
-
-        if change >= 0:
-            up += 1
-            up_changes.append(change)
-        elif change <= 0:
-            down += 1
-            down_changes.append(change)
-        else:
-            flat += 1
-
-    return {
-        "total": total,  # 总次数
-        "upCount": up,  # 涨次数
-        "downCount": down,  # 跌次数
-        "flatCount": 0,  # 持平次数
-        "upProb": round(up / total, 3),   # 涨概率 = up/total
-        "downProb": round(down / total, 3),  # 跌概率 = 16/40
-        "flatProb": 0,
-        "avgUpPoints": round(sum(up_changes) / len(up_changes), 3) if up_changes else 0,  # 平均上涨点数（美元）
-        "avgDownPoints": round(sum(down_changes) / len(down_changes), 3) if down_changes else 0, # 平均下跌点数（美元）
-        "avgRange": round(sum(ranges) / len(ranges), 3),  # 平均波动 high-low
-    }
 
 
 @router.get("/economicNews", name="日历数据")
@@ -558,11 +491,11 @@ async def get_market_statistics(economicNewsUid: int = Query(..., description="�
 
         # ④ 计算统计
         summary = {
-            "m5": summarize_period(m5_values),
-            "m30": summarize_period(m30_values),
-            "h1": summarize_period(h1_values),
-            "d1": summarize_period(d1_values),
-            "w1": summarize_period(w1_values),
+            "m5": Jin10CalendarUtils.summarize_period(m5_values),
+            "m30": Jin10CalendarUtils.summarize_period(m30_values),
+            "h1": Jin10CalendarUtils.summarize_period(h1_values),
+            "d1": Jin10CalendarUtils.summarize_period(d1_values),
+            "w1": Jin10CalendarUtils.summarize_period(w1_values),
         }
 
         # 返回Vo对象，响应时会自动解析json
