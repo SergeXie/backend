@@ -113,6 +113,10 @@ class MarketStatisticsOut(BaseModel):
     w1: Optional[str]
     createTime: datetime
     summary: Optional[dict]
+    periodRange: Optional[dict]
+    goods: Optional[str] = Field("XAUUSD", description="品种")
+
+
 
     # 把 datetime 转换成字符串
     @field_serializer("createTime")
