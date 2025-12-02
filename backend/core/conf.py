@@ -32,7 +32,7 @@ class Settings:
     DOCS_URL: str | None = f'{API_V1_STR}/docs'
     REDOCS_URL: str | None = f'{API_V1_STR}/redocs'
     OPENAPI_URL: str | None = f'{API_V1_STR}/openapi'
-    AI_URL = "http://192.168.1.60:8083/api/ai/dl"
+    AI_URL = "http://192.168.1.60:8083/api/ai/myai"
 
     # @model_validator(mode='before')
     # @classmethod

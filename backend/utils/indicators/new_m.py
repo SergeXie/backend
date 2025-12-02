@@ -1,13 +1,12 @@
 import pickle
-
+from core.conf import settings
 import backtrader as bt
 import numpy as np
-import math
-import random
 import pandas as pd
 import tensorflow as tf
-from backtrader.feeds import PandasData
+import requests
 from utils.module.zigzag_calculator import ZigZagCalculator
+from clients.dl_api_client import call_dl_api2
 from utils.module.dll import train_two_classifiers, predict_binary
 
 import warnings
@@ -32,8 +31,16 @@ class ResponseWMpredictData(bt.Strategy):
 
         self.BarState = []
         self.BarStateText = []
+        self.BarStateText1 = []
         self.W_sum = 0
         self.M_sum = 0
+
+        self.kline_goods = self.indicator_params.get("Kline_goods",'')
+        self.kline_period = self.indicator_params.get("Kline_period", '')
+        self.end_time = self.indicator_params.get("end_time", '')
+        self.begin_time = self.indicator_params.get("begin_time", '')
+
+        self.show_all_wm = False if self.indicator_params.get("show_all_wm", '1') == 1 else True
 
 
         # 实例化独立的算法类
@@ -69,7 +76,6 @@ class ResponseWMpredictData(bt.Strategy):
     def stop(self):
         digit = int(self.datas[0].digits[0])
         zigzag_points = self.zigzag_calculator.get_zigzag_points()
-        print('这里')
         # print(zigzag_points)
 
         dataset = []
@@ -83,31 +89,59 @@ class ResponseWMpredictData(bt.Strategy):
             self.pattern_recognizer.analyze_zigzag_points(zigzag_list)
 
         m_zigzag_points = self.pattern_recognizer.get_m_zigzag_points()
+        w_zigzag_points = self.pattern_recognizer.get_w_zigzag_points()
         # print(m_zigzag_points)
 
         df = pd.DataFrame(dataset, columns=['col1', 'col2', 'col3', 'col4', 'col5', 'col6',
                                             'col7', 'col8', 'col9', 'col10', 'col11', 'col12',
                                             'wmclass'])
-        # print(df)
-        with open('./dataset/wm_predict_classifiers.pkl', 'rb') as f:
-            classifiers = pickle.load(f)
+        # # print(df)
+        # with open('./dataset/wm_predict_classifiers.pkl', 'rb') as f:
+        #     classifiers = pickle.load(f)
+        #
+        # model_neg = tf.keras.models.load_model('./dataset/model_neg.h5')
+        # model_pos = tf.keras.models.load_model('./dataset/model_pos.h5')
+        # predictions_neg, probs_neg = predict_binary(
+        #     model_neg,
+        #     classifiers['scaler_neg'],
+        #     df,
+        #     -1
+        # )
+        #
+        # # 使用第二个模型预测(1 vs 0)
+        # predictions_pos, probs_pos = predict_binary(
+        #     model_pos,
+        #     classifiers['scaler_pos'],
+        #     df,
+        #     1
+        # )
+        # print('请求API', settings.WM_predict_URL)
 
-        model_neg = tf.keras.models.load_model('./dataset/model_neg.h5')
-        model_pos = tf.keras.models.load_model('./dataset/model_pos.h5')
-        predictions_neg, probs_neg = predict_binary(
-            model_neg,
-            classifiers['scaler_neg'],
-            df,
-            -1
+        request_data = {
+            "features": df.values.tolist(),
+            "columns": df.columns.tolist(),
+            "model_type": "wm"
+        }
+
+        # 发送预测请求
+        print('正在请求')
+        response = call_dl_api2(
+            url=settings.AI_URL,
+            # url='http://192.168.1.182:8083/api/ai/myai',
+            task='wm_predic',
+            goods=self.kline_goods,
+            period=self.kline_period,
+            begin_time=self.begin_time,
+            end_time=self.end_time,
+            data=request_data,
+            timeout=120.0,
         )
 
-        # 使用第二个模型预测(1 vs 0)
-        predictions_pos, probs_pos = predict_binary(
-            model_pos,
-            classifiers['scaler_pos'],
-            df,
-            1
-        )
+        if response.get('status_code') == 200:
+            print('接口请求正常')
+
+        predictions_neg = response['predictions_neg']
+        predictions_pos = response['predictions_pos']
         # print("预测结果:", list(predictions))
         # print("真正结果:", list(df['wmclass']))
         # print(len(zigzag_list))
@@ -116,88 +150,196 @@ class ResponseWMpredictData(bt.Strategy):
         # print(dataset)
         # print(zigzag_list)
         # print('@@@@@@@@@@@@@@@@')
-        a = [0,0,0,0,0,1,0,-1]
         # print("\n预测结果(-1 vs 0):", predictions_neg)
         # print("预测概率(-1的概率):", [f"{p:.4f}" for p in probs_neg])
         #
         # print("\n预测结果(1 vs 0):", predictions_pos)
         # print("预测概率(1的概率):", [f"{p:.4f}" for p in probs_pos])
+        # print(predictions_neg, predictions_pos)
 
+        if self.show_all_wm:
+            print('显示全部wm')
+            for i in range(len(predictions_neg)):
+                neg_one_idx = i - len(predictions_neg)
+                if predictions_neg[i] == 0:
+                    continue
+                try:
+                    w_point = [zigzag_list[neg_one_idx-4], zigzag_list[neg_one_idx-2], zigzag_list[neg_one_idx-1], zigzag_list[neg_one_idx]]
+                except:
+                    pass
 
-        _, neg_one_idx = find_last_negative_indices(predictions_neg)
-        one_idx, _ = find_last_negative_indices(predictions_pos)
-        print(one_idx, neg_one_idx)  # 获取 预测队列中1和-1的位置
+                # 计算价差 W底#------------------计算概率-----------------------#
+                try:
+                    p = probability(w_zigzag_points, datafrom='w')
+                    # print("w概率:", p)
+                    # w_point = w_zigzag_points[-1]
+                    price_diff = w_point[2]['hloc'][0] - w_point[3]['hloc'][1]  # 高点到低点的价差
+                    klineId = int(w_point[3]['kLineId'])
 
-        m_point = [zigzag_list[one_idx-4], zigzag_list[one_idx-2], zigzag_list[one_idx-1], zigzag_list[one_idx]]
-        w_point = [zigzag_list[neg_one_idx-4], zigzag_list[neg_one_idx-2], zigzag_list[neg_one_idx-1], zigzag_list[neg_one_idx]]
+                    self.BarStateText1.append({
+                        "kLineId": w_point[2]['kLineId'],
+                        "price": w_point[2]['price'],
+                        "timestamp": w_point[2]['timestamp'],
+                        "value": '预测为W形态'
+                    })
+                    for index, i in enumerate(p['probabilities']):
+                        base_price = w_point[2]['hloc'][0]
+                        price = base_price + price_diff * index
+                        price = np.round(price, digit)
+                        # print(i)
+                        i = np.round(i*100, 2)
+                        # print('来了', price)
+                        # print(index)
+                        self.BarStateText.append({
+                            "kLineId": klineId,
+                            "price": price,
+                            "timestamp": self.Id_TS_dict.get(klineId, ),
+                            "value": f"{np.round(price, 2)}: " + str(i) + '%'
+                        })
+                        self.BarState.append([
+                            {
+                                "kLineId": int(klineId),
+                                "price": price,
+                            },
+                            {
+                                "kLineId": int(klineId),
+                                "price": price,
+                            }
+                        ])
+                except:
+                    pass
+            for i in range(len(predictions_pos)):
+                one_idx = i - len(predictions_pos)
+                if predictions_pos[i] == 0:
+                    continue
+                try:
+                    m_point = [zigzag_list[one_idx-4], zigzag_list[one_idx-2], zigzag_list[one_idx-1], zigzag_list[one_idx]]
+                except:
+                    pass
+                # 计算价差 M顶#------------------计算概率-----------------------#
+                # m_point = m_zigzag_points[-1]
+                try:
+                    price_diff = m_point[2]['hloc'][1] - m_point[3]['hloc'][0]  # 高点到低点的价差
+                    p = probability(m_zigzag_points, datafrom='m')
+                    # print("m概率:", p)
+                    if p is None:
+                        return
+                    klineId = int(m_point[3]['kLineId'])
+                    self.BarStateText1.append({
+                        "kLineId": m_point[2]['kLineId'],
+                        "price": m_point[2]['price'],
+                        "timestamp": m_point[2]['timestamp'],
+                        "value": '预测为M形态'
+                    })
+                    for index, i in enumerate(p['probabilities']):
+                        base_price = m_point[2]['hloc'][1]
+                        price = base_price + price_diff * index
+                        price = np.round(price, digit)
+                        # print(i)
+                        i = np.round(i*100, 2)
+                        # print('来了', price)
+                        # print(index)
+                        self.BarStateText.append({
+                            "kLineId": klineId,
+                            "price": price,
+                            "timestamp": self.Id_TS_dict.get(klineId, ),
+                            "value": f"{np.round(price, 2)}: " + str(i) + '%'
+                        })
+                        self.BarState.append([
+                            {
+                                "kLineId": int(klineId),
+                                "price": price,
+                            },
+                            {
+                                "kLineId": int(klineId),
+                                "price": price,
+                            }
+                        ])
+                except:
+                    pass
+        else:
+            print('显示最后wm')
+            _, neg_one_idx = find_last_negative_indices(predictions_neg)
+            one_idx, _ = find_last_negative_indices(predictions_pos)
+            print(one_idx, neg_one_idx)  # 获取 预测队列中1和-1的位置
+            try:
+                m_point = [zigzag_list[one_idx - 4], zigzag_list[one_idx - 2], zigzag_list[one_idx - 1],
+                           zigzag_list[one_idx]]
+                w_point = [zigzag_list[neg_one_idx - 4], zigzag_list[neg_one_idx - 2], zigzag_list[neg_one_idx - 1],
+                           zigzag_list[neg_one_idx]]
+            except:
+                pass
+            # ------------------计算概率-----------------------#
+            try:
+                # 计算价差 M顶
+                # m_point = m_zigzag_points[-1]
+                price_diff = m_point[2]['hloc'][1] - m_point[3]['hloc'][0]  # 高点到低点的价差
+                p = probability(m_zigzag_points, datafrom='m')
+                # print("m概率:", p)
+                if p is None:
+                    return
+                klineId = int(m_point[3]['kLineId'])
+                for index, i in enumerate(p['probabilities']):
+                    base_price = m_point[2]['hloc'][1]
+                    price = base_price + price_diff * index
+                    price = np.round(price, digit)
+                    # print(i)
+                    i = np.round(i * 100, 2)
+                    # print('来了', price)
+                    # print(index)
+                    self.BarStateText.append({
+                        "kLineId": klineId,
+                        "price": price,
+                        "timestamp": self.Id_TS_dict.get(klineId, ),
+                        "value": f"{np.round(price, 2)}: " + str(i) + '%'
+                    })
+                    self.BarState.append([
+                        {
+                            "kLineId": int(klineId),
+                            "price": price,
+                        },
+                        {
+                            "kLineId": int(klineId),
+                            "price": price,
+                        }
+                    ])
+            except:
+                pass
+            try:
+                # 计算价差 W底
+                w_zigzag_points = self.pattern_recognizer.get_w_zigzag_points()
 
-        #------------------计算概率-----------------------#
-
-        # 计算价差 M顶
-        # m_point = m_zigzag_points[-1]
-        price_diff = m_point[2]['hloc'][1] - m_point[3]['hloc'][0]  # 高点到低点的价差
-        p = probability(m_zigzag_points, datafrom='m')
-        # print("m概率:", p)
-        if p is None:
-            return
-        klineId = int(m_point[3]['kLineId'])
-        for index, i in enumerate(p['probabilities']):
-            base_price = m_point[2]['hloc'][1]
-            price = base_price + price_diff * index
-            price = np.round(price, digit)
-            # print(i)
-            i = np.round(i*100, 2)
-            # print('来了', price)
-            # print(index)
-            self.BarStateText.append({
-                "kLineId": klineId,
-                "price": price,
-                "timestamp": self.Id_TS_dict.get(klineId, ),
-                "value": f"{np.round(price, 2)}: " + str(i) + '%'
-            })
-            self.BarState.append([
-                {
-                    "kLineId": int(klineId),
-                    "price": price,
-                },
-                {
-                    "kLineId": int(klineId),
-                    "price": price,
-                }
-            ])
-
-        # 计算价差 W底
-        w_zigzag_points = self.pattern_recognizer.get_w_zigzag_points()
-
-        p = probability(w_zigzag_points, datafrom='w')
-        # print("w概率:", p)
-        # w_point = w_zigzag_points[-1]
-        price_diff = w_point[2]['hloc'][0] - w_point[3]['hloc'][1]  # 高点到低点的价差
-        klineId = int(w_point[3]['kLineId'])
-        for index, i in enumerate(p['probabilities']):
-            base_price = w_point[2]['hloc'][0]
-            price = base_price + price_diff * index
-            price = np.round(price, digit)
-            # print(i)
-            i = np.round(i*100, 2)
-            # print('来了', price)
-            # print(index)
-            self.BarStateText.append({
-                "kLineId": klineId,
-                "price": price,
-                "timestamp": self.Id_TS_dict.get(klineId, ),
-                "value": f"{np.round(price, 2)}: " + str(i) + '%'
-            })
-            self.BarState.append([
-                {
-                    "kLineId": int(klineId),
-                    "price": price,
-                },
-                {
-                    "kLineId": int(klineId),
-                    "price": price,
-                }
-            ])
+                p = probability(w_zigzag_points, datafrom='w')
+                # print("w概率:", p)
+                # w_point = w_zigzag_points[-1]
+                price_diff = w_point[2]['hloc'][0] - w_point[3]['hloc'][1]  # 高点到低点的价差
+                klineId = int(w_point[3]['kLineId'])
+                for index, i in enumerate(p['probabilities']):
+                    base_price = w_point[2]['hloc'][0]
+                    price = base_price + price_diff * index
+                    price = np.round(price, digit)
+                    # print(i)
+                    i = np.round(i * 100, 2)
+                    # print('来了', price)
+                    # print(index)
+                    self.BarStateText.append({
+                        "kLineId": klineId,
+                        "price": price,
+                        "timestamp": self.Id_TS_dict.get(klineId, ),
+                        "value": f"{np.round(price, 2)}: " + str(i) + '%'
+                    })
+                    self.BarState.append([
+                        {
+                            "kLineId": int(klineId),
+                            "price": price,
+                        },
+                        {
+                            "kLineId": int(klineId),
+                            "price": price,
+                        }
+                    ])
+            except:
+                pass
 
         self.M_sum = len(m_zigzag_points)
         self.W_sum = len(w_zigzag_points)
@@ -233,6 +375,16 @@ class ResponseWMpredictData(bt.Strategy):
                 "TextColor": self.indicator_params.get("TextColor", "#0000FF"),
                 "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFFFFF"),
                 "position": 'right',
+                "data": [i],
+            })
+        # 写形态
+        for i in self.BarStateText1:
+            # print(i)
+            self.result_data_dict["lines"].append({
+                "type": "text",
+                "TextColor": self.indicator_params.get("TextColor", "#0000FF"),
+                "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFFFFF"),
+                "position": 'top',
                 "data": [i],
             })
 

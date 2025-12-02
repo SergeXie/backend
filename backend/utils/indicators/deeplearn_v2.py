@@ -6,10 +6,9 @@ import tensorflow as tf
 from tensorflow import keras
 import backtrader as bt
 import joblib
-
+from core.conf import settings
 from clients.dl_api_client import call_dl_api
 from common.log import log
-from core.conf import settings
 from models.deepmodel import create_googlenet_1d
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import AUC
@@ -57,9 +56,9 @@ class ResponseDL2Data(bt.Strategy):
         try:
             log.info(f"正在请求 DL API ... 参数：{self.indicator_params}")
             data = call_dl_api(
-                # url=settings.AI_URL,
-                url = 'http://192.168.1.182:8083/api/ai/myai',
-                task='kline_predict_price',
+                url=settings.AI_URL,
+                # url = 'http://192.168.1.182:8083/api/ai/myai',
+                task='wm_predic',
                 goods=self.kline_goods,
                 period=self.kline_period,
                 begin_time=self.begin_time,
