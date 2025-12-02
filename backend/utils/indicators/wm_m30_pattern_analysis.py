@@ -151,20 +151,22 @@ class ResponseWMM30Data(bt.Strategy):
 
         # pattern = m_tmp[-2]
         for pattern in m_tmp:
-            multiple = self.get_multiple_m(self.h_list, self.l_list, self.o_list, self.c_list, self.ts_list, pattern)
-            # print(multiple)
-            if pattern['value'] == 'M2形态':
-                m2_count.append(multiple)
-            if pattern['value'] == 'M1形态':
-                m1_count.append(multiple)
+            if 'M' in pattern['value']:
+                multiple = self.get_multiple_m(self.h_list, self.l_list, self.o_list, self.c_list, self.ts_list, pattern)
+                # print(multiple)
+                if pattern['value'] == 'M2形态':
+                    m2_count.append(multiple)
+                if pattern['value'] == 'M1形态':
+                    m1_count.append(multiple)
 
         for pattern in w_tmp:
-            multiple = self.get_multiple_w(self.h_list, self.l_list, self.o_list, self.c_list, self.ts_list, pattern)
-            # print(multiple)
-            if pattern['value'] == 'W2形态':
-                w2_count.append(multiple)
-            if pattern['value'] == 'W1形态':
-                w1_count.append(multiple)
+            if 'W' in pattern['value']:
+                multiple = self.get_multiple_w(self.h_list, self.l_list, self.o_list, self.c_list, self.ts_list, pattern)
+                # print(multiple)
+                if pattern['value'] == 'W2形态':
+                    w2_count.append(multiple)
+                if pattern['value'] == 'W1形态':
+                    w1_count.append(multiple)
 
 
         for pattern in m_non_standard:
@@ -207,7 +209,11 @@ class ResponseWMM30Data(bt.Strategy):
             pattern_titles = self.pattern_recognizer.get_pattern_titles()  # 获取原始形态标题列表
         elif show_pattern == 1:
             pattern_titles = self.pattern_recognizer.get_maybe_classification()
-        # print("这里@@@@@@@@@@@@")
+        print("这里@@@@@@@@@@@@")
+        pattern_titles_non_w = self.pattern_recognizer.get_non_standard_w_patterns()
+        pattern_titles_non_m = self.pattern_recognizer.get_non_standard_m_patterns()
+
+        pattern_titles = pattern_titles + pattern_titles_non_w + pattern_titles_non_m
 
         self.result_data_dict["lines"] = [
             {
