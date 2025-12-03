@@ -479,7 +479,7 @@ async def get_market_statistics(economicNewsUid: int = Query(..., description="�
         time_str = record.time
         name = record.name
 
-        data_period = await MarketStatisticsObject.get_statistics(db, name, time_str)
+        data_period, periodRange = await MarketStatisticsObject.get_statistics(db, name, time_str)
 
         # 根据 newsType 查询全表数据
         result2 = await db.execute(
@@ -520,6 +520,7 @@ async def get_market_statistics(economicNewsUid: int = Query(..., description="�
             w1=data_period.get("w1"),
             createTime=record.createTime,
             summary=summary,  # 新增：周期统计结果
+            periodRange=periodRange, # 合成周期范围
 
         )
 

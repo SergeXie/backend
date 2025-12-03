@@ -17,6 +17,11 @@ class MarketStatisticsObject:
     }
 
     @staticmethod
+    # 时间格式输出标准化
+    def to_str(dt: datetime.datetime):
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    @staticmethod
     def aggregate_kline(kline_rows):
         """传入 ORM 对象列表，返回 OHLC 聚合结果"""
 
@@ -78,6 +83,15 @@ class MarketStatisticsObject:
 
         data = {}
 
+        # ⭐ 构建 PeriodRange（字符串时间 + 列表）
+        periodRange = {
+            key: [
+                cls.to_str(base_time),
+                cls.to_str(base_time + delta)
+            ]
+            for key, delta in cls.INTERVALS.items()
+        }
+
         for key, delta in cls.INTERVALS.items():
 
             start_time = base_time
@@ -112,4 +126,4 @@ class MarketStatisticsObject:
                 data[key] = None
 
         print("最终结果：", data)
-        return data
+        return data,periodRange
