@@ -498,8 +498,13 @@ async def fetch_trading_data(db, goods, period, model_classes,
                     print("isSystemIndicatorQuery：{}".format(isSystemIndicatorQuery))
                     # 对特定的指标特定查询，从起始时间再剪一天
                     start_time = parser.parse(begin_time)
-                    # 减去一个工作日
-                    previous_working_day = (pd.Timestamp(start_time) - pd.offsets.BDay()).to_pydatetime()
+                    if period == "H4":
+                        # 减去十个工作日
+                        previous_working_day = (pd.Timestamp(start_time) - pd.offsets.BDay(10)).to_pydatetime()
+                    else:
+                        # 减去一个工作日
+                        previous_working_day = (pd.Timestamp(start_time) - pd.offsets.BDay()).to_pydatetime()
+
                     # 格式化回字符串
                     previous_working_day_str = previous_working_day.strftime('%Y-%m-%d')
                 else:
