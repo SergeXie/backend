@@ -41,7 +41,7 @@ from datetime import datetime, timedelta, time
 from utils.strategys import reload_strategies
 from fastapi import BackgroundTasks, WebSocket, WebSocketDisconnect
 from sqlalchemy.exc import OperationalError
-from apis.v1.platform_strategy import fetch_indicators, create_strategy_record
+from apis.v1.platform_strategy import create_strategy_record
 router = APIRouter()
 
 file_path = './order_point.txt'
@@ -136,7 +136,7 @@ except Exception:
 finally:
     s.close()
 
-diaoqucishu = 500
+diaoqucishu = 3770
 period_Conversion_Seconds_dict = {
     'M1': 5,
     'M5': 5,
@@ -148,7 +148,7 @@ period_Conversion_Seconds_dict = {
     'W1': 60480,
     'MN': 259200
 }
-async def run_backtest(db: AsyncSession, indicator_data_request, strategys, tester_uid, goods_data, task_name=None, ismoni=False):
+async def run_backtest(indicator_data_request, strategys, tester_uid, goods_data, task_name=None, simulated=False):
     """
     :param db: 会话
     :param indicator_data_request: 请求参数
@@ -163,24 +163,10 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
         period = indicator_data_request.get("period", None)
         tradeUid = indicator_data_request.get("tradeUid", 0)
 
-        trading_data = await fetch_trading_data(db, goods, period, model_classes, name="latest_new", tradeUid=tradeUid)
-        if not trading_data:
-            return
+        df, last_datetime= await get_k_line_data(goods, period, model_classes, name="latest_new", tradeUid=tradeUid, simulated=simulated)
 
         cerebro = bt.Cerebro()
         cerebro.broker.setcommission(leverage=indicator_data_request.get("leverage", 1))
-        df = pd.DataFrame(trading_data)
-        if ismoni:
-            global diaoqucishu
-            df = df.iloc[0:diaoqucishu]
-            diaoqucishu += 1
-            # print('diaoqucishu', diaoqucishu)
-            print(df.tail(1)['datetime'])
-
-
-        df['datetime'] = pd.to_datetime(df['datetime'])
-        last_datetime = df['datetime'].iloc[-1]
-        df.set_index('datetime', inplace=True)
         data = PandasData(dataname=df)
         cerebro.adddata(data)
         for class_name in json.loads(strategys.className):
@@ -201,37 +187,16 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
         traderReport = trader_return.get('trader_report')
         order_point = trader_return.get('order_point', [])
 
-        if task_name == "async":
-
-            await db.execute(
-                update(DqlStrategyTestResult).where(DqlStrategyTestResult.uid == tester_uid).values(
-                    traderResult=json.dumps({"traderResult": traderResult, "traderReport": traderReport}),
-                    yieldRate=traderReport.get("yieldRate", 0),
-                    isBursted=traderReport.get("isBursted", 0),
-                    mdr=traderReport.get("mdr", 0),
-                    winRate=traderReport.get("winRate", 0),
-                    pnl=traderReport.get("totalNetProfit", 0),
-                    plr=traderReport.get("plr", 0),
-                    tradeCount=traderReport.get("totalTrades", 0),
-                    maxProfit=traderReport.get("largestProfit", 0),
-                    maxLoss=traderReport.get("largestLoss", 0),
-                    avgProfit=traderReport.get("AverageProfitLossPerorder", 0),
-                    maxFUR=traderReport.get("maxFUR", 0),
-                    score=traderReport.get("totalTrades", 0),
-                )
-            )
-            await db.commit()
-        else:
-            return {"traderResult": traderResult,
-                    "traderReport": traderReport,
-                    "order_point": order_point,
-                    "last_datetime": last_datetime}
+        return {"traderResult": traderResult,
+                "traderReport": traderReport,
+                "order_point": order_point,
+                "last_datetime": last_datetime}
 
     except Exception as e:
         info = traceback.format_exc()
         log.error("策略结果插入数据库失败：{}".format(info))
-        await db.rollback()  # 如果发生异常，回滚事务
-        await db.close()
+        # await db.rollback()  # 如果发生异常，回滚事务
+        # await db.close()
         return None
 
 
@@ -426,13 +391,17 @@ def get_strategy_str(tradeUid, new_order_point, new_data, CMD=None):
     elif CMD == 'Connect':
         return base + 'Code=200'
 
-
+sigal = False
+async def fetch_indicators(uid: str):
+    async with async_db_session() as db:
+        select_indicators = await db.execute(select(DqlStrategy).where(
+            DqlStrategy.uid == uid, DqlStrategy.is_delete == 0))
+    return select_indicators.scalars().first()
 # 买卖点轮询计算
 async def send_forex_updates(data):
     try:
         last_order_point = []
         last_latest_Kline_datetime = ''
-        # data = json.loads(data)
         tradeUid = data.get("tradeUid", 0)
         parameter = data.get("parameter", None)
         period = data.get("period", None)
@@ -441,157 +410,188 @@ async def send_forex_updates(data):
 
         MagicCode = random.randint(10000000, 99999999)
 
-        new_data = {"parameter":parameter,
-                    "period":period,
-                    "goods": goods,
-                    "tradeUid": data.get("tradeUid", 0)}
+        new_data = {
+            "parameter": parameter,
+            "period": period,
+            "goods": goods,
+            "tradeUid": data.get("tradeUid", 0)
+        }
 
-        if tradeUid == 'NTRXAUM1S000':
+        if tradeUid == 'NTRXAUM5S000':
             moni = True
+            print('模拟')
         else:
             moni = False
+
+        async with async_db_session() as db:
+            dp_goods_data = await db.execute(select(DplGoodsTest).where(
+                DplGoodsTest.goods == goods))
+            goods_data = dp_goods_data.scalars().first()
+            strategy = await fetch_indicators(uid=strategyUid)
+
         while keep_running:
-            print('轮询中')
             try:
-                async with async_db_session() as db:
-                    # 根据品种或者品种表的手数和盈亏倍率
-                    dp_goods_data = await db.execute(select(DplGoodsTest).where(
-                        DplGoodsTest.goods == goods))
-                    goods_data = dp_goods_data.scalars().first()
-                    # 根据uid寻找策略
-                    strategy = await fetch_indicators(db, strategyUid)
+                print('轮询中', tradeUid, sigal)
 
-                    # print('strategys.className',strategy.className)
-                    # 计算策略结果
-                    backtest_result = await run_backtest(db, new_data, strategy, 0, goods_data, task_name="sync", ismoni=moni)
-                    order_point = backtest_result.get('order_point', [])  # 获取买卖点的字典
-                    latest_Kline_datetime = str(backtest_result.get('last_datetime', []))  # 最新k线时间
-                    latest_Kline_datetime = datetime.strptime(latest_Kline_datetime, '%Y-%m-%d %H:%M:%S')
+                backtest_result = await run_backtest(new_data, strategy, 0, goods_data, task_name="sync",
+                                                     simulated=moni)
+                order_point = backtest_result.get('order_point', [])
+                latest_Kline_datetime = str(backtest_result.get('last_datetime', []))
+                latest_Kline_datetime = datetime.strptime(latest_Kline_datetime, '%Y-%m-%d %H:%M:%S')
 
-                # print('@@@@@@', last_order_point[-1:])
-                # print('@@@@@@', order_point[-1:])
-                # print(order_point)
                 await strategy_hold_order(tradeUid, order_point, goods)
-                # 判断有没有买卖点
+
                 if order_point_judge(last_order_point, order_point):
                     index = find_last_index(order_point, last_order_point, from_w='轮询计算')
-                    print(index)
+                    print('索引：',index, '  order_point长度', len(order_point),'  last_order_point长度', len(last_order_point))
 
                     if index == -1:
                         last_order_point = order_point
                         continue
+                    if index != len(last_order_point):
+                        index += 1
                     new_order_points = order_point[index:]
-                    # 保存出现的买卖点
+                    print('买卖点',len(new_order_points), new_order_points)
 
                     for new_order_point in new_order_points:
-                        print('*****',new_order_point)
                         await strategy_history_order(tradeUid, new_order_point)
-                        if new_order_point.get('order_type') == 'buy' or new_order_point.get('order_type') == 'sell': # 开仓
+                        if new_order_point.get('order_type') in ['buy', 'sell']:
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Open')
-                            print('开仓',tmp)
                             await send_tradeUid(tradeUid, tmp)
-                        elif new_order_point.get('order_type') == 'close':  # 关仓
+                        elif new_order_point.get('order_type') == 'close':
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Close')
-                            print('关仓', tmp)
                             await send_tradeUid(tradeUid, tmp)
-                        elif new_order_point.get('order_type') == 'buy_limit' or new_order_point.get('order_type') == 'sell_limit':  # 关仓
+                        elif new_order_point.get('order_type') in ['buy_limit', 'sell_limit']:
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Open')
-                            # print('挂单', tmp)
                             await send_tradeUid(tradeUid, tmp)
-                        elif new_order_point.get('order_type') == 'modify_buy' or new_order_point.get('order_type') == 'modify_sell':  # 关仓
+                        elif new_order_point.get('order_type') in ['modify_buy', 'modify_sell']:
                             tmp = get_strategy_str(tradeUid, new_order_point, new_data, CMD='Modify')
-                            # print('挂单', tmp)
                             await send_tradeUid(tradeUid, tmp)
 
-                        print('产生买卖点')
-                        # 持单的保存
-                sleep_seconds = period_Conversion_Seconds_dict.get(period)  # 通过周期获取休眠时间
+                sleep_seconds = period_Conversion_Seconds_dict.get(period)
                 last_order_point = order_point
                 last_latest_Kline_datetime = latest_Kline_datetime
+
             except OperationalError as e:
-                log.error(f"数据库断开，捕获到 OperationalError: {e}")
-
-            # 设置轮询间隔
-            if tradeUid in ['NTRXAUM5S0004']:
-                # print('进行模拟输出',order_point_judge(last_order_point, order_point))
-                # print(order_point)
-                for i in order_point:
-                    if i.get('order_type') == 'buy' or i.get('order_type') == 'sell':  # 开仓
-                        tmp = get_strategy_str(tradeUid, i, new_data, CMD='Open')
-                        await send_tradeUid(tradeUid, tmp)
-                    elif i.get('order_type') == 'close':  # 关仓
-                        tmp = get_strategy_str(tradeUid, i, new_data, CMD='Close')
-                        await send_tradeUid(tradeUid, tmp)
-                    elif i.get('order_type') == 'buy_limit' or i.get('order_type') == 'sell_limit':  # 关仓
-                        tmp = get_strategy_str(tradeUid, i, new_data, CMD='Open')
-                        await send_tradeUid(tradeUid, tmp)
-                    elif i.get('order_type') == 'modify_buy' or i.get('order_type') == 'modify_sell':  # 关仓
-                        tmp = get_strategy_str(tradeUid, i, new_data, CMD='Modify')
-                        await send_tradeUid(tradeUid, tmp)
-                    await asyncio.sleep(1)
-                await asyncio.sleep(0)
-            else:
-                if tradeUid == 'NTRXAUM1S000':
-                    await asyncio.sleep(0.5)
+                log.error(f"数据库错误，需要重启轮询: {tradeUid}, 错误: {e}")
+            except RuntimeError as e:
+                if "Unexpected ASGI message 'websocket.send'" in str(e):
+                    log.error(f"WebSocket连接错误，需要重启轮询: {tradeUid}, 错误: {e}")
                 else:
+                    log.error(f"其他运行时错误: {e}")
+            except Exception as e:
+                info = traceback.format_exc()
+                log.error(f"本轮轮询出错：{info}")
+            finally:
+                if 'sleep_seconds' in locals():
                     await asyncio.sleep(sleep_seconds)
-    except:
+                else:
+                    await asyncio.sleep(1)
+
+    except Exception as e:
         info = traceback.format_exc()
-        log.error("策略轮询出错：{}".format(info))
-        print("错误信息：{}".format(info))
-        return Response(status_code=500, content="系统错误!")
+        log.error(f"函数初始化阶段出错：{info}")
+        # 初始化失败也尝试重启
+        # await restart_polling(tradeUid)
+
+# 在现有全局变量基础上添加
+active_tasks = {}  # 存储 tradeUid 与对应轮询任务的映射
+
+@router.post("/restartPolling", name="重启轮询任务")
+async def restart_polling(trade_uid: str):
+    """通过 tradeUid 重启对应的轮询任务"""
+    try:
+        # 1. 停止现有任务（如果存在）
+        if trade_uid in active_tasks:
+            task = active_tasks[trade_uid]
+            if not task.done():
+                task.cancel()  # 取消任务
+                await asyncio.sleep(0.1)  # 等待任务终止
+            del active_tasks[trade_uid]
+            log.info(f"已停止轮询任务: {trade_uid}")
+
+        # 2. 查询策略信息，准备重启参数
+        async with async_db_session() as db:
+            query = select(TradingStrategy).where(TradingStrategy.tradeUid == trade_uid)
+            strategy = await db.execute(query)
+            result = strategy.scalars().first()
+            if not result:
+                return await response_base.fail(msg="策略不存在")
+
+            # 3. 重启轮询任务
+            data_dict = {
+                "parameter": json.loads(result.parameter),
+                "period": result.period,
+                "goods": result.goods,
+                "uid": result.strategyUid,
+                "tradeUid": result.tradeUid
+            }
+            new_task = asyncio.create_task(send_forex_updates(data_dict))
+            active_tasks[trade_uid] = new_task
+            log.info(f"已重启轮询任务: {trade_uid}")
+            return await response_base.success(msg="轮询已重启")
+
+    except Exception as e:
+        log.error(f"重启轮询失败: {traceback.format_exc()}")
+        return await response_base.fail(msg=f"重启失败: {str(e)}")
 
 
+@router.get("/stop", name="出问题")
+def stop():
+    print('停止轮询')
+    global sigal
+    sigal = True
 
+@router.get("/open", name="出问题")
+def stop():
+    print('继续轮询')
+    global sigal
+    sigal = False
 
 @router.websocket("/wss")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     global diaoqucishu
+    current_trade_uid = None  # 记录当前处理的tradeUid
     try:
         while True:
-            # 接收消息
             data = await websocket.receive_text()
-            # print(data)
-
-            # 解析-参数
             parsed_params = parse_qs(data)
-
-            # 接收参数
-            tradeUid = parsed_params.get('tradeUid', [''])[0]  # 交易策略Uid
+            tradeUid = parsed_params.get('tradeUid', [''])[0]
             cmd = parsed_params.get('cmd', [''])[0]
-            # cmd=connect表示连接指令 quit=关闭连接  heartbeat 表示心跳检测
+            current_trade_uid = tradeUid  # 更新当前tradeUid
+
             if cmd == "connect":
-                # 拿到tradeUid 后，进行数据库查询出品种-交易周期-参数-策略Uid
                 async with async_db_session() as db:
+                    try:
+                        # 增加数据库连接检测
+                        await db.execute(select(1))
+                    except OperationalError:
+                        await send_websocket(websocket, f"tradeUid={tradeUid}&cmd=error&code=503&message=数据库连接失败")
+                        continue
+
                     query = select(TradingStrategy).where(TradingStrategy.tradeUid == tradeUid)
                     strategy = await db.execute(query)
                     results = strategy.scalars().first()
                     if results:
-                        # 将每一个订阅者加入到websocket连接池中
                         creat = await manager.connect(websocket, results.tradeUid)
                         tmp = get_strategy_str(tradeUid, {}, {}, CMD='Connect')
                         await send_websocket(websocket, tmp)
-                        # await send_websocket(websocket,f"tradeUid={tradeUid}&cmd=connect&code=200&timeStamp={int(datetime.now().timestamp())}")
 
                         if creat:
                             data_dict = {"parameter": json.loads(results.parameter), "period": results.period,
                                          "goods": results.goods, "uid": results.strategyUid,
                                          "tradeUid": results.tradeUid}
                             print("创建轮询")
-                            # 调用计算函数
-                            # 直接 await 异步函数
                             if tradeUid == 'NTRXAUM1S000':
                                 diaoqucishu = 3000
 
-                            asyncio.create_task(send_forex_updates(data_dict))
-                            # await send_forex_updates(data_dict)
-                            print("&"*30)
+                            new_task = asyncio.create_task(send_forex_updates(data_dict))
+                            active_tasks[data_dict["tradeUid"]] = new_task
                         else:
                             print("已经存在")
-                        # print(original_dict)
                     else:
-                        await send_websocket(websocket, f"tradeUid={tradeUid}&cmd=connect&code=404&message=策略不存在&timeStamp={int(datetime.now().timestamp())}")
+                        await send_websocket(websocket, f"tradeUid={tradeUid}&cmd=connect&code=404&message=策略不存在")
 
             elif cmd == 'heartbeat':
                 # print('心跳', inverse_dict.get(websocket))
@@ -621,92 +621,44 @@ async def websocket_endpoint(websocket: WebSocket):
                 print("接到断开请求")
                 await manager.disconnect(websocket, tradeUid)
 
-            # print(original_dict)
-            # print(inverse_dict)
-
     except WebSocketDisconnect as e:
         print(f"WebSocket disconnected with code: {e.code}")
         await manager.disconnect(websocket, "all")
-        # await websocket.close()  # 关闭 WebSocket 连接
     except OperationalError as e:
-        log.error(f"捕获到 OperationalError: {e}")
+        log.error(f"WebSocket中的数据库错误: {e}")
+        # 如果有当前处理的tradeUid，重启其任务
+        if current_trade_uid:
+            await restart_polling(current_trade_uid)
     except Exception as e:
-        print(e)
-        log.error(f"捕获到异常: {e}")
+        log.error(f"WebSocket异常: {e}")
+        if current_trade_uid:
+            await restart_polling(current_trade_uid)
 
 
 #-------------------------------- 毒属于该文件的函数-------------------------------#
 
 # 封装成一个异步函数，然后在需要使用的地方直接调用该函数
-async def fetch_trading_data(db, goods, period, model_classes,
+async def get_k_line_data(goods, period, model_classes,
                              begin_time=None, end_time=None,
-                             lineId=0, name=None, period_tuple=None, class_name=None, tradeUid=None):
+                             lineId=0, name=None, period_tuple=None, class_name=None, tradeUid=None, simulated=False):
     # 需要使用到begintime的策略，即数据开始时间会影响
     need_begintime_class = ['atr_strategy.ATRStrategy',
                             'atr_strategyv1.ATRStrategy',
                             'bbtrend.BBTrendStrategy']
 
     try:
-        # 1 查询中间表 交易品种表
-        select_model_class, result = await select_goods_common(db, goods, model_classes)
+        async with async_db_session() as db:
+            # 1 查询中间表 交易品种表
+            select_model_class, result = await select_goods_common(db, goods, model_classes)
+            if not select_model_class:
+                return False
 
-        if not select_model_class:
-            return False
-
-        if begin_time and end_time:
-            print("时段数据 开始执行时间：{}".format(datetime.datetime.now()))
-            # 根据交易品种表的 table_name 字段查找主表，拿到交易历史数据后加入到backtrader的数据源中（开始时间 - 结束时间）
-            # if class_name in ["atr_strategy.ATRStrategy"] or class_name in ["atr_strategyv1.ATRStrategy"]:
-            if class_name in need_begintime_class:
-                # backtrader ATR回测特定查询，从起始时间再剪一天
-                start_time = datetime.datetime.strptime(begin_time, '%Y-%m-%d %H:%M:%S')
-
-                # 减去一个工作日
-                previous_working_day = (pd.Timestamp(start_time) - pd.offsets.BDay()).to_pydatetime()
-
-                # 格式化回字符串
-                previous_working_day_str = previous_working_day.strftime('%Y-%m-%d')
-
-                query = select(select_model_class).where(
-                    select_model_class.tradingGoods == result.trading_goods,
-                    select_model_class.platform == result.platform,
-                    select_model_class.type == period,
-                    select_model_class.tradeDateTime.between(previous_working_day_str, end_time)
-                ).order_by(select_model_class.tradeDateTime.desc())
-
-            else:
-                # 正常根据起始时间至结束时间查询
-                query = select(select_model_class).where(
-                    select_model_class.tradingGoods == result.trading_goods,
-                    select_model_class.platform == result.platform,
-                    select_model_class.type == period,
-                    select_model_class.tradeDateTime.between(begin_time, end_time)
-                    ).order_by(select_model_class.tradeDateTime.desc())
-
-            details = await db.execute(query)
-
-            # 组织数据结构
-            result_list = details.scalars().all()
-
-            results_data_list = [
-                {"pkId": x.pkId, "datetime": timezone.str_f(x.tradeDateTime), "open": x.opening,
-                 "high": x.high, "low": x.low, "close": x.closed,
-                 "volume": x.vol, "openinterest": 0, "klineId": x.pkId,
-                 "digits": x.digits, "spread": x.spread} for x in result_list]
-
-            result_list_data = sorted(results_data_list, key=lambda x: x['datetime'])
-
-            print("时段数据 结束执行时间：{}".format(datetime.datetime.now()))
-
-            return result_list_data
-
-        else:
             if name == "latest_new":  # 最新数据
                 details_data = select(select_model_class).where(
                     select_model_class.tradingGoods == result.trading_goods,
                     select_model_class.platform == result.platform,
                     select_model_class.type == period,
-                ).order_by(desc(select_model_class.tradeDateTime)).limit(3000)
+                ).order_by(desc(select_model_class.tradeDateTime)).limit(1000)
 
                 detail = await db.execute(details_data)
                 # 组织数据结构
@@ -714,22 +666,34 @@ async def fetch_trading_data(db, goods, period, model_classes,
             else:
                 results = []
 
-            results_data_list = [
-                {"pkId": x.pkId, "datetime": timezone.str_f(x.tradeDateTime), "open": x.opening,
-                 "high": x.high, "low": x.low, "close": x.closed,
-                 "volume": x.vol, "openinterest": 0,
-                 "klineId": x.pkId, "spread": x.spread, "digits": x.digits} for x in results]
+        results_data_list = [
+            {"pkId": x.pkId, "datetime": timezone.str_f(x.tradeDateTime), "open": x.opening,
+             "high": x.high, "low": x.low, "close": x.closed,
+             "volume": x.vol, "openinterest": 0,
+             "klineId": x.pkId, "spread": x.spread, "digits": x.digits} for x in results]
 
-            result_list = sorted(results_data_list, key=lambda x: x['datetime'])
-            # print(len(result_list))
+        result_list = sorted(results_data_list, key=lambda x: x['datetime'])
 
-            return result_list
+        df = pd.DataFrame(result_list)
+        if simulated:
+            # print('模拟数据')
+            global diaoqucishu
+            df = df.iloc[diaoqucishu - 3000:diaoqucishu]
+            diaoqucishu += 1
+            # print('diaoqucishu', diaoqucishu)
+
+        df['datetime'] = pd.to_datetime(df['datetime'])
+        last_datetime = df['datetime'].iloc[-1]
+        df.set_index('datetime', inplace=True)
+
+        return df, last_datetime
 
     except Exception as e:
         info = traceback.format_exc()
         log.error("查询技术指标K线历史数据错误出错：{}".format(info))
         print("查询技术指标K线历史数据错误出错：{}".format(info))
-        return []
+        return [None, None]
+
 
 
 def find_last_index(order_point, last_order_point, from_w=None):
@@ -739,12 +703,13 @@ def find_last_index(order_point, last_order_point, from_w=None):
     :return: 返回last_order_point最后一个在，新的买卖点记录中的位置，如果没有返回-1
     """
     last_order_point = last_order_point[-1]
-    print(f'find_last_index这里,来自{from_w}',last_order_point,)
+    # print(f'find_last_index这里,来自{from_w}',last_order_point,)
 
     order_point_l = [[i['datatime'], i['order_type']] for i in order_point]
     last_order_point_l = [last_order_point['datatime'], last_order_point['order_type']]
 
-    print(order_point_l[-5:])
+    print('当前',order_point_l[-5:])
+    print('上一个',last_order_point_l)
     # return order_point_l.index(last_order_point_l)
     try:
         return order_point_l.index(last_order_point_l)
@@ -759,7 +724,7 @@ def order_point_judge(last_order_point, order_point):
     # 条件2可以覆盖条件1的场景
     condition1 = last_order_point[-1]['datatime'] != order_point[-1]['datatime']
     condition2 = last_order_point[-1]['datatime'] < order_point[-1]['datatime']
-    print('条件', condition1, condition2,len(order_point))
+    # print('条件', condition1, condition2,len(order_point))
     if condition1 and condition2:
         return True
     else:
