@@ -200,6 +200,7 @@ async def get_economic_news(
 @router.get("/marketNews", name="快讯")
 async def get_market_news(
         lastId: Optional[int] = Query(None, description="上次请求的最后ID"),
+        historyId: Optional[int] = Query(None, description="往后翻查看历史的最后ID"),
         pageNo: Optional[int] = Query(1, description="当前页码，从1开始"),
         pageSize: Optional[int] = 100,
         keyword: Optional[str] = Query(None, description="快讯内容搜索关键字"),
@@ -240,7 +241,7 @@ async def get_market_news(
         if isPredict:
             # 预测快讯表
             # ===== 2️ 主表查询 =====
-            if lastId is None:
+            if lastId is None and historyId is None:
                 # 初次查询
                 if conditions:
                     stmt = (
@@ -261,6 +262,29 @@ async def get_market_news(
 
                     count_stmt = select(func.count()).select_from(news_class).where(
                         news_class.preds.in_([1, -1]))
+
+            elif historyId:
+                # 查历史数据
+                first_market_news_row = (
+                    select(news_class.time)
+                    .where(news_class.pkId == historyId)
+                )
+                result = await db.execute(first_market_news_row)
+                first_market_news_time = result.scalars().first()
+
+                # 翻页查询
+                stmt = (
+                    select(news_class)
+                    .where(and_(news_class.time < first_market_news_time, news_class.preds.in_([1, -1])))
+                    .order_by(news_class.time.desc()).offset(offset).limit(pageSize)
+                )
+
+                count_stmt = select(func.count()).select_from(news_class).where(
+                    and_(news_class.time < first_market_news_time, news_class.preds.in_([1, -1])))
+
+                if conditions:
+                    stmt = stmt.where(and_(*conditions))
+                    count_stmt = count_stmt.where(and_(*conditions))
 
             else:
                 # 翻页查询
@@ -285,7 +309,7 @@ async def get_market_news(
 
         else:
             # ===== 2️ 主表查询 =====
-            if lastId is None:
+            if lastId is None and historyId is None:
                 stmt = (
                     select(market)
                     .where(*conditions) if conditions else select(market)
@@ -294,7 +318,29 @@ async def get_market_news(
 
                 count_stmt = select(func.count()).select_from(market).where(*conditions)
 
+            elif historyId:
+                # 查历史数据
+                first_market_news_row =(
+                    select(market.time)
+                    .where(market.pkId == historyId)
+                )
+                result = await db.execute(first_market_news_row)
+                first_market_news_time = result.scalars().first()
+
+                stmt = (
+                    select(market)
+                    .where(market.time < first_market_news_time).order_by(
+                        market.time.desc()).offset(offset).limit(pageSize)
+                )
+
+                count_stmt = select(func.count()).select_from(market).where(market.time <= first_market_news_time)
+
+                if conditions:
+                    stmt = stmt.where(*conditions)
+                    count_stmt = count_stmt.where(and_(*conditions))
+
             else:
+
                 stmt = (
                     select(market)
                     .where(market.pkId > lastId)
