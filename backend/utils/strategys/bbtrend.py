@@ -39,7 +39,7 @@ class BBTrendStrategy(CommonStrategy):
     # 使用长连接的接口时候，不会传begin_time
     def __init__(self, indicator_params, goodsId=None, begin_time=None, baseLots=0.1):
         # 调用父类方法 （固定写法）
-        super().__init__(goodsId=None)
+        super().__init__(goodsId)
 
         # 接收参数变量
         self.indicator_params = indicator_params
