@@ -10,7 +10,7 @@ from utils.common import fetch_indicators, run_backtest, save_trader_result, tas
 CYCLES = ['M15', "M30", "H1", "H4"]
 strategyUid = {"趋势止损策略": "SSWiwM6dp5FgE8"}
 # goods = ["FPG-XAUUSD"]
-goods = ["FPG-XAUUSD", "FPG-USOUSD"]
+goods = ["FPG-XAUUSD", "FPG-USOUSD", "FPG-USTEC"]
 
 
 
