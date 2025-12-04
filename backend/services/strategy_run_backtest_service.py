@@ -84,16 +84,8 @@ class StrategyRunBacktestService:
             if backtest_result is None:
                 continue
 
-            item["account"] = None
-            item["userName"] = None
-            item["currency"] = "USD"
             traderResult = backtest_result["traderResult"]
             traderReport = backtest_result["traderReport"]
-            item["floatingPointValues"] = backtest_result["floatingPointValues"]
-            item["netAssetValues"] = backtest_result["netAssetValues"]
-            item["traderResult"] = traderResult
-            item["traderReport"] = traderReport
-            item["newReportTemplate"] = backtest_result["newReportTemplate"]
 
             # 对交易订单 traderResult还在持仓的，进行盈利结算
             traderResult = await adjust_unpaired_trades(db, item.get("startTime"),
@@ -107,7 +99,7 @@ class StrategyRunBacktestService:
                 )
 
             # 8. 整理响应数据
-            result_data.append(self._build_response(item, tester_uid))
+            result_data.append(self._build_response(item, tester_uid, backtest_result, traderResult, traderReport))
 
         return result_data
 
@@ -174,10 +166,17 @@ class StrategyRunBacktestService:
         await db.commit()
         return tester_uid
 
-    def _build_response(self, item, tester_uid):
+    def _build_response(self, item, tester_uid, backtest_result, traderResult, traderReport):
         item["testerUids"] = tester_uid
         item["createTime"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
+        item["account"] = None
+        item["userName"] = None
+        item["currency"] = "USD"
+        item["floatingPointValues"] = backtest_result["floatingPointValues"]
+        item["netAssetValues"] = backtest_result["netAssetValues"]
+        item["traderResult"] = traderResult
+        item["traderReport"] = traderReport
+        item["newReportTemplate"] = backtest_result["newReportTemplate"]
         return item
 
 
