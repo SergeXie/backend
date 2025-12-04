@@ -7,28 +7,25 @@ import sys
 import traceback
 import shutil
 from collections import defaultdict, namedtuple
-from typing import List
-
 import chardet
 from datetime import datetime
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, Query, HTTPException, UploadFile, File, BackgroundTasks, Depends
-from sqlalchemy import select, desc, update, func, and_
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Query, HTTPException, UploadFile, File, BackgroundTasks
+from sqlalchemy import select, desc, func, and_
 from starlette.requests import Request
 from starlette.responses import Response
 from apis.v1.platform import model_classes
 from common.log import log
 from common.response.response_schema import response_base
-from database.db_mysql import async_db_session, get_db
+from database.db_mysql import async_db_session
 from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest, DqlOrder, DqlIndicators, \
     DqlStrategyIndicatorRel
 from schemas.platorm import DqlIndicatorsModel
 from schemas.platorm_strategr_schemas import TestResultRequest, RealOrderFloatingProfitModel
+from services.strategy_run_backtest_service import create_strategy_record, strategy_run_backtest_service
 from utils.common import get_entities_list, generate_random_string, \
     generate_lazy_pinyin, \
-    to_float, format_datetime, select_goods_common, select_kline_data, fetch_indicators, \
-    run_backtest, adjust_unpaired_trades
+    to_float, format_datetime, select_goods_common, select_kline_data, fetch_indicators
 from utils.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
 from utils.trader_report_calculate import  normalize_to_float, process_manual_upload, process_auto_upload
@@ -87,46 +84,6 @@ def get_param(file_path):
             params_list.append(param_dict)
 
     return params_list
-
-
-async def create_strategy_record(db: AsyncSession, indicator_data_request, strategys):
-    """
-    :param db: 数据库会话
-    :param indicator_data_request: 请求参数
-    :param strategys:  策略对象
-    :return:
-    """
-    try:
-        # 创建策略结果记录
-        add_strategy_record = DqlStrategyTestResult(
-            uid=generate_random_string("TR"),
-            title=strategys.name,
-            notes=strategys.description,
-            strategyUid=indicator_data_request.get("uid", 0),
-            goodsId=indicator_data_request["goods"],
-            period=indicator_data_request["period"],
-            startTime=indicator_data_request["startTime"],
-            endTime=indicator_data_request["endTime"],
-            traderResult="{}",
-            parameter=json.dumps(indicator_data_request.get("parameter", {})),
-            isBursted=0, status=0, yieldRate=0,
-            mdr=0, winRate=0, plr=0, tradeCount=0,
-            pnl=0,maxProfit=0, maxLoss=0, avgProfit=0, maxFUR=0, score=0,
-            is_delete=0, spread=indicator_data_request.get("spread", 0),
-            leverage=indicator_data_request.get("leverage", 1),
-            paramsStrName=indicator_data_request.get("paramsStrName", None),
-            newReportTemplate=json.dumps(indicator_data_request.get("newReportTemplate", {}))
-        )
-        db.add(add_strategy_record)
-        await db.commit()
-        return add_strategy_record.uid
-
-    except Exception as e:
-        info = traceback.format_exc()
-        log.error("策略存储插入数据库失败：{}".format(info))
-        await db.rollback()  # 如果发生异常，回滚事务
-        await db.close()
-        return None
 
 
 @router.get("/list", name="获取所有策略列表")
@@ -773,91 +730,10 @@ async def real_order_floating_profit(order_object: RealOrderFloatingProfitModel)
 
 @router.post("/syncBatchTest", name="策略批量回测(同步)")
 async def indicator_sync_batch_test(request: Request):
-    strategy_data_requests = await request.json()
-
-    print("回测请求的参数：{}".format(strategy_data_requests))
+    payload_list = await request.json()
     async with async_db_session() as db:
-        result_data = []
-        for strategy_data_requests in strategy_data_requests:
-            strategy = await fetch_indicators(db, strategy_data_requests.get("uid", 0))
-
-            if not strategy:
-                return await response_base.fail(msg=f"uid:{strategy_data_requests.get('uid', 0)} not found !", data=[])
-
-            # 根据品种或者品种表的手数和盈亏倍率
-            dp_goods_data = await db.execute(select(DplGoodsTest).where(
-                DplGoodsTest.goods == strategy_data_requests.get("goods")))
-
-            goods_data = dp_goods_data.scalars().first()
-
-            backtest_result = await run_backtest(db, strategy_data_requests, strategy, 0, goods_data, task_name="sync")
-
-            if backtest_result is None:
-                continue
-
-            strategy_data_requests["account"] = None
-            strategy_data_requests["userName"] = None
-            strategy_data_requests["currency"] = "USD"
-            traderResult = backtest_result["traderResult"]
-            traderReport = backtest_result["traderReport"]
-            strategy_data_requests["floatingPointValues"] = backtest_result["floatingPointValues"]
-            strategy_data_requests["netAssetValues"] = backtest_result["netAssetValues"]
-            strategy_data_requests["traderResult"] = traderResult
-            strategy_data_requests["traderReport"] = traderReport
-            strategy_data_requests["newReportTemplate"] = backtest_result["newReportTemplate"]
-
-            # 对交易订单 traderResult还在持仓的，进行盈利结算
-            traderResult = await adjust_unpaired_trades(db, strategy_data_requests.get("startTime"),
-                                                        strategy_data_requests.get("endTime"), traderResult)
-
-            print("traderResult:{}".format(traderResult))
-            if not strategy_data_requests.get("manualBatchTest", 0):
-                try:
-                    # TODO 保存回测所有信息保存策略结果表中
-                    tester_uid = await create_strategy_record(db, strategy_data_requests, strategy)
-
-                    # TODO 更新
-                    await db.execute(
-                        update(DqlStrategyTestResult).where(DqlStrategyTestResult.uid == tester_uid).values(
-                            traderResult=json.dumps({"traderResult": traderResult,
-                                                     "traderReport": traderReport,
-                                                     "floatingPointValues": backtest_result["floatingPointValues"],
-                                                     "netAssetValues": backtest_result["netAssetValues"]}),
-                            yieldRate=traderReport.get("yieldRate", 0),
-                            isBursted=traderReport.get("isBursted", 0),
-                            mdr=traderReport.get("mdr", 0),
-                            winRate=traderReport.get("winRate", 0),
-                            pnl=traderReport.get("totalNetProfit", 0),
-                            plr=traderReport.get("plr", 0),
-                            tradeCount=traderReport.get("totalTrades", 0),
-                            maxProfit=traderReport.get("largestProfit", 0),
-                            maxLoss=traderReport.get("largestLoss", 0),
-                            avgProfit=traderReport.get("avgProfit", 0),
-                            maxFUR=traderReport.get("maxFUR", 0),
-                            score=traderReport.get("totalTrades", 0),
-                            paramsStrName=strategy_data_requests.get("paramsStrName", 0),
-                            calculationStatus=1  # 计算回测结果状态
-
-                        )
-                    )
-                    await db.commit()
-
-                except Exception as e:
-                    info = traceback.format_exc()
-                    log.error("策略结果插入数据库失败信息：{}".format(info))
-                    log.error("请求参数信息：{}".format(strategy_data_requests))
-                    await db.rollback()  # 如果发生异常，回滚事务
-                    raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
-
-                finally:
-                    await db.close()
-
-                strategy_data_requests["testerUids"] = tester_uid
-                strategy_data_requests["createTime"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-            result_data.append(strategy_data_requests)
-
-        return await response_base.success(data=result_data)
+        result = await strategy_run_backtest_service.batch_run_backtest(db, payload_list)
+        return await response_base.success(data=result)
 
 
 @router.post("/asyncBatchTest", name="策略批量回测(异步)")
@@ -875,9 +751,6 @@ async def indicator_async_batch_test(request: Request):
 
             tester_uid = await create_strategy_record(db, strategy_data_requests, strategy)
 
-            # background_tasks.add_task(run_backtest, db, strategy_data_requests, strategy,
-            #                          tester_uid, task_name="async")
-
             result_data.append({"index": strategy_data_requests.get("index"), "testerUid": tester_uid})
 
             strategy_data_requests["testerUids"] = tester_uid
@@ -885,7 +758,6 @@ async def indicator_async_batch_test(request: Request):
             task_run_backtest.send(strategy_data_requests, tester_uid, task_name="async")
 
         return await response_base.success(data=result_data)
-
 
 
 @router.get("/delete", name="策略删除")
@@ -1164,6 +1036,7 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
                 return await response_base.fail(msg="文件路径不存在")
 
             if upload_type == "2":  # 手动上传
+                # 查询策略数据
                 strategy = await fetch_indicators(db, uid)
                 if not strategy:
                     return await response_base.fail(code=400, msg=f"提交失败,未找到存在策略！", data=[])

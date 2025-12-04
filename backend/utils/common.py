@@ -877,7 +877,7 @@ async def _dedup_and_insert(rows, db, strategyUid: str, period: str):
     await db.commit()
     return len(to_insert)
 
-async def run_backtest(db: AsyncSession, indicator_data_request, strategys, tester_uid, goods_data, task_name=None):
+def run_backtest(trading_data, indicator_data_request, strategys, goods_data):
     """
 
     :param db: 会话
@@ -888,25 +888,7 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
     :return:
     """
     try:
-        # 根据period参数的取值进行条件判断
-        period_dict = {"period": indicator_data_request.get("period", None),
-                       "tradingGoods": indicator_data_request.get("goods", None),
-                       "beginTime": indicator_data_request.get("startTime", None),
-                       "endTime": indicator_data_request.get("endTime", None)}
-
-        period_tuple = tuple(period_dict.items())
-
         indicator_params = indicator_data_request.get("parameter", {})
-        # 在参数中增加k线的品种和周期
-        indicator_params['Kline_period'] = indicator_data_request.get("period", None)
-        indicator_params['Kline_goods'] = indicator_data_request.get("goods", None)
-
-        trading_data = await fetch_trading_data(db, indicator_data_request.get("goods", None),
-                                                indicator_data_request.get("period", None), model_classes,
-                                                begin_time=indicator_data_request.get("startTime", None),
-                                                end_time=indicator_data_request.get("endTime", None),
-                                                period_tuple=period_tuple, class_name=json.loads(strategys.className))
-
         if not trading_data:
             return
 
@@ -971,8 +953,6 @@ async def run_backtest(db: AsyncSession, indicator_data_request, strategys, test
     except Exception as e:
         info = traceback.format_exc()
         log.error("策略结果插入数据库失败：{}".format(info))
-        await db.rollback()  # 如果发生异常，回滚事务
-        await db.close()
         return None
 
 
@@ -1255,49 +1235,56 @@ async def adjust_unpaired_trades(db, beginTime, endTime, trader_result,
     :param trader_result: 原始交易列表
     :return: 修改后的完整交易记录列表
     """
-    # 1. 构建 tradeid -> list of orderType 映射
-    tradeid_to_types = defaultdict(list)
-    cash = starting_cash
+    try:
+        # 1. 构建 tradeid -> list of orderType 映射
+        tradeid_to_types = defaultdict(list)
+        cash = starting_cash
 
-    for item in trader_result:
-        cash += item.get("pnl", 0.0)  # 先更新现金净值
-        item["initialCash"] = round(cash, 2)  # 记录更新后的净值
-        tradeid_to_types[item["tradeid"]].append(item["orderType"])
+        for item in trader_result:
+            cash += item.get("pnl", 0.0)  # 先更新现金净值
+            item["initialCash"] = round(cash, 2)  # 记录更新后的净值
+            tradeid_to_types[item["tradeid"]].append(item["orderType"])
 
-    # 2. 找出那些没有 'close' 类型的 tradeid（表示没有被平仓） 找到未配对的 tradeid（即只出现一次）
-    unpaired_ids = {tid for tid, types in tradeid_to_types.items() if 'close' not in types}
+        # 2. 找出那些没有 'close' 类型的 tradeid（表示没有被平仓） 找到未配对的 tradeid（即只出现一次）
+        unpaired_ids = {tid for tid, types in tradeid_to_types.items() if 'close' not in types}
 
-    # 修改原列表（in-place 修改）
-    for item in trader_result:
-        if item["tradeid"] in unpaired_ids:
-            # 查K线
-            select_model_class, goods_ = await select_goods_common(db, item["goodsId"], model_classes)
+        # 修改原列表（in-place 修改）
+        for item in trader_result:
+            if item["tradeid"] in unpaired_ids:
+                # 查K线
+                select_model_class, goods_ = await select_goods_common(db, item["goodsId"], model_classes)
 
-            select_k_time = select(select_model_class).where(
-                select_model_class.platform == goods_.platform,
-                select_model_class.tradingGoods == goods_.trading_goods,
-                select_model_class.type == "M1",
-                select_model_class.tradeDateTime >= beginTime,
-                select_model_class.tradeDateTime < endTime
-            ).order_by(select_model_class.tradeDateTime.desc()).limit(1)
+                select_k_time = select(select_model_class).where(
+                    select_model_class.platform == goods_.platform,
+                    select_model_class.tradingGoods == goods_.trading_goods,
+                    select_model_class.type == "M1",
+                    select_model_class.tradeDateTime >= beginTime,
+                    select_model_class.tradeDateTime < endTime
+                ).order_by(select_model_class.tradeDateTime.desc()).limit(1)
 
-            # 执行查询
-            result = await db.execute(select_k_time)
-            kline_data = result.scalar_one_or_none()
-            if kline_data:
-                size = abs(item["size"])  # 避免负数干扰计算
+                # 执行查询
+                result = await db.execute(select_k_time)
+                kline_data = result.scalar_one_or_none()
+                if kline_data:
+                    size = abs(item["size"])  # 避免负数干扰计算
 
-                item["price"] = kline_data.closed
-                if item["orderType"] == "sell":
-                    # 做空 PnL = (开仓价格−平仓价格（现价 K线M1的收盘价）)×交易手数×杠杆−隔夜利息
-                    item["pnl"] = round((item["openPrice"] - kline_data.closed) * (size * goods_.profitRatio), 3)
-                else:
-                    # 做多 PnL=(平仓价格（现价 K线M1的收盘价）− 开仓价格)×交易手数×杠杆−隔夜利息
-                    item["pnl"] = round((kline_data.closed - item["openPrice"]) * (size * goods_.profitRatio), 3)
+                    item["price"] = kline_data.closed
+                    if item["orderType"] == "sell":
+                        # 做空 PnL = (开仓价格−平仓价格（现价 K线M1的收盘价）)×交易手数×杠杆−隔夜利息
+                        item["pnl"] = round((item["openPrice"] - kline_data.closed) * (size * goods_.profitRatio), 3)
+                    else:
+                        # 做多 PnL=(平仓价格（现价 K线M1的收盘价）− 开仓价格)×交易手数×杠杆−隔夜利息
+                        item["pnl"] = round((kline_data.closed - item["openPrice"]) * (size * goods_.profitRatio), 3)
 
-                item["initialCash"] += item["pnl"]
+                    item["initialCash"] += item["pnl"]
 
-    return trader_result
+        return trader_result
+
+    except Exception as e:
+        info = traceback.format_exc()
+        log.error("adjust_unpaired_trades 函数异常 详细信息：{}".format(info))
+        await db.close()
+        return None
 
 
 async def task_run_backtest(db: AsyncSession, indicator_data_request, strategys, tester_uid, goods_data, task_name=None):
