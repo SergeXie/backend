@@ -247,7 +247,7 @@ async def get_market_news(
                     stmt = (
                         select(news_class)
                         .where(and_(*conditions, news_class.preds.in_([1, -1])))
-                        .order_by(news_class.pkId.desc()).offset(offset).limit(pageSize)
+                        .order_by(news_class.time.desc()).offset(offset).limit(pageSize)
                     )
 
                     count_stmt = select(func.count()).select_from(news_class).where(
@@ -257,7 +257,7 @@ async def get_market_news(
                     stmt = (
                         select(news_class)
                         .where(news_class.preds.in_([1, -1]))
-                        .order_by(news_class.pkId.desc()).offset(offset).limit(pageSize)
+                        .order_by(news_class.time.desc()).offset(offset).limit(pageSize)
                     )
 
                     count_stmt = select(func.count()).select_from(news_class).where(
@@ -291,7 +291,7 @@ async def get_market_news(
                 stmt = (
                     select(news_class)
                     .where(and_(news_class.pkId > lastId, news_class.preds.in_([1, -1])))
-                    .order_by(news_class.pkId.asc()).offset(offset).limit(pageSize)
+                    .order_by(news_class.time.desc()).offset(offset).limit(pageSize)
                 )
 
                 count_stmt = select(func.count()).select_from(news_class).where(
@@ -314,7 +314,7 @@ async def get_market_news(
                     select(market)
                     .where(*conditions) if conditions else select(market)
                 )
-                stmt = stmt.order_by(market.pkId.desc()).offset(offset).limit(pageSize)
+                stmt = stmt.order_by(market.time.desc()).offset(offset).limit(pageSize)
 
                 count_stmt = select(func.count()).select_from(market).where(*conditions)
 
@@ -340,11 +340,11 @@ async def get_market_news(
                     count_stmt = count_stmt.where(and_(*conditions))
 
             else:
-
+                # 翻译
                 stmt = (
                     select(market)
                     .where(market.pkId > lastId)
-                    .order_by(market.pkId.asc()).offset(offset).limit(pageSize)
+                    .order_by(market.time.desc()).offset(offset).limit(pageSize)
                 )
 
                 count_stmt = select(func.count()).select_from(market).where(market.pkId > lastId)
