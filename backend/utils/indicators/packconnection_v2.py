@@ -571,44 +571,44 @@ class ResponsePCDataV2(bt.Strategy):
                 "color": self.indicator_params.get("TrendPackconnectionColor", "#00FF00"),
                 "data": self.result_data
             },
-            # {
-            #     "type": "bmp",  # 表示破顶
-            #     "arrow": self.peakBmp,
-            #     "data": self.po_high
-            # },
-            # {
-            #     "type": "bmp",  # 表示破底
-            #     "arrow": self.bottolBmp,
-            #     "data": self.po_low
-            # },
-            # {
-            #     "type": "text",
-            #     "TextColor": self.indicator_params.get("TextColor", "#000000"),
-            #     "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFF000"),
-            #     "position": 'top',
-            #     "data": self.titlepeak[::-1]
-            # },
-            # {
-            #     "type": "text",
-            #     "TextColor": self.indicator_params.get("TextColor", "#000000"),
-            #     "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFF000"),
-            #     "position": 'bottom',
-            #     "data": self.titlebottol[::-1]
-            # },
-            # {
-            #     "type": "text",
-            #     "TextColor": self.indicator_params.get("TextColor", "#000000"),
-            #     "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFF000"),
-            #     "position": 'top',
-            #     "data": self.titlepeak_offset[::-1]
-            # },
-            # {
-            #     "type": "text",
-            #     "TextColor": self.indicator_params.get("TextColor", "#000000"),
-            #     "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFF000"),
-            #     "position": 'bottom',
-            #     "data": self.titlebottol_offset[::-1]
-            # },
+            {
+                "type": "bmp",  # 表示破顶
+                "arrow": self.peakBmp,
+                "data": self.po_high
+            },
+            {
+                "type": "bmp",  # 表示破底
+                "arrow": self.bottolBmp,
+                "data": self.po_low
+            },
+            {
+                "type": "text",
+                "TextColor": self.indicator_params.get("TextColor", "#000000"),
+                "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFF000"),
+                "position": 'top',
+                "data": self.titlepeak[::-1]
+            },
+            {
+                "type": "text",
+                "TextColor": self.indicator_params.get("TextColor", "#000000"),
+                "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFF000"),
+                "position": 'bottom',
+                "data": self.titlebottol[::-1]
+            },
+            {
+                "type": "text",
+                "TextColor": self.indicator_params.get("TextColor", "#000000"),
+                "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFF000"),
+                "position": 'top',
+                "data": self.titlepeak_offset[::-1]
+            },
+            {
+                "type": "text",
+                "TextColor": self.indicator_params.get("TextColor", "#000000"),
+                "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFF000"),
+                "position": 'bottom',
+                "data": self.titlebottol_offset[::-1]
+            },
         ]
 
         if len(self.notnallpoint) > 2:

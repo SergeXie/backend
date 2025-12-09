@@ -180,7 +180,7 @@ class ResponseWMpredictData(bt.Strategy):
                         "kLineId": w_point[2]['kLineId'],
                         "price": w_point[2]['price'],
                         "timestamp": w_point[2]['timestamp'],
-                        "value": '预测为W形态'
+                        "value": 'W形态'
                     })
                     for index, i in enumerate(p['probabilities']):
                         base_price = w_point[2]['hloc'][0]
@@ -229,7 +229,7 @@ class ResponseWMpredictData(bt.Strategy):
                         "kLineId": m_point[2]['kLineId'],
                         "price": m_point[2]['price'],
                         "timestamp": m_point[2]['timestamp'],
-                        "value": '预测为M形态'
+                        "value": 'M形态'
                     })
                     for index, i in enumerate(p['probabilities']):
                         base_price = m_point[2]['hloc'][1]
