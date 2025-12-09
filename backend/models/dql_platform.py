@@ -117,16 +117,17 @@ class DqlIndicators(Base):
     uid: Mapped[str] = mapped_column(String(64), nullable=False, comment='唯一标识符')
     name: Mapped[str] = mapped_column(String(32), nullable=False, comment='策略指标名称')
     className: Mapped[str] = mapped_column(String(32), nullable=False, comment='指标名称')
+    category: Mapped[str] = mapped_column(String(32), nullable=False, comment='指标类别')
     description: Mapped[str] = mapped_column(String(255), nullable=False, comment='指标备注')
     parameters: Mapped[str] = mapped_column(String(1024), nullable=False, comment='指标参数')
     type: Mapped[int] = mapped_column(Integer, nullable=False, comment='指标参数')
     subType: Mapped[int] = mapped_column(Integer, nullable=False, comment='副图参数')
     owner: Mapped[str] = mapped_column(String(64), nullable=False, comment='用户')
-    createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
-                                                 server_default='CURRENT_TIMESTAMP', comment='创建时间')
+    categoryWeight: Mapped[int] = mapped_column(Integer, nullable=False, comment='指标类别权重')
     pinyinname: Mapped[str] = mapped_column(String(255), nullable=False, comment='中文指标的拼音')
     weights: Mapped[int] = mapped_column(Integer, nullable=False, comment='指标权重')
-
+    createTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
+                                                 server_default='CURRENT_TIMESTAMP', comment='创建时间')
 
 class DqlStrategyIndicatorRel(Base):
     """
