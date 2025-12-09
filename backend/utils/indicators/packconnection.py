@@ -41,6 +41,7 @@ class IndicatorDataProcessor:
                 "timestamp": self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
                 "price": mountain_poit2,
                 "index": len(self.data),
+                "hloc": [self.data.high[0], self.data.low[1], self.data.open[0], self.data.close[0]],
             })
 
         mountain_poit3 = self.TI.lines.mountain_poit_original[0]
