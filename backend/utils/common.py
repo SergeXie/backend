@@ -432,6 +432,8 @@ async def get_entities_list(entity_type, pageNo=1, pageSize=100, orderBy=0, keyW
                             "isSupportBacktesting": data.isSupportBacktesting if entity_type.__tablename__ == "dql_strategy" else None,
                             "type": data.type,
                             "owner": data.owner,
+                            "categoryWeight": data.categoryWeight if entity_type.__tablename__ == "dql_indicators" else None,
+                            "category": data.category if entity_type.__tablename__ == "dql_indicators" else None,
                             "parameter": json.loads(data.parameters),
                             "createTime": data.createTime.strftime('%Y-%m-%d %H:%M:%S'),
                             } for data in result]
