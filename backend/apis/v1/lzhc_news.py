@@ -181,7 +181,6 @@ async def get_economic_news(
                 updateTime=row.updateTime,
                 isPeriodicStatistics=1 if row.pkId in has_stats_ids else 0,
                 tag=tagName,
-                # 新增三个返回字段
                 impactLevel=impactLevel,
                 description=description,
             )
