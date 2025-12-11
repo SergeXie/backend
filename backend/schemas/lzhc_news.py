@@ -15,13 +15,10 @@ class EconomicNewsResponse(BaseModel):
     createTime: Optional[datetime] = Field(None, description="创建时间")
     updateTime: Optional[datetime] = Field(None, description="更新时间")
     isPeriodicStatistics: Optional[int] = Field(0, description="是否存在周期统计，1=存在，0=不存在")
-
-    # 新增的三个字段
-    finalScore: Optional[float] = None  # 评分 Impact Level
-    scoreDescription: Optional[str] = None  # 方向一致性
-    evaluateStrengthText: Optional[str] = None  # 方向文字
-    direction: Optional[str] = None  # 方向
     tag: Optional[str] = None  # 标签
+    # 新增的二个字段
+    impactLevel: Optional[str] = None  # 强弱等级
+    description: Optional[str] = None  # 方向一致性
 
     class Config:
         orm_mode = True  # 允许 Pydantic 从 ORM 对象读取数据

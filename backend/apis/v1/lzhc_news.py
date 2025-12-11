@@ -141,26 +141,24 @@ async def get_economic_news(
         forecast = EconomicDataAnalyzer.safe_float(row.expectValue)  # 预期值
         actual = EconomicDataAnalyzer.safe_float(row.publishValue)  # 公布值
         print("prior:{} forecast:{} actual:{}".format(prior, forecast, actual))
-        final_score = None
+        impactLevel = None
         description = None
-        strength = None
-        direction = None
 
         # 针对统计表中的日历进行计算
         if row.pkId in has_stats_ids:
             if prior is not None and forecast is not None and actual is not None:
-
-                final_score, description, direction = EconomicDataAnalyzer.calculate_impact_score(
+                # 强弱等级
+                impactLevel = EconomicDataAnalyzer.calculate_impact_score(
                     prior, forecast, actual
                 )  # :contentReference[oaicite:1]{index=1}
 
-                strength = EconomicDataAnalyzer.evaluate_strength(
+                # 方向一致性
+                description = EconomicDataAnalyzer.evaluate_strength(
                     prior, forecast, actual
                 )  # :contentReference[oaicite:2]{index=2}
 
-                print("final_score:{}".format(final_score))
+                print("impactLevel:{}".format(impactLevel))
                 print("description:{}".format(description))
-                print("strength:{}".format(strength))
 
         # 如果经济日历ID，存在关联表中的newsIds，那么显示标签名
         if row.pkId in newsIds:
@@ -183,11 +181,8 @@ async def get_economic_news(
                 updateTime=row.updateTime,
                 isPeriodicStatistics=1 if row.pkId in has_stats_ids else 0,
                 tag=tagName,
-                # 新增三个返回字段
-                finalScore=final_score,
-                direction=direction,
-                scoreDescription=description,
-                evaluateStrengthText=strength,
+                impactLevel=impactLevel,
+                description=description,
             )
         )
 

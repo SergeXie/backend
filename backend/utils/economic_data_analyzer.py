@@ -68,32 +68,31 @@ class EconomicDataAnalyzer:
         # --- 3. 确定描述 (基于最终分数) ---
 
         if final_score >= 7.5:
-            description: ScoreDescription = '爆好 (Massive Beat) / 强多'
+            impactLevel: ScoreDescription = '爆好 (Massive Beat) / 强多'
             direction = "强于利空黄金"
             increase = "涨"
 
         elif final_score >= 2.5:
-            description = '强于预期 (Better than Expected) / 弱多'
+            impactLevel = '强于预期 (Better than Expected) / 弱多'
             direction = "利空黄金"
             increase = "涨"
 
         elif final_score <= -7.5:
-            description = '爆冷 (Massive Miss) / 强空'
+            impactLevel = '爆冷 (Massive Miss) / 强空'
             direction = "强于利多黄金"
             increase = "跌"
 
         elif final_score <= -2.5:
-            description = '差于预期 (Worse than Expected) / 弱空'
+            impact_level = '差于预期 (Worse than Expected) / 弱空'
             direction = "利多黄金"
             increase = "跌"
         else:
-            description = '持平 (In Line) / 中性'
+            impactLevel = '持平 (In Line) / 中性'
             direction = "低波动"
 
-        # description 方向一致性
-        # direction 方向
-        # final_score Impact Level
-        return final_score, description, direction
+        # impact_level = 强弱等级
+
+        return impactLevel
 
     @classmethod
     # 定义强弱等级
@@ -105,6 +104,7 @@ class EconomicDataAnalyzer:
             name: str = "指标"  # 可选：用于输出提示的指标名称
     ) -> StrengthRating:
         """
+        description 方向一致性
         返回方向一致性字段
         根据失业人数/失业率等“越低越好”的指标数据，评估市场强弱。
 
