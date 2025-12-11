@@ -76,6 +76,9 @@ class TradingFPG(BaseTrading):
     __tablename__ = 'dql_trading_fpg'
 
 
+class TradingFPGFx(BaseTrading):
+    __tablename__ = 'dql_trading_fpg_fx'
+
 class TradingFPG2(BaseTrading):
     __tablename__ = 'dql_trading_fpg_tests'
 
