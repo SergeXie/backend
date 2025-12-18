@@ -140,7 +140,6 @@ async def get_economic_news(
         prior = EconomicDataAnalyzer.safe_float(row.prevValue)  # 前值
         forecast = EconomicDataAnalyzer.safe_float(row.expectValue)  # 预期值
         actual = EconomicDataAnalyzer.safe_float(row.publishValue)  # 公布值
-        print("prior:{} forecast:{} actual:{}".format(prior, forecast, actual))
         impactLevel = None
         description = None
 
@@ -156,9 +155,6 @@ async def get_economic_news(
                 description = EconomicDataAnalyzer.evaluate_strength(
                     prior, forecast, actual
                 )  # :contentReference[oaicite:2]{index=2}
-
-                print("impactLevel:{}".format(impactLevel))
-                print("description:{}".format(description))
 
         # 如果经济日历ID，存在关联表中的newsIds，那么显示标签名
         if row.pkId in newsIds:
@@ -428,7 +424,6 @@ async def period_market_news(goods: str = Query(..., title="交易平台-交易�
         results_time = sorted(
             [datetime.strptime(r.time, '%Y-%m-%d %H:%M:%S') for r in results]
         )
-        print(results_time)
 
         idx = 0
         n = len(results_time)
