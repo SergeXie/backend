@@ -163,25 +163,6 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
         print("执行动态K0")
         # 当前时间（假设需要 +2 小时）
         now = datetime.datetime.utcnow() + datetime.timedelta(hours=2) # 冬令时 UTC+2 夏令时 UTC+3
-        # now = datetime.datetime.utcnow()
-        # select_model_class, result = await select_goods_common(db, goods, model_classes)
-        #
-        # if not select_model_class:
-        #     return await response_base.fail(msg="数据库表未找到！", data=[])
-        #
-        # stmt = (
-        #     select(select_model_class.tradeDateTime)
-        #     .where(
-        #         select_model_class.platform == result.platform,
-        #         select_model_class.tradingGoods == result.trading_goods,
-        #         select_model_class.type == "M1",
-        #     )
-        #     .order_by(select_model_class.tradeDateTime.desc())
-        #     .limit(1)
-        # )
-        #
-        # _last_k_time = (await db.execute(stmt)).scalar_one_or_none()
-        # print("_last_k_time:{}".format(_last_k_time))
 
         # 解析周期（以分钟为单位）
         period_map = {
@@ -225,9 +206,6 @@ async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易�
             # 其他周期处理
             start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
             end_time = start_time + datetime.timedelta(minutes=interval_minutes)
-            print("end_time")
-            print(start_time)
-            print(end_time)
 
         # 因M1数据没有更新到FPG-XAUUSD_合成，临时策略用FPG-XAUUSD,后续需要改
         if goods == "FPG-XAUUSD_合成":
