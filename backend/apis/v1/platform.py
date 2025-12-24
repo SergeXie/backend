@@ -156,7 +156,7 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
 async def get_dynamic_kline(
     goods: str = Query(..., title="交易平台-交易品种"),
     period: str = Query(..., title="周期"),
-    startTime: str = Query(..., title="起始时间")
+    startTime: str = Query(None, title="起始时间")
 ):
     async with async_db_session() as db:
 
