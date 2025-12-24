@@ -48,8 +48,7 @@ class DplGoodsTest(Base):
 
     contractSize: Mapped[int] = mapped_column(Integer, nullable=False, comment='合约大小')
     prepaymentPercentage: Mapped[float] = mapped_column(Integer, nullable=False, comment='预付款百分比')
-    creationTime: Mapped[datetime] = mapped_column(TIMESTAMP, nullable=False,
-                                                   server_default='CURRENT_TIMESTAMP', comment='创建时间')
+
 
 
 

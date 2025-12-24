@@ -1,4 +1,5 @@
 import calendar
+import datetime
 import json
 import multiprocessing
 import traceback
@@ -16,6 +17,7 @@ from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwd
     DqlStrategyIndicatorRel
 from schemas.base import ErrorModel
 from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData, DqlIndicatorsModel
+from services.dynamic_kline_service import DynamicKlineService
 from services.indicatory_service import get_indicator_data_async
 from utils.common import select_goods_common, RandomIDGenerator, select_kline_data, Trader, \
     GoodTrader, PandasData, cache, get_indicator_data, model_classes, \
@@ -151,189 +153,34 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
 
 
 @router.get("/dynamicKline", name="动态0号K线")
-async def get_dynamic_kline(goods: str = Query(..., title="交易平台-交易品种"),
-                            period: str = Query(..., title="周期")):
-    """
-    根据时间周期动态生成 K 线数据
-    :param goods:
-    :return:
-    """
+async def get_dynamic_kline(
+    goods: str = Query(..., title="交易平台-交易品种"),
+    period: str = Query(..., title="周期"),
+    startTime: str = Query(..., title="起始时间")
+):
     async with async_db_session() as db:
 
-        print("执行动态K0")
-        # 当前时间（假设需要 +2 小时）
-        now = datetime.datetime.utcnow() + datetime.timedelta(hours=2) # 冬令时 UTC+2 夏令时 UTC+3
+        now = datetime.datetime.utcnow() + datetime.timedelta(hours=2)
 
-        # 解析周期（以分钟为单位）
-        period_map = {
-            "M1": 1,
-            "M5": 5,
-            "M15": 15,
-            "M30": 30,
-            "H1": 60,
-            "H4": 240,
-            "D1": 1440,
-            "W1": 10080,
-            "MN": 43800
-        }
+        service = await DynamicKlineService.create(
+            db=db,
+            goods=goods,
+            model_classes=model_classes
+        )
 
-        # 动态计算时间范围
-        interval_minutes = period_map[period]
+        if not service:
+            return await response_base.fail(
+                msg="数据库表未找到！",
+                data=[]
+            )
 
-        if period == "W1":
-            # 获取上一周的时间范围
-            start_time = now - datetime.timedelta(days=now.weekday() + 1)  # 上一周的周日
-            start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)  # 设置为当天零点
-            end_time = start_time + datetime.timedelta(days=7)  # 上一周的周末
+        data = await service.get_dynamic_kline(
+            period=period,
+            start_time_str=startTime,
+            now=now
+        )
 
-        elif period == "D1":
-            # D1 周期，调整到当天的 00:00:00
-            start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_time = start_time + datetime.timedelta(days=1)  # 次日 00:00:00
-
-        elif period == "MN":
-            # 本月的月初和月底
-            start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)  # 月初
-            _, last_day = calendar.monthrange(now.year, now.month)  # 获取本月最后一天
-            end_time = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)  # 月底
-
-        elif period == "H4":
-            now = datetime.datetime.utcnow()
-            # H4处理
-            start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
-            end_time = start_time + datetime.timedelta(minutes=interval_minutes)
-        else:
-            # 其他周期处理
-            start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
-            end_time = start_time + datetime.timedelta(minutes=interval_minutes)
-
-        # 因M1数据没有更新到FPG-XAUUSD_合成，临时策略用FPG-XAUUSD,后续需要改
-        if goods == "FPG-XAUUSD_合成":
-            goods = "FPG-XAUUSD"
-
-        select_model_class, result = await select_goods_common(db, goods, model_classes)
-
-        if not select_model_class:
-            return await response_base.fail(msg="数据库表未找到！", data=[])
-
-        # 根据 lineId 查询出当前的时间
-        select_k_time = select(select_model_class).where(
-            select_model_class.platform == result.platform,
-            select_model_class.tradingGoods == result.trading_goods,
-            select_model_class.type == "M1",
-            select_model_class.tradeDateTime >= start_time,
-            select_model_class.tradeDateTime < end_time
-        ).order_by(select_model_class.tradeDateTime)
-
-        # 执行查询
-        detail = await db.execute(select_k_time)
-        kline_datas = detail.scalars().all()
-
-        if kline_datas:
-            is_final = False
-            # 将数据转换为 DataFrame
-            df = pd.DataFrame([{
-                "pkId": x.pkId,
-                "tradeDateTime": x.tradeDateTime.strftime("%Y-%m-%d %H:%M:%S"),
-                "unxTimestamp": x.tradeDateTime.timestamp(),
-                "swapLong": x.swapLong,
-                "swapShort": x.swapShort,
-                "opening": float(x.opening),
-                "digits": x.digits,
-                "spread": int(x.spread),
-                "high": float(x.high),
-                "low": float(x.low),
-                "closed": float(x.closed),
-                "vol": x.vol
-            } for x in kline_datas])
-
-            df['tradeDateTime'] = pd.to_datetime(df['tradeDateTime'])
-            df = df.set_index('tradeDateTime')
-
-            # 定义不同周期的类型名称映射
-            type_dict = {
-                'M5': '5min',  # 替换为小写 'min'
-                'M15': '15min',
-                'M30': '30min',
-                'H1': '1h',  # 替换为小写 'h'
-                'H4': '4h',
-                'D1': '1d',  # 替换为小写 'd'
-                'W1': 'W',  # 替换为小写 'w'
-                'MN': 'ME'  # 替换为小写 'm'
-            }
-
-            interval = type_dict[period]
-            # Pandas 聚合
-            # 对高、低、成交量和spread进行常规的聚合处理
-            resampled_df = df.resample(interval).agg({
-                'high': 'max',  # 获取该周期的最高价
-                'low': 'min',  # 获取该周期的最低价
-                'vol': 'sum',  # 获取该周期的成交量总和
-                'spread': 'last',  # 获取该周期的最后一个spread值
-                'pkId': 'last',  # 取最后一个 pkId
-                'swapLong': 'mean',  # 取周期内 swapLong 的平均值
-                'swapShort': 'mean',  # 取周期内 swapShort 的平均值
-            }).reset_index()
-
-            # 单独处理开盘价和收盘价：获取该周期的第一根K线的开盘价和最后一根K线的收盘价
-            resampled_df['opening'] = df['opening'].resample(interval).first().values  # 第一根K线的开盘价
-            resampled_df['closed'] = df['closed'].resample(interval).last().values  # 最后一根K线的收盘价
-
-            # 转换为字典
-            if not resampled_df.empty:
-                row = resampled_df.iloc[0]
-                # 转换为 Python 基础类型
-                lineData = {
-                    "pkId": int(row["pkId"]),
-                    "timestamp": start_time.strftime('%Y-%m-%d %H:%M:%S'),
-                    "unxTimestamp": int(start_time.timestamp()),
-                    "open": float(row["opening"]),
-                    "high": float(row["high"]),
-                    "low": float(row["low"]),
-                    "close": float(row["closed"]),
-                    "vol": int(row["vol"]),
-                    "spread": float(row["spread"]),
-                    "swapLong": float(row["swapLong"]),  # 添加 swapLong
-                    "swapShort": float(row["swapShort"])  # 添加 swapShort
-                }
-        else:
-            is_final = True
-            new_start_time = start_time - datetime.timedelta(minutes=interval_minutes)
-            print("new_start_time:{}".format(new_start_time))
-            print("start_time:{}".format(start_time))
-            print("period:{}".format(period))
-            select_k_time = select(select_model_class).where(
-                select_model_class.platform == result.platform,
-                select_model_class.tradingGoods == result.trading_goods,
-                select_model_class.type == period,
-                select_model_class.tradeDateTime >= new_start_time,
-                select_model_class.tradeDateTime < start_time
-            ).order_by(select_model_class.tradeDateTime.desc()).limit(1)
-            # 再次执行查询
-            detail = await db.execute(select_k_time)
-            latest_data = detail.scalars().first()
-            if latest_data:
-                lineData = {
-                    "pkId": latest_data.pkId,
-                    "timestamp": latest_data.tradeDateTime.strftime('%Y-%m-%d %H:%M:%S'),
-                    "unxTimestamp": latest_data.tradeDateTime.timestamp(),
-                    "open": latest_data.opening,
-                    "high": latest_data.high,
-                    "low": latest_data.low,
-                    "close": latest_data.closed,
-                    "vol": latest_data.vol,
-                    "spread": latest_data.spread,
-                    "swapLong": latest_data.swapLong,  # 添加 swapLong
-                    "swapShort": latest_data.swapShort  # 添加 swapShort
-                }
-            else:
-                lineData = None
-
-        print("lineData")
-        print(lineData)
-
-        return await response_base.success(data={"goods": goods, "period": period, "utc": result.utc, "is_final": is_final,
-                                                 "lineData": lineData})
+        return await response_base.success(data=data)
 
 
 @router.get("/selectFrontKline", name="获取K线历史数据")
