@@ -221,11 +221,15 @@ class DynamicKlineService:
             lineData = self.build_kline_dict(prev[0]) if prev else None
 
         # ---------- 历史K ----------
-        start_dt = datetime.datetime.strptime(
-            start_time_str, "%Y-%m-%d %H:%M:%S"
-        )
+        if start_time_str:
 
-        history = await self.query_kline(period, start_dt)
+            start_dt = datetime.datetime.strptime(
+                start_time_str, "%Y-%m-%d %H:%M:%S"
+            )
+
+            history = await self.query_kline(period, start_dt)
+        else:
+            history = []
 
         return {
             "goods": self.goods,
