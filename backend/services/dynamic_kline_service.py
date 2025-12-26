@@ -195,6 +195,7 @@ class DynamicKlineService:
         is_final = not bool(m1_rows)
 
         if m1_rows:
+            print("111")
             df = pd.DataFrame([{
                 "tradeDateTime": x.tradeDateTime,
                 "opening": float(x.opening),
@@ -203,7 +204,7 @@ class DynamicKlineService:
                 "closed": float(x.closed),
                 "vol": x.vol,
                 "spread": x.spread,
-                "pkId": x.pkId,
+                "pkId": 0,
                 "swapLong": x.swapLong,
                 "swapShort": x.swapShort,
             } for x in m1_rows]).set_index("tradeDateTime")
@@ -211,6 +212,7 @@ class DynamicKlineService:
             lineData = self.build_dynamic_bar(df, period, start_time)
 
         else:
+            print("222")
             prev = await self.query_kline(
                 period,
                 start_time - datetime.timedelta(minutes=minutes),
