@@ -384,23 +384,40 @@ async def get_market_news(
 async def period_market_news(goods: str = Query(..., title="交易平台-交易品种"),
                              period: str = Query(..., title="周期"),
                              beginTime: str = Query(..., title="开始时间"),
-                             endTime: str = Query(..., title="结束时间"),):
+                             endTime: str = Query(..., title="结束时间"),
+                             isPredict: Optional[int] = Query(0,description="是否经过预测过的快讯，0=全部快讯，1=预测快讯"),
+                             ):
 
     async with async_db_session() as db:
 
-        stmt = (
-            select(DqlJinshiMarketNews)
-            .where(
-                and_(
-                    DqlJinshiMarketNews.time >= beginTime,
-                    DqlJinshiMarketNews.time < endTime
+        if isPredict:
+            stmt = (
+                select(DqlJinshiNewsClass)
+                .where(
+                    and_(
+                        DqlJinshiNewsClass.time >= beginTime,
+                        DqlJinshiNewsClass.time < endTime,
+                        DqlJinshiNewsClass.preds.in_([1, -1])
+                    )
                 )
+                .order_by(DqlJinshiNewsClass.time.desc())
             )
-            .order_by(DqlJinshiMarketNews.time.asc())
-        )
+
+        else:
+            stmt = (
+                select(DqlJinshiMarketNews)
+                .where(
+                    and_(
+                        DqlJinshiMarketNews.time >= beginTime,
+                        DqlJinshiMarketNews.time < endTime
+                    )
+                )
+                .order_by(DqlJinshiMarketNews.time.desc())
+            )
 
         result = await db.execute(stmt)
         rows = result.scalars().all()
+
 
         # 返回Vo对象，响应时会自动解析json
         results = [
@@ -449,18 +466,23 @@ async def period_market_news(goods: str = Query(..., title="交易平台-交易�
 
             start_time = time2
 
-        return await response_base.success(data=time_list)
+        return {"code": 200,"message": "Success", "data": time_list, "isPredict": isPredict}
+
+        # return await response_base.success(data=time_list)
 
 
 @router.get("/marketNewsByPeriod", name="特定时间段快讯")
 async def get_market_news_by_period(
     goods: str = Query(..., title="交易平台-交易品种"),
     beginTime: str = Query(..., description="开始时间，例如 2025-09-11 12:00:00"),
-    period: str = Query("M5", description="周期，例如 M5 / M15 / H1")
+    period: str = Query("M5", description="周期，例如 M5 / M15 / H1"),
+    isPredict: Optional[int] = Query(0, description="是否经过预测过的快讯，0=全部快讯，1=预测快讯"),
+
 ):
     start_time = datetime.strptime(beginTime, '%Y-%m-%d %H:%M:%S')
 
     async with async_db_session() as db:
+
         period = PeriodEnum.parse_string(period)
         if period:
             # 加周期
@@ -471,19 +493,42 @@ async def get_market_news_by_period(
 
         end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
 
-        stmt = (
-            select(DqlJinshiMarketNews)
-            .where(
-                and_(
-                    DqlJinshiMarketNews.time >= beginTime,
-                    DqlJinshiMarketNews.time < end_time_str
+        if isPredict:
+            stmt = (
+                select(DqlJinshiNewsClass)
+                .where(
+                    and_(
+                        DqlJinshiNewsClass.time >= beginTime,
+                        DqlJinshiNewsClass.time < end_time_str,
+                        DqlJinshiNewsClass.preds.in_([1, -1])
+                    )
                 )
+                .order_by(DqlJinshiNewsClass.time.desc())
             )
-            .order_by(DqlJinshiMarketNews.time.asc())
-        )
+        else:
+
+            stmt = (
+                select(DqlJinshiMarketNews)
+                .where(
+                    and_(
+                        DqlJinshiMarketNews.time >= beginTime,
+                        DqlJinshiMarketNews.time < end_time_str
+                    )
+                )
+                .order_by(DqlJinshiMarketNews.time.asc())
+            )
 
         result = await db.execute(stmt)
         rows = result.scalars().all()
+
+        # 提取快讯ID
+        market_ids = [row.pkId for row in rows]
+
+        # ===== 3 查询预测表 =====
+        stmt2 = select(DqlJinshiNewsClass.newsId, DqlJinshiNewsClass.preds
+                       ).where(DqlJinshiNewsClass.newsId.in_(market_ids))
+        result2 = await db.execute(stmt2)
+        preds_map = {r.newsId: r.preds for r in result2.all()}
 
         # 返回Vo对象，响应时会自动解析json
         result = [
@@ -493,6 +538,7 @@ async def get_market_news_by_period(
                 content=row.content,
                 createTime=row.createTime,
                 updateTime=row.updateTime,
+                preds=row.preds if isPredict else preds_map.get(row.pkId, 0)  # 默认0表示未预测
             )
             for row in rows
         ]
