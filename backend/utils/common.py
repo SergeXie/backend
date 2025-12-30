@@ -42,6 +42,7 @@ from utils.indicators.wm_predict_bymodel import ResWMpredictByModelData
 from utils.indicators.wm_predict_bymath import ResWMpredictByMathData
 from utils.indicators.wm_picture import ResponseWMPicyureData
 from utils.indicators.packconnection_v2 import ResponsePCDataV2
+from utils.indicators.packconnection import ResponsePCData
 from pypinyin import lazy_pinyin, Style
 from typing import List, Dict, Any
 from utils.strategys import reload_strategies
@@ -96,6 +97,7 @@ indicator_classes = {
     "WMpredictByModel": ResWMpredictByModelData,
     "WMPicture":ResponseWMPicyureData,
     "WMM30": ResponseWMM30Data,
+    "PeakConnection": ResponsePCData,
 }
 
 

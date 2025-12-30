@@ -405,3 +405,5 @@ class ResponsePCData(bt.Strategy):
         return analyzer.get_analysis()
 
         # return [self.result_data_dict["lines"], None, None]
+
+
