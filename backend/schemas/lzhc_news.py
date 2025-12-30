@@ -37,7 +37,7 @@ class MarketNewsResponse(BaseModel):
     content: str
     createTime: Optional[datetime] = None
     updateTime: Optional[datetime] = None
-    preds: Optional[int] = 0
+    preds: Optional[int] = Field(0, description="1为利多黄金，-1为利空黄金 0为已处理")
 
     class Config:
         orm_mode = True
