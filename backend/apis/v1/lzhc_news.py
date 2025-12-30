@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Query
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, or_
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
 from models.news_models import DqlJinshiEconomicNews, DqlJinshiMarketNews, DqlJinshiHoliday, DqlJinshiEvent, \
@@ -207,6 +207,8 @@ async def get_market_news(
     - 每条快讯包含 preds（利多/利空标识）
 
     """
+
+
     async with async_db_session() as db:
         # ===== 1️ 查询快讯主表 =====
         market = DqlJinshiMarketNews
@@ -218,9 +220,13 @@ async def get_market_news(
         # ===== 1️ 构建基础查询条件 =====
         conditions = []
         if keyword:
-            # 模糊匹配 content（可加更多字段）
-            conditions.append(model.content.like(f"%{keyword}%"))
-
+            keyword_list = [k.strip() for k in keyword.split(" ") if k.strip()]
+            conditions.append(
+                or_(*[
+                    model.content.like(f"%{k}%")
+                    for k in keyword_list
+                ])
+            )
         if startTime and endTime:
             conditions.append(
                 and_(
