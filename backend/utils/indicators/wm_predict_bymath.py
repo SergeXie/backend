@@ -2,22 +2,20 @@ import pickle
 import backtrader as bt
 import numpy as np
 import pandas as pd
-from utils.module.zigzag_calculator import ZigZagCalculator
+from utils.module.zigzag_calculator_byclass import ZigZagCalculator
 from utils.module.dll import train_two_classifiers, predict_binary
 from utils.module.dtw import calc_dtw_distance
-from utils.module.wm_pattern_recognizer import WMPatternRecognizer
+from utils.module.wm_pattern_recognizer import WMPatternRecognizer2
 import warnings
+from datetime import datetime
 from sklearn.exceptions import UndefinedMetricWarning
+from utils.module.wm_pattern import run_strategy
 
 # 过滤特定警告
 warnings.filterwarnings('ignore', category=UndefinedMetricWarning)
 
 
 class ResWMpredictByMathData(bt.Strategy):
-    # 定义参数
-    params = (
-        ('inp_depth', 12),
-    )
 
     def __init__(self, indicator_params, indicator_name, comments):
         self.indicator_params = indicator_params
@@ -26,25 +24,38 @@ class ResWMpredictByMathData(bt.Strategy):
         self.result_data_dict = dict()
         self.Id_TS_dict = {}
         self.Ts_to_hloc = {}
+        self.inp_depth = 12
 
         self.BarState = []
         self.BarStateText = []
+        self.verticalBrokenline = []
         self.W_sum = 0
         self.M_sum = 0
         self.all_kline_data = []
 
         # 实例化独立的算法类
-        self.zigzag_calculator = ZigZagCalculator(inp_depth=self.p.inp_depth)
-        self.pattern_recognizer = WMPatternRecognizer()
+        self.zigzag_calculator = ZigZagCalculator(inp_depth=self.inp_depth)
+        self.pattern_recognizer = WMPatternRecognizer2()
+
+        goods = self.indicator_params.get('Kline_goods')
+        periods = self.indicator_params.get('Kline_period')
+        endTime = self.indicator_params.get('end_time')
+        beginTime = '2020-01-01 00:00:00'
+        self.all_wm_pattern = run_strategy(goods, periods, endTime, beginTime)
+        from apis.v1.platform import select_multiple_goods_k_lines
+        # res = await select_multiple_goods_k_lines(goods, periods, beginTime, endTime)
+        # print('全部参数', self.all_wm_pattern[-1])
+        # print(res.data)
+
 
         # 确保数据长度足够时再开始计算
-        self.addminperiod(self.p.inp_depth)
+        self.addminperiod(self.inp_depth)
 
     def next(self):
         self.Id_TS_dict[int(self.data.klineId[0])] = self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')
 
         # 确保数据长度足够
-        if len(self) < self.p.inp_depth:
+        if len(self) < self.inp_depth:
             return
 
         # 准备当前K线数据，传递给ZigZagCalculator
@@ -71,8 +82,8 @@ class ResWMpredictByMathData(bt.Strategy):
 
     def stop(self):
         digit = int(self.datas[0].digits[0])
-        zigzag_points = self.zigzag_calculator.get_zigzag_points()
-        # print(zigzag_points)
+        zigzag_points = self.zigzag_calculator.get_zigzag_points(as_dict=False)
+        print('看中了',zigzag_points)
 
         zigzag_list = []
         for zig in zigzag_points:
@@ -115,115 +126,202 @@ class ResWMpredictByMathData(bt.Strategy):
         # with open('./dataset/all_wm_pattern_kline.pkl', 'wb') as file:
         #     pickle.dump(all, file)
         # ________________保存全部的wm形态_____________________________#
-        with open('./dataset/all_wm_pattern_kline.pkl', 'rb') as file:
-            all_wm_pattern = pickle.load(file)
-        for i in all_wm_pattern:
-            if "W" in i['pattern_type']:
-                self.W_sum += 1
-            if "M" in i['pattern_type']:
-                self.M_sum += 1
+        # with open('./dataset/all_wm_pattern_kline.pkl', 'rb') as file:
+        #     all_wm_pattern = pickle.load(file)
+        # for i in all_wm_pattern:
+        #     if "W" in i['pattern_type']:
+        #         self.W_sum += 1
+        #     if "M" in i['pattern_type']:
+        #         self.M_sum += 1
 
 
-        print(len(all_wm_pattern))
-        print(all_wm_pattern[-1])
+        # print(len(all_wm_pattern))
+        # print(all_wm_pattern[-5:])
 
 
         #_______________计算相似度____________________
-        all_wm_pattern_kline = [klines_to_dataframe(merge_klines(i['target_klines'])) for i in all_wm_pattern]
-        # all_wm_pattern_kline = all_wm_pattern_kline[:50]
-        print('计算中')
-        # -----------获取最后一个可能的m，用于计算概率----------------
-
-        maybe_m = self.pattern_recognizer.get_maybe_m_patterns()[-1]
-        last_m_start = maybe_m['start']
-        last_m_end = maybe_m['end']
-        last_m_kline = get_klines_in_range(self.all_kline_data, last_m_start, last_m_end)
-        last_m_kline_df = klines_to_dataframe(merge_klines(last_m_kline))
-        # print(last_m_kline_df)
-        # print(calc_dtw_distance(last_m_kline_df, last_m_kline_df))
-        distance = [calc_dtw_distance(last_m_kline_df, i) for i in all_wm_pattern_kline]
-        weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
-        m_zigzag_points = [i['points'] for i in all_wm_pattern if "M" in i['pattern_type']]
-        weight = [weight[index] for index, i in enumerate(all_wm_pattern) if "M" in i['pattern_type']]
-
-        p = probability(m_zigzag_points, datafrom='m',weight=weight)
-        print("m概率:", p)
+        time_format = "%Y-%m-%d %H:%M:%S"  # 定义时间类型
 
 
-        price_diff = self.Ts_to_hloc.get(maybe_m['start_third'])[1] - self.Ts_to_hloc.get(maybe_m['start_four'])[0]  # 高点到低点的价差
-        klineId = maybe_m['kLineId_3']
-        for index, i in enumerate(p['probabilities']):
-            base_price = self.Ts_to_hloc.get(maybe_m['start_third'])[1]
-            price = base_price + price_diff * index
-            price = np.round(price, digit)
-            # print(i)
-            i = np.round(i*100, 2)
-            # print('来了', price,self.Id_TS_dict.get(klineId))
-            # print(index)
-            self.BarStateText.append({
-                "kLineId": klineId,
-                "price": price,
-                "timestamp": self.Id_TS_dict.get(klineId),
-                "value": f"{np.round(price, 2)}: " + str(i) + '%'
-            })
-            self.BarState.append([
+        all_wm_pattern_kline = []
+        time_list = []
+        for i in self.all_wm_pattern:
+            all_wm_pattern_kline.append(klines_to_dataframe(merge_klines(i.target_klines)))
+            datetime_list = datetime.strptime(i.start_timestamp, time_format)
+            time_list.append(datetime_list)
+
+        show_pattern = self.indicator_params.get("show_mabye_pattern")
+
+        if show_pattern == 1:  # 可能形态
+            # -----------获取最后一个可能的m，用于计算概率----------------
+            for maybe_m in self.pattern_recognizer.get_maybe_m_patterns():
+                # maybe_m = self.pattern_recognizer.get_maybe_m_patterns()[1]
+                last_m_start = maybe_m.start
+                base_time = datetime.strptime(last_m_start, time_format)
+                early_indices = [idx for idx, t in enumerate(time_list) if t < base_time]
+                # print(early_indices)
+                early_times = self.all_wm_pattern[:early_indices[-1]]
+                # print("对应早于基准时间的元素：", early_times)
+
+                last_m_end = maybe_m.end
+                last_m_kline = get_klines_in_range(self.all_kline_data, last_m_start, last_m_end)
+                last_m_kline_df = klines_to_dataframe(merge_klines(last_m_kline))
+                # print(last_m_kline_df)
+                # print(all_wm_pattern_kline[-1])
+                # print(calc_dtw_distance(last_m_kline_df, last_m_kline_df))
+                distance = [calc_dtw_distance(last_m_kline_df, i) for i in all_wm_pattern_kline]
+                weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
+                m_zigzag_points = [i.points for i in early_times if "M" in i.value]
+                weight = [weight[index] for index, i in enumerate(early_times) if "M" in i.value]
+
+                p = probability(m_zigzag_points, datafrom='m',weight=weight)
+                print("m概率:", p)
+
+                price_diff = self.Ts_to_hloc.get(maybe_m.start_third)[1] - self.Ts_to_hloc.get(maybe_m.start_four)[0]  # 高点到低点的价差
+                klineId = maybe_m.four_kLineId
+                for index, i in enumerate(p['probabilities']):
+                    base_price = self.Ts_to_hloc.get(maybe_m.start_third)[1]
+                    price = base_price + price_diff * index
+                    price = np.round(price, digit)
+                    # print(i)
+                    i = np.round(i*100, 2)
+                    # print('来了', price,self.Id_TS_dict.get(klineId))
+                    # print(index)
+                    self.BarStateText.append({
+                        "kLineId": klineId,
+                        "price": price,
+                        "timestamp": self.Id_TS_dict.get(klineId),
+                        "value": f"{np.round(price, 2)}: " + str(i) + '%'
+                    })
+                self.verticalBrokenline.append(
+                    {
+                        "kLineId": klineId,
+                        "price": price,
+                        "price2": [base_price-price_diff, base_price + price_diff * 2],
+                        "timestamp": self.Id_TS_dict.get(klineId),
+                    })
+
+
+            # -----------获取最后一个可能的w，用于计算概率----------------
+            for maybe_w in self.pattern_recognizer.get_maybe_w_patterns():
+                # maybe_w = self.pattern_recognizer.get_maybe_w_patterns()[-1]
+                last_w_start = maybe_w.start
+                base_time = datetime.strptime(last_w_start, time_format)
+                early_indices = [idx for idx, t in enumerate(time_list) if t < base_time]
+                early_times = self.all_wm_pattern[:early_indices[-1]]
+
+                last_w_end = maybe_w.end
+                last_w_kline = get_klines_in_range(self.all_kline_data, last_w_start, last_w_end)
+                last_w_kline_df = klines_to_dataframe(merge_klines(last_w_kline))
+
+                distance = [calc_dtw_distance(last_w_kline_df, i) for i in all_wm_pattern_kline]
+                weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
+                w_zigzag_points = [i.points for i in early_times if "W" in i.value]
+                weight = [weight[index] for index, i in enumerate(early_times) if "W" in i.value]
+
+                p = probability(w_zigzag_points, datafrom='w',weight=weight)
+                print("w概率:", p)
+
+                price_diff = self.Ts_to_hloc.get(maybe_w.start_third)[0] - self.Ts_to_hloc.get(maybe_w.start_four)[1]  # 高点到低点的价差
+                klineId = maybe_w.four_kLineId
+                for index, i in enumerate(p['probabilities']):
+                    base_price = self.Ts_to_hloc.get(maybe_w.start_third)[0]
+                    price = base_price + price_diff * index
+                    price = np.round(price, digit)
+                    # print(i)
+                    i = np.round(i*100, 2)
+                    # print('来了', price,self.Id_TS_dict.get(klineId))
+                    # print(index)
+                    self.BarStateText.append({
+                        "kLineId": klineId,
+                        "price": price,
+                        "timestamp": self.Id_TS_dict.get(klineId),
+                        "value": f"{np.round(price, 2)}: " + str(i) + '%'
+                    })
+                self.verticalBrokenline.append(
+                    {
+                        "kLineId": klineId,
+                        "price": price,
+                        "price2": [base_price-price_diff, base_price + price_diff * 2],
+                        "timestamp": self.Id_TS_dict.get(klineId),
+                    })
+
+
+        elif show_pattern == 0:  # 确认形态
+            for standard_m in self.pattern_recognizer.get_standard_m_patterns():
+                last_m_start = standard_m.start
+                base_time = datetime.strptime(last_m_start, time_format)
+                early_indices = [idx for idx, t in enumerate(time_list) if t < base_time]
+                early_times = self.all_wm_pattern[:early_indices[-1]]
+                last_m_end = standard_m.end
+                last_m_kline = get_klines_in_range(self.all_kline_data, last_m_start, last_m_end)
+                last_m_kline_df = klines_to_dataframe(merge_klines(last_m_kline))
+                distance = [calc_dtw_distance(last_m_kline_df, i) for i in all_wm_pattern_kline]
+                weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
+                m_zigzag_points = [i.points for i in early_times if "M" in i.value]
+                weight = [weight[index] for index, i in enumerate(early_times) if "M" in i.value]
+                p = probability(m_zigzag_points, datafrom='m',weight=weight)
+                print("m概率:", p)
+                price_diff = self.Ts_to_hloc.get(standard_m.start_third)[1] - self.Ts_to_hloc.get(standard_m.start_four)[0]  # 高点到低点的价差
+                klineId = standard_m.end_kLineId
+                for index, i in enumerate(p['probabilities'][-2:]):
+                    base_price = standard_m.end_price + price_diff
+                    price = base_price + price_diff * index
+                    price = np.round(price, digit)
+                    # print(i)
+                    i = np.round(i*100, 2)
+                    # print('来了', price,self.Id_TS_dict.get(klineId))
+                    # print(index)
+                    self.BarStateText.append({
+                        "kLineId": klineId,
+                        "price": price,
+                        "timestamp": self.Id_TS_dict.get(klineId),
+                        "value": f"{np.round(price, 2)}: " + str(i) + '%'
+                    })
+                self.verticalBrokenline.append(
+                    {
+                        "kLineId": klineId,
+                        "price": price,
+                        "price2": [standard_m.end_price, standard_m.end_price + price_diff * 2],
+                        "timestamp": self.Id_TS_dict.get(klineId),
+                    })
+
+            for standard_w in self.pattern_recognizer.get_standard_w_patterns():
+                last_w_start = standard_w.start
+                base_time = datetime.strptime(last_w_start, time_format)
+                early_indices = [idx for idx, t in enumerate(time_list) if t < base_time]
+                early_times = self.all_wm_pattern[:early_indices[-1]]
+                last_w_end = standard_w.end
+                last_w_kline = get_klines_in_range(self.all_kline_data, last_w_start, last_w_end)
+                last_w_kline_df = klines_to_dataframe(merge_klines(last_w_kline))
+                distance = [calc_dtw_distance(last_w_kline_df, i) for i in all_wm_pattern_kline]
+                weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
+                w_zigzag_points = [i.points for i in early_times if "W" in i.value]
+                weight = [weight[index] for index, i in enumerate(early_times) if "W" in i.value]
+                p = probability(w_zigzag_points, datafrom='w',weight=weight)
+                print("w概率:", p)
+                price_diff = self.Ts_to_hloc.get(standard_w.start_third)[0] - self.Ts_to_hloc.get(standard_w.start_four)[1]  # 高点到低点的价差
+                klineId = standard_w.end_kLineId
+                for index, i in enumerate(p['probabilities'][-2:]):
+                    base_price = standard_w.end_price + price_diff
+                    price = base_price + price_diff * index
+                    price = np.round(price, digit)
+                    i = np.round(i*100, 2)
+                    self.BarStateText.append({
+                        "kLineId": klineId,
+                        "price": price,
+                        "timestamp": self.Id_TS_dict.get(klineId),
+                        "value": f"{np.round(price, 2)}: " + str(i) + '%'
+                    })
+                self.verticalBrokenline.append(
                 {
-                    "kLineId": int(klineId),
+                    "kLineId": klineId,
                     "price": price,
-                },
-                {
-                    "kLineId": int(klineId),
-                    "price": price,
-                }
-            ])
-        # -----------获取最后一个可能的w，用于计算概率----------------
-        maybe_w = self.pattern_recognizer.get_maybe_w_patterns()[-1]
-        last_w_start = maybe_w['start']
-        last_w_end = maybe_w['end']
-        last_w_kline = get_klines_in_range(self.all_kline_data, last_w_start, last_w_end)
-        last_w_kline_df = klines_to_dataframe(merge_klines(last_w_kline))
-
-        distance = [calc_dtw_distance(last_w_kline_df, i) for i in all_wm_pattern_kline]
-        weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
-        w_zigzag_points = [i['points'] for i in all_wm_pattern if "W" in i['pattern_type']]
-        weight = [weight[index] for index, i in enumerate(all_wm_pattern) if "W" in i['pattern_type']]
-
-        p = probability(w_zigzag_points, datafrom='w',weight=weight)
-        print("w概率:", p)
+                    "price2": [standard_w.end_price, standard_w.end_price + price_diff * 2],
+                    "timestamp": self.Id_TS_dict.get(klineId),
+                })
 
 
-        price_diff = self.Ts_to_hloc.get(maybe_w['start_third'])[0] - self.Ts_to_hloc.get(maybe_w['start_four'])[1]  # 高点到低点的价差
-        klineId = maybe_w['kLineId_3']
-        for index, i in enumerate(p['probabilities']):
-            base_price = self.Ts_to_hloc.get(maybe_w['start_third'])[0]
-            price = base_price + price_diff * index
-            price = np.round(price, digit)
-            # print(i)
-            i = np.round(i*100, 2)
-            # print('来了', price,self.Id_TS_dict.get(klineId))
-            # print(index)
-            self.BarStateText.append({
-                "kLineId": klineId,
-                "price": price,
-                "timestamp": self.Id_TS_dict.get(klineId),
-                "value": f"{np.round(price, 2)}: " + str(i) + '%'
-            })
-            self.BarState.append([
-                {
-                    "kLineId": int(klineId),
-                    "price": price,
-                },
-                {
-                    "kLineId": int(klineId),
-                    "price": price,
-                }
-            ])
-
-
-
-        # print(calculate_dtw_distance_matrix(all_wm_pattern_kline, calc_dtw_distance))
-        # print('123123')
-        # print(zigzag_points[-4:])
 
 
 
@@ -262,6 +360,12 @@ class ResWMpredictByMathData(bt.Strategy):
             "color": self.indicator_params.get("DnColor", "#FF0000"),
             "data": f"W形态个数: {self.W_sum}, M形态个数: {self.M_sum},"
         })
+        for i in self.verticalBrokenline:
+            self.result_data_dict["lines"].append({
+                "type": "verticalBrokenline",
+                "color": self.indicator_params.get("DnColor", "#FF0000"),
+                "data": [i]
+            })
         return [self.result_data_dict["lines"], None, None]
 
 # 权重映射到1~10
@@ -457,9 +561,9 @@ def probability(zigzag_points, datafrom='m', weight=None):
         fou = i[3]['kline_data']
         fif = i[4]['kline_data']
         if datafrom == 'm':
-            p = (fif['hloc'][1] - thi['hloc'][1]) / (thi['hloc'][1] - fou['hloc'][0])
+            p = (fif.hloc[1] - thi.hloc[1]) / (thi.hloc[1] - fou.hloc[0])
         elif datafrom == 'w':
-            p = (fif['hloc'][0] - thi['hloc'][0]) / (thi['hloc'][0] - fou['hloc'][1])
+            p = (fif.hloc[0] - thi.hloc[0]) / (thi.hloc[0] - fou.hloc[1])
         math_diff_list.append(p)
     # print('math_diff_list', datafrom, math_diff_list)
     try:
@@ -540,207 +644,3 @@ def calculate_probability_distribution(data, bins=None, num_bins=6, weights=None
         "intervals": intervals,
         "probabilities": probabilities.round(4).tolist()  # 保留4位小数
     }
-#
-# class WMPatternRecognizer:
-#     """
-#     负责识别M和W形态的独立算法类。
-#     """
-#
-#     def __init__(self):
-#         self.detected_patterns = []  # 存储M/W形态结果
-#         self.zigzag_points = []
-#         self.dataset = []
-#         self.m_zigzag_points = []
-#         self.w_zigzag_points = []
-#
-#     def analyze_zigzag_points(self, zigzag_points):
-#         """
-#         分析ZigZag点列表，识别M和W形态。
-#         Args:
-#             zigzag_points (list): 从ZigZagCalculator获取的ZigZag转折点列表。
-#             dict_index2ts (dict): 内部K线索引到时间戳的映射。
-#             dict_ts2index (dict): 时间戳到内部K线索引的映射。
-#         """
-#         # 只有当zigzag点数量增加且至少有5个点时才进行判断
-#         if len(zigzag_points) >= 5:
-#             con1 = self._judgment_m_pattern(zigzag_points)
-#             con2 = self._judgment_w_pattern(zigzag_points)
-#             self.zigzag_points = zigzag_points
-#             if con1:
-#                 self.m_zigzag_points.append(self.zigzag_points[-5:])
-#             if con2:
-#                 self.w_zigzag_points.append(self.zigzag_points[-5:])
-#             if not con1 and not con2:
-#                 self._add_dataset(self.dataset, zigzag_points[-5:], stutas=0)
-#
-#     def _judgment_m_pattern(self, zigzag_points):
-#         """判断M形态 (双顶)"""
-#         # M形态需要至少5个点: L-D-H-D-L (或 H-D-H-D-H)
-#         # 这里的zigzag_points[-5:]是最近的5个点
-#         # 原始代码的M形态定义：l_d_val -> l_val -> head_val -> r_val -> r_d_val
-#         # 对应zigzag_points: [-5] -> [-4] -> [-3] -> [-2] -> [-1]
-#
-#         if len(zigzag_points) < 5:
-#             return
-#
-#         l_val = zigzag_points[-4]['price']  # 左肩高点
-#         r_val = zigzag_points[-2]['price']  # 右肩高点
-#         l_d_val = zigzag_points[-5]['price']  # 左脚（形态起始低点）
-#         r_d_val = zigzag_points[-1]['price']  # 右脚（形态结束低点）
-#         head_val = zigzag_points[-3]['price']  # 颈线（谷底）
-#
-#         # 距离20根 K 线
-#         con1 = (zigzag_points[-3]['index'] - zigzag_points[-5]['index']) > 20
-#         # 左肩高点高于右肩高点
-#         con3 = l_val > r_val
-#         # 颈线（谷底）高于双脚最低点，且低于双肩最高点
-#         con4 = head_val > max(l_d_val, r_d_val) and head_val < min(l_val, r_val)
-#
-#         # 不重复判断，避免连续识别相同的形态
-#         con5 = True
-#         if self.detected_patterns and zigzag_points[-3]['timestamp'] == self.detected_patterns[-1]['timestamp']:
-#             con5 = False
-#
-#         if con1 and con3 and con4 and con5:
-#             self._add_dataset(self.dataset, zigzag_points[-5:], stutas=1)
-#             self.detected_patterns.append({
-#                 "kLineId": zigzag_points[-3]['kLineId'],
-#                 "timestamp": zigzag_points[-3]['timestamp'],
-#                 "price": zigzag_points[-3]['price'],
-#                 "value": "M形态",
-#                 "start": zigzag_points[-5]['timestamp'],
-#                 "end": zigzag_points[-1]['timestamp'],
-#                 "high": max(l_val, r_val),  # 形态的最高点是左右肩中较高的那个
-#                 "low": head_val,  # 形态的最低点是颈线
-#             })
-#             return True
-#         return False
-#
-#     def _judgment_w_pattern(self, zigzag_points):
-#         """判断W形态 (双底)"""
-#         # W形态需要至少5个点: H-D-L-D-H (或 L-D-L-D-L)
-#         # 原始代码的W形态定义：l_d_val -> l_val -> head_val -> r_val -> r_d_val
-#         # 对应zigzag_points: [-5] -> [-4] -> [-3] -> [-2] -> [-1]
-#
-#         if len(zigzag_points) < 5:
-#             return
-#
-#         l_val = zigzag_points[-4]['price']  # 左肩低点
-#         r_val = zigzag_points[-2]['price']  # 右肩低点
-#         l_d_val = zigzag_points[-5]['price']  # 左高（形态起始高点）
-#         r_d_val = zigzag_points[-1]['price']  # 右高（形态结束高点）
-#         head_val = zigzag_points[-3]['price']  # 颈线（山顶）
-#
-#         # 距离20根 K 线
-#         con1 = (zigzag_points[-3]['index'] - zigzag_points[-5]['index']) > 20
-#         # 左肩低点低于右肩低点
-#         con3 = l_val < r_val
-#         # 颈线（山顶）低于双高点，且高于双低点
-#         con4 = head_val < min(l_d_val, r_d_val) and head_val > max(l_val, r_val)
-#
-#         # 不重复判断
-#         con5 = True
-#         if self.detected_patterns and zigzag_points[-3]['timestamp'] == self.detected_patterns[-1]['timestamp']:
-#             con5 = False
-#
-#         if con1 and con3 and con4 and con5:
-#             self._add_dataset(self.dataset, zigzag_points[-5:], stutas=-1)
-#             self.detected_patterns.append({
-#                 "kLineId": zigzag_points[-3]['kLineId'],
-#                 "timestamp": zigzag_points[-3]['timestamp'],
-#                 "price": zigzag_points[-3]['price'],
-#                 "value": "W形态",
-#                 "start": zigzag_points[-5]['timestamp'],
-#                 "end": zigzag_points[-1]['timestamp'],
-#                 "high": head_val,  # 形态的最高点是颈线
-#                 "low": min(l_val, r_val),  # 形态的最低点是左右肩中较低的那个
-#             })
-#             return True
-#         return False
-#
-#     def get_pattern_titles(self):
-#         """返回检测到的M/W形态标题的原始列表。"""
-#         return self.detected_patterns
-#
-#     def get_zigzag_points(self):
-#         return self.zigzag_points
-#
-#     def _add_dataset(self, dataset, zigzag_points_1for5, stutas=0):
-#         """
-#         用于测试的函数，将zigzag_points_1for5添加到dataset中。
-#         zigzag_points_1for5表示5个轴点
-#         stutas表示是否是M形态，-1表示W形态，1表示M形态， 0表示其他形态
-#         """
-#         fri = zigzag_points_1for5[0]
-#         sec = zigzag_points_1for5[1]
-#         thi = zigzag_points_1for5[2]
-#         fou = zigzag_points_1for5[3]
-#         # fif = zigzag_points_1for5[4]
-#
-#         dataset.append(
-#             [sec['index'] - fri['index'],
-#              thi['index'] - sec['index'],
-#              fou['index'] - thi['index'],
-#              fou['index'] - sec['index'],
-#              # fif['index'] - fou['index'],
-#              round(sec['price'] - fri['price'], 3),
-#              round(thi['price'] - sec['price'], 3),
-#              round(fou['price'] - thi['price'], 3),
-#              round(fou['price'] - sec['price'], 3),
-#              # round(fif['price'] - fou['price'], 3),
-#              stutas,
-#              ]
-#         )
-#
-#     def get_dataset(self):
-#         return self.dataset
-#
-#     def get_m_zigzag_points(self):
-#         return self.m_zigzag_points
-#
-#     def get_w_zigzag_points(self):
-#         return self.w_zigzag_points
-#
-#     def get_all_wm_patterns(self):
-#         """
-#         返回所有识别到的W/M形态的详细数据列表
-#         每个元素为字典，包含形态类型、各点时间及完整K线数据
-#         """
-#         all_patterns = []
-#
-#         # 处理M形态
-#         for m_points in self.m_zigzag_points:
-#             # 提取每个点的时间和完整K线数据
-#             points_data = [
-#                 {
-#                     "timestamp": point['timestamp'],
-#                     "kline_data": point  # 包含kLineId、price、index等完整数据
-#                 }
-#                 for point in m_points
-#             ]
-#
-#             all_patterns.append({
-#                 "pattern_type": "M形态",
-#                 "points": points_data,
-#                 "start_timestamp": m_points[0]['timestamp'],
-#                 "end_timestamp": m_points[-1]['timestamp']
-#             })
-#
-#         # 处理W形态
-#         for w_points in self.w_zigzag_points:
-#             points_data = [
-#                 {
-#                     "timestamp": point['timestamp'],
-#                     "kline_data": point
-#                 }
-#                 for point in w_points
-#             ]
-#
-#             all_patterns.append({
-#                 "pattern_type": "W形态",
-#                 "points": points_data,
-#                 "start_timestamp": w_points[0]['timestamp'],
-#                 "end_timestamp": w_points[-1]['timestamp']
-#             })
-#
-#         return all_patterns
