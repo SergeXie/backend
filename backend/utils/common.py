@@ -1392,7 +1392,8 @@ async def task_run_backtest(db: AsyncSession, indicator_data_request, strategys,
         return None
 
 
-def filter_by_time(trader_result, begin_time, end_time):
+async def filter_by_time(db, trader_result, begin_time, end_time, goods, period):
+    # 起始结束时间
     begin_dt = datetime.datetime.strptime(begin_time, "%Y-%m-%d %H:%M:%S")
     end_dt = datetime.datetime.strptime(end_time, "%Y-%m-%d %H:%M:%S")
 
@@ -1406,5 +1407,36 @@ def filter_by_time(trader_result, begin_time, end_time):
 
         if begin_dt <= ts_dt <= end_dt:
             filtered.append(item)
+
+    # 特殊处理
+    for new_itme in filtered:
+        # 开仓时间
+        ts_str = new_itme.get("openTime")
+        op_ts_dt = datetime.datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+        if op_ts_dt <= begin_dt:
+            # 查K线
+            select_model_class, goods_ = await select_goods_common(db, goods, model_classes)
+
+            select_k_time = select(select_model_class).where(
+                select_model_class.platform == goods_.platform,
+                select_model_class.tradingGoods == goods_.trading_goods,
+                select_model_class.type == period,
+                select_model_class.tradeDateTime >= op_ts_dt,
+                select_model_class.tradeDateTime < begin_dt
+            ).order_by(select_model_class.tradeDateTime.desc()).limit(1)
+
+            # 执行查询
+            result = await db.execute(select_k_time)
+            kline_data = result.scalar_one_or_none()
+            if kline_data:
+                size = abs(new_itme["size"])  # 避免负数干扰计算
+
+                new_itme["price"] = kline_data.closed
+                if new_itme["placeType"] == "sell":
+                    # 做空 PnL = (开仓价格−平仓价格（现价 K线M1的收盘价）)×交易手数×杠杆−隔夜利息
+                    new_itme["pnl"] = round((new_itme["openPrice"] - kline_data.closed) * (size * goods_.profitRatio), 3)
+                else:
+                    # 做多 PnL=(平仓价格（现价 K线M1的收盘价）− 开仓价格)×交易手数×杠杆−隔夜利息
+                    new_itme["pnl"] = round((kline_data.closed - new_itme["openPrice"]) * (size * goods_.profitRatio), 3)
 
     return filtered
