@@ -1283,6 +1283,8 @@ async def adjust_unpaired_trades(db, beginTime, endTime, trader_result,
 
                     item["initialCash"] += item["pnl"]
 
+        print("trader_result:{}".format(trader_result))
+
         return trader_result
 
     except Exception as e:
@@ -1388,3 +1390,21 @@ async def task_run_backtest(db: AsyncSession, indicator_data_request, strategys,
         await db.rollback()  # 如果发生异常，回滚事务
         await db.close()
         return None
+
+
+def filter_by_time(trader_result, begin_time, end_time):
+    begin_dt = datetime.datetime.strptime(begin_time, "%Y-%m-%d %H:%M:%S")
+    end_dt = datetime.datetime.strptime(end_time, "%Y-%m-%d %H:%M:%S")
+
+    filtered = []
+    for item in trader_result:
+        ts_str = item.get("timestamp")
+        if not ts_str:
+            continue  # 没 timestamp 的直接丢掉（可按你规则改）
+
+        ts_dt = datetime.datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+
+        if begin_dt <= ts_dt <= end_dt:
+            filtered.append(item)
+
+    return filtered
