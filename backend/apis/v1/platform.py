@@ -7,7 +7,7 @@ import uuid
 from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 from fastapi import APIRouter, Query
-from sqlalchemy import select, and_, update, func
+from sqlalchemy import select, and_, update, func, or_
 from starlette.requests import Request
 from starlette.responses import Response
 from common.log import log
@@ -21,7 +21,7 @@ from services.dynamic_kline_service import DynamicKlineService
 from services.indicatory_service import get_indicator_data_async
 from utils.common import select_goods_common, RandomIDGenerator, select_kline_data, Trader, \
     GoodTrader, PandasData, cache, get_indicator_data, model_classes, \
-    get_entities_list, generate_random_string, statistics_from_orders, adjust_unpaired_trades
+    get_entities_list, generate_random_string, statistics_from_orders, adjust_unpaired_trades, filter_by_time
 from utils.prod_backtrader import MyStrategy
 from utils.timezone import timezone
 import pandas as pd
@@ -89,21 +89,26 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
         if not order_strategy:
             return await response_base.fail(msg="该策略不存在实时回测报告", data=[])
 
+        # timestamp 关仓时间
         stmt = (
             select(DqlOrder)
             .where(
                 and_(
                     DqlOrder.tradingGoods == goods,
                     DqlOrder.period == period,
-                    DqlOrder.openTime.between(beginTime, endTime),
-                    DqlOrder.timestamp.between(beginTime, endTime),
                     DqlOrder.strategyUid == strategyUid,
+                    # 这里是合并后的 or_ 逻辑
+                    or_(
+                        DqlOrder.openTime.between(beginTime, endTime),
+                        DqlOrder.timestamp.between(beginTime, endTime)
+                    )
                 )
             )
             .order_by(DqlOrder.openTime.asc())
         )
         result = await db.execute(stmt)
         rows = result.scalars().all()
+
         if not rows:
             return await response_base.fail(msg="时间范围内不存在实时回测报告", data=[])
 
@@ -112,8 +117,10 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
         strategy_indicator_rels = (await db.execute(select(
             DqlStrategyIndicatorRel).where(DqlStrategyIndicatorRel.sid == strategyUid))).scalars().first()
         indicatorDataList = list()
+
         indicatorData = (await db.execute(select(DqlIndicators).where(
             DqlIndicators.uid == strategy_indicator_rels.iid))).scalars().first()
+
         if indicatorData:
             indicator_dict = DqlIndicatorsModel.from_orm(indicatorData).dict()
             indicator_dict["parameters"] = json.loads(strategy_indicator_rels.indicatorParameter)
@@ -137,10 +144,16 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
                 d[field] = d[field].strftime('%Y-%m-%d %H:%M:%S')
         data.append(d)
 
-    traderResult = await adjust_unpaired_trades(db, beginTime, endTime, data)
+    new_trader_result = filter_by_time(data, beginTime, endTime)
+
+    traderResult = await adjust_unpaired_trades(db, beginTime, endTime, new_trader_result)
+
     trader_report, orders = statistics_from_orders(traderResult)
+
     analyzer = ManualComprehensiveAnalyzer()
+
     newReportTemplate = analyzer.get_analysis_from_result(orders)
+
     result_data = [{"goods": goods, "period": period, "startTime": beginTime, "endTime": endTime,
                     "name": strategy.name, "initialCash": 100000, "digits": digits, "parameter": None,
                     "paramsStrName": None, "account": None, "userName": None, "currency": "USD", "spread": 0,
@@ -340,6 +353,7 @@ async def select_multiple_goods_k_lines(goods: str = Query(..., title="交易平
             select_model_class.type == period,
             select_model_class.tradeDateTime.between(beginTime, endTime)).order_by(
             select_model_class.tradeDateTime.desc())
+
 
 
         result_list = await select_kline_data(db, result_data)  # 不使用缓存处理函数
