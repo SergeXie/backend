@@ -2,17 +2,14 @@ import pickle
 import backtrader as bt
 import numpy as np
 import tensorflow as tf
-from utils.module.zigzag_calculator import ZigZagCalculator
-from utils.module.wm_pattern_recognizer import WMPatternRecognizer
+from utils.module.zigzag_calculator_byclass import ZigZagCalculator
+from utils.module.wm_pattern_recognizer import WMPatternRecognizer2
 from utils.indicators.wm_predict_bymath import get_klines_in_range
 from utils.module.dtw import calc_dtw_distance
-from utils.indicators.wm_predict_bymath import klines_to_dataframe, merge_klines
-from utils.indicators.wm_predict_bymath import convert_to_weight, probability
-import warnings
-from sklearn.exceptions import UndefinedMetricWarning
+from clients.dl_api_client import call_dl_api2
+from core.conf import settings
 
 # 过滤特定警告
-warnings.filterwarnings('ignore', category=UndefinedMetricWarning)
 
 
 class ResWMpredictByModelData(bt.Strategy):
@@ -30,23 +27,27 @@ class ResWMpredictByModelData(bt.Strategy):
 
         self.BarState = []
         self.BarStateText = []
+        self.BarStateText1 = []
+        self.verticalBrokenline = []
         self.W_sum = 0
         self.M_sum = 0
         self.all_kline_data = []
         self.Ts_to_hloc = {}
 
-        #----------
+        self.kline_goods = self.indicator_params.get("Kline_goods", '')
+        self.kline_period = self.indicator_params.get("Kline_period", '')
+        self.end_time = self.indicator_params.get("end_time", '')
+        self.begin_time = self.indicator_params.get("begin_time", '')
+
+        # ----------
         # 参数 # 0为指标,1为模型
         self.wm_from = self.indicator_params.get('WMfrom', 0)
         self.pre_from = self.indicator_params.get('Prefrom', 0)
-        #---------
-
-        self
-
+        # ---------
 
         # 实例化独立的算法类
         self.zigzag_calculator = ZigZagCalculator(inp_depth=self.p.inp_depth)
-        self.pattern_recognizer = WMPatternRecognizer()
+        self.pattern_recognizer = WMPatternRecognizer2()
 
         # 确保数据长度足够时再开始计算
         self.addminperiod(self.p.inp_depth)
@@ -70,18 +71,17 @@ class ResWMpredictByModelData(bt.Strategy):
         }
         self.all_kline_data.append(current_kline_data)
         self.Ts_to_hloc[self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')] = [self.data.high[0],
-                                                 self.data.low[0],
-                                                 self.data.open[0],
-                                                 self.data.close[0]]
+                                                                                         self.data.low[0],
+                                                                                         self.data.open[0],
+                                                                                         self.data.close[0]]
 
         # 调用ZigZag算法类的处理方法
         # process_kline会返回是否产生了新的zigzag点，如果产生，就通知形态识别器
         new_zigzag_point_or_updated = self.zigzag_calculator.process_kline(current_kline_data)
 
-
     def stop(self):
         digit = int(self.datas[0].digits[0])
-        zigzag_points = self.zigzag_calculator.get_zigzag_points()
+        zigzag_points = self.zigzag_calculator.get_zigzag_points(as_dict=False)
 
         zigzag_list = []
         for zig in zigzag_points:
@@ -123,70 +123,54 @@ class ResWMpredictByModelData(bt.Strategy):
         #
         # pass
 
-        with open('./dataset/all_wm_pattern_kline.pkl', 'rb') as file:
-            all_wm_pattern = pickle.load(file)
-        with open('./dataset/all_no_pattern_kline.pkl', 'rb') as file:
-            all_none_pattern = pickle.load(file)
-        for i in all_wm_pattern:
-            if "W" in i['pattern_type']:
-                self.W_sum += 1
-            if "M" in i['pattern_type']:
-                self.M_sum += 1
+        # 加载wm形态
 
-        all_save_pattern = all_wm_pattern+all_none_pattern[:len(all_wm_pattern)]  # 保存的全部形态数据
+
         # 指标时间段内的全部形态
         all_5point = self.pattern_recognizer.get_all_5point_list()
         for pattern in all_5point:
             # 获取该模式时间范围内的所有K线
             target_klines = get_klines_in_range(
                 all_klines=self.all_kline_data,  # 替换为实际的全量K线数据
-                start_timestamp=pattern['start_timestamp'],
-                end_timestamp=pattern['end_timestamp']
+                start_timestamp=pattern.start_timestamp,
+                end_timestamp=pattern.end_timestamp
             )
-            pattern['target_klines'] = target_klines
-            pattern['period'] = "none"
+            pattern.target_klines = target_klines
+            # pattern['target_klines'] = target_klines
+            pattern.period = "none"
+            # pattern['period'] = "none"
 
         print('加载保存的数据')
-        print(len(all_wm_pattern))
-        print(len(all_none_pattern))
-        print(all_wm_pattern[0])
-        print(all_none_pattern[0])
 
-        from utils.module.t2 import extract_data_to_diffclass, build_lstm_model_status, build_lstm_model_class, extract_xdata, extract_data_to_statusclass
+
+        from utils.module.t2 import extract_data_to_diffclass, build_lstm_model_status, build_lstm_model_class, \
+            extract_xdata, extract_data_to_statusclass
         #  ----------------------------------------这里先预测是否是形态--------------------------------
-        X, y = extract_data_to_statusclass(all_save_pattern)
-        print(X.shape, y.shape)
-        # 划分训练集和测试集（8:2）
-        split_idx = int(0.8 * len(X))
-        X_train, X_test = X[:split_idx], X[split_idx:]
-        y_train, y_test = y[:split_idx], y[split_idx:]
-        # --------------------------
-        # 步骤2：构建并训练模型
-        # --------------------------
-        max_seq_len = 200
-        model = build_lstm_model_status(max_seq_len=max_seq_len, feat_dim=7)
-        # 训练模型
-        # print("\n开始训练模型...")
-        # history = model.fit(
-            # X_train, y_train,
-            # batch_size=64,
-            # epochs=50,
-            # validation_data=(X_test, y_test),
-            # shuffle=True
-        # )
-        
-        # model.save('./dataset/pre_status.h5')  # 会创建一个包含模型信息的文件夹
-        # 加载模型
-        model = tf.keras.models.load_model('./dataset/pre_status.h5')
-
-        # 评估模型
-        test_loss, test_acc = model.evaluate(X_test, y_test)
-        print(f"\n测试集性能：损失={test_loss:.4f}, 准确率={test_acc:.4f}")
-        # --------------------------
-        # 步骤3：模型预测
-        # --------------------------
         test_x = extract_xdata(all_5point)
-        y_pred_prob = model.predict(test_x, verbose=2)  # (3,)
+        request_data = {
+            "test_x": test_x.tolist(),
+            "model": 'pre_status'
+        }
+
+        # 发送预测请求
+        print('正在请求形态分类')
+        response = call_dl_api2(
+            # url=settings.AI_URL,
+            url='http://192.168.1.182:8083/api/ai/myai',
+            task='wm_predic_v2',
+            goods=self.kline_goods,
+            period=self.kline_period,
+            begin_time=self.begin_time,
+            end_time=self.end_time,
+            data=request_data,
+            timeout=120.0,
+        )
+        if response.get('status_code') == 200:
+            print('接口请求正常')
+
+        y_pred_prob = response['y_pred_prob']
+        print(y_pred_prob)
+
         # print(len(y_pred_prob))
         # print(y_pred_prob)
         predict_wm_pattern = []
@@ -204,150 +188,172 @@ class ResWMpredictByModelData(bt.Strategy):
                 elif max_index == 2:
                     maybe_w = all_5point[index]
 
-        #--------------------------------------------------------------------------------------------
-        if self.wm_from == 0:  # 0:math
-            print('指标计算形态')
-            maybe_m = self.pattern_recognizer.get_maybe_m_patterns()[-1]
-            maybe_w = self.pattern_recognizer.get_maybe_w_patterns()[-1]
-            for pattern in [maybe_m, maybe_w]:
-                # 获取该模式时间范围内的所有K线
-                target_klines = get_klines_in_range(
-                    all_klines=self.all_kline_data,  # 替换为实际的全量K线数据
-                    start_timestamp=pattern['start_timestamp'],
-                    end_timestamp=pattern['end_timestamp']
-                )
-                pattern['target_klines'] = target_klines
-                pattern['period'] = "none"
-            predict_wm_pattern = [maybe_m, maybe_w]
-        elif self.wm_from == 1:
-            print('模型计算形态')
+        print('模型计算形态')
+        print('====================')
 
+        # --------------------------------------------------------------------------------------------
+        # if self.wm_from == 0:  # 0:math
+        #     print('指标计算形态')
+        #     maybe_m = self.pattern_recognizer.get_maybe_m_patterns()[-1]
+        #     maybe_w = self.pattern_recognizer.get_maybe_w_patterns()[-1]
+        #     for pattern in [maybe_m, maybe_w]:
+        #         # 获取该模式时间范围内的所有K线
+        #         target_klines = get_klines_in_range(
+        #             all_klines=self.all_kline_data,  # 替换为实际的全量K线数据
+        #             start_timestamp=pattern['start_timestamp'],
+        #             end_timestamp=pattern['end_timestamp']
+        #         )
+        #         pattern['target_klines'] = target_klines
+        #         pattern['period'] = "none"
+        #     predict_wm_pattern = [maybe_m, maybe_w]
+        # elif self.wm_from == 1:
+        #     print('模型计算形态')
 
+        # all_wm_pattern_kline = [klines_to_dataframe(merge_klines(i['target_klines'])) for i in all_wm_pattern]
+        # ----------------------------------指标计算概率-----------------------------------------
+        # if self.pre_from == 0:
+        #     print('指标计算概率')
+        #     try:
+        #         last_m_start = maybe_m['start']
+        #         last_m_end = maybe_m['end']
+        #         last_m_kline = get_klines_in_range(self.all_kline_data, last_m_start, last_m_end)
+        #         last_m_kline_df = klines_to_dataframe(merge_klines(last_m_kline))
+        #         distance = [calc_dtw_distance(last_m_kline_df, i) for i in all_wm_pattern_kline]
+        #         weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
+        #         m_zigzag_points = [i['points'] for i in all_wm_pattern if "M" in i['pattern_type']]
+        #         weight = [weight[index] for index, i in enumerate(all_wm_pattern) if "M" in i['pattern_type']]
+        #         p = probability(m_zigzag_points, datafrom='m', weight=weight)
+        #         print("m概率:", p)
+        #         price_diff = self.Ts_to_hloc.get(maybe_m['start_third'])[1] - \
+        #                      self.Ts_to_hloc.get(maybe_m['start_four'])[0]  # 高点到低点的价差
+        #         klineId = maybe_m['kLineId_3']
+        #         self.BarStateText1.append({
+        #             "kLineId": maybe_m['points'][2]['kline_data']['kLineId'],
+        #             "price": maybe_m['points'][2]['kline_data']['price'],
+        #             "timestamp": self.Id_TS_dict.get(maybe_m['points'][2]['kline_data']['kLineId']),
+        #             "value": 'M形态'
+        #         })
+        #         for index, i in enumerate(p['probabilities']):
+        #             base_price = self.Ts_to_hloc.get(maybe_m['start_third'])[1]
+        #             price = base_price + price_diff * index
+        #             price = np.round(price, digit)
+        #             # print(i)
+        #             i = np.round(i * 100, 2)
+        #             # print('来了', price,self.Id_TS_dict.get(klineId))
+        #             # print(index)
+        #
+        #             self.BarStateText.append({
+        #                 "kLineId": klineId,
+        #                 "price": price,
+        #                 "timestamp": self.Id_TS_dict.get(klineId),
+        #                 "value": f"{np.round(price, 2)}: " + str(i) + '%'
+        #             })
+        #             self.BarState.append([
+        #                 {
+        #                     "kLineId": int(klineId),
+        #                     "price": price,
+        #                 },
+        #                 {
+        #                     "kLineId": int(klineId),
+        #                     "price": price,
+        #                 }
+        #             ])
+        #         # -----------------------w计算概率-----------------------------------------
+        #         last_w_start = maybe_w['start']
+        #         last_w_end = maybe_w['end']
+        #         last_w_kline = get_klines_in_range(self.all_kline_data, last_w_start, last_w_end)
+        #         last_w_kline_df = klines_to_dataframe(merge_klines(last_w_kline))
+        #         distance = [calc_dtw_distance(last_w_kline_df, i) for i in all_wm_pattern_kline]
+        #         weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
+        #         w_zigzag_points = [i['points'] for i in all_wm_pattern if "W" in i['pattern_type']]
+        #         weight = [weight[index] for index, i in enumerate(all_wm_pattern) if "W" in i['pattern_type']]
+        #         p = probability(w_zigzag_points, datafrom='w', weight=weight)
+        #         print("w概率:", p)
+        #         price_diff = self.Ts_to_hloc.get(maybe_w['start_third'])[0] - \
+        #                      self.Ts_to_hloc.get(maybe_w['start_four'])[1]  # 高点到低点的价差
+        #         klineId = maybe_w['kLineId_3']
+        #         self.BarStateText1.append({
+        #             "kLineId": maybe_w['points'][2]['kline_data']['kLineId'],
+        #             "price": maybe_w['points'][2]['kline_data']['price'],
+        #             "timestamp": self.Id_TS_dict.get(maybe_w['points'][2]['kline_data']['kLineId']),
+        #             "value": 'W形态'
+        #         })
+        #         for index, i in enumerate(p['probabilities']):
+        #             base_price = self.Ts_to_hloc.get(maybe_w['start_third'])[0]
+        #             price = base_price + price_diff * index
+        #             price = np.round(price, digit)
+        #             # print(i)
+        #             i = np.round(i * 100, 2)
+        #             # print('来了', price,self.Id_TS_dict.get(klineId))
+        #             # print(index)
+        #
+        #             self.BarStateText.append({
+        #                 "kLineId": klineId,
+        #                 "price": price,
+        #                 "timestamp": self.Id_TS_dict.get(klineId),
+        #                 "value": f"{np.round(price, 2)}: " + str(i) + '%'
+        #             })
+        #             self.BarState.append([
+        #                 {
+        #                     "kLineId": int(klineId),
+        #                     "price": price,
+        #                 },
+        #                 {
+        #                     "kLineId": int(klineId),
+        #                     "price": price,
+        #                 }
+        #             ])
+        #     except Exception as e:
+        #         print(e)
 
-        all_wm_pattern_kline = [klines_to_dataframe(merge_klines(i['target_klines'])) for i in all_wm_pattern]
-        # ----------------------------------w计算概率-----------------------------------------
-        if self.pre_from == 0:
-            print('指标计算概率')
-            try:
-                last_m_start = maybe_m['start']
-                last_m_end = maybe_m['end']
-                last_m_kline = get_klines_in_range(self.all_kline_data, last_m_start, last_m_end)
-                last_m_kline_df = klines_to_dataframe(merge_klines(last_m_kline))
-                distance = [calc_dtw_distance(last_m_kline_df, i) for i in all_wm_pattern_kline]
-                weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
-                m_zigzag_points = [i['points'] for i in all_wm_pattern if "M" in i['pattern_type']]
-                weight = [weight[index] for index, i in enumerate(all_wm_pattern) if "M" in i['pattern_type']]
-                p = probability(m_zigzag_points, datafrom='m',weight=weight)
-                print("m概率:", p)
-                price_diff = self.Ts_to_hloc.get(maybe_m['start_third'])[1] - self.Ts_to_hloc.get(maybe_m['start_four'])[0]  # 高点到低点的价差
-                klineId = maybe_m['kLineId_3']
-                for index, i in enumerate(p['probabilities']):
-                    base_price = self.Ts_to_hloc.get(maybe_m['start_third'])[1]
-                    price = base_price + price_diff * index
-                    price = np.round(price, digit)
-                    # print(i)
-                    i = np.round(i*100, 2)
-                    # print('来了', price,self.Id_TS_dict.get(klineId))
-                    # print(index)
-                    self.BarStateText.append({
-                        "kLineId": klineId,
-                        "price": price,
-                        "timestamp": self.Id_TS_dict.get(klineId),
-                        "value": f"{np.round(price, 2)}: " + str(i) + '%'
-                    })
-                    self.BarState.append([
-                        {
-                            "kLineId": int(klineId),
-                            "price": price,
-                        },
-                        {
-                            "kLineId": int(klineId),
-                            "price": price,
-                        }
-                    ])
-                # -----------------------w计算概率-----------------------------------------
-                last_w_start = maybe_w['start']
-                last_w_end = maybe_w['end']
-                last_w_kline = get_klines_in_range(self.all_kline_data, last_w_start, last_w_end)
-                last_w_kline_df = klines_to_dataframe(merge_klines(last_w_kline))
-                distance = [calc_dtw_distance(last_w_kline_df, i) for i in all_wm_pattern_kline]
-                weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
-                w_zigzag_points = [i['points'] for i in all_wm_pattern if "W" in i['pattern_type']]
-                weight = [weight[index] for index, i in enumerate(all_wm_pattern) if "W" in i['pattern_type']]
-                p = probability(w_zigzag_points, datafrom='w',weight=weight)
-                print("w概率:", p)
-                price_diff = self.Ts_to_hloc.get(maybe_w['start_third'])[0] - self.Ts_to_hloc.get(maybe_w['start_four'])[1]  # 高点到低点的价差
-                klineId = maybe_w['kLineId_3']
-                for index, i in enumerate(p['probabilities']):
-                    base_price = self.Ts_to_hloc.get(maybe_w['start_third'])[0]
-                    price = base_price + price_diff * index
-                    price = np.round(price, digit)
-                    # print(i)
-                    i = np.round(i*100, 2)
-                    # print('来了', price,self.Id_TS_dict.get(klineId))
-                    # print(index)
-                    self.BarStateText.append({
-                        "kLineId": klineId,
-                        "price": price,
-                        "timestamp": self.Id_TS_dict.get(klineId),
-                        "value": f"{np.round(price, 2)}: " + str(i) + '%'
-                    })
-                    self.BarState.append([
-                        {
-                            "kLineId": int(klineId),
-                            "price": price,
-                        },
-                        {
-                            "kLineId": int(klineId),
-                            "price": price,
-                        }
-                    ])
-            except Exception as e:
-                print(e)
-
-        #  ----------------------------------------预测价差--------------------------------
+        #  ----------------------------------------模型预测价差--------------------------------
         if self.pre_from == 1:
-            print('模型计算概率')
-            X, y = extract_data_to_diffclass(all_save_pattern)  # 用全部数据训练
-            # print(X.shape, y.shape)
-            # 划分训练集和测试集（8:2）
-            split_idx = int(0.8 * len(X))
-            X_train, X_test = X[:split_idx], X[split_idx:]
-            y_train, y_test = y[:split_idx], y[split_idx:]
-            # --------------------------
-            # 步骤2：构建并训练模型
-            # --------------------------
-            max_seq_len = 200
-            model = build_lstm_model_class(max_seq_len=max_seq_len, feat_dim=7)
-            # 训练模型
-            print("\n开始训练模型...")
-            # history = model.fit(
-                # X_train, y_train,
-                # batch_size=64,
-                # epochs=20,
-                # validation_data=(X_test, y_test),
-                # shuffle=True
+            # 发送预测请求
+            # print('正在请求新的接口')
+            # response = call_dl_api2(
+            #     # url=settings.AI_URL,
+            #     url='http://192.168.1.182:8083/api/ai/myai',
+            #     task='wm_train_model',
+            #     goods=self.kline_goods,
+            #     period=self.kline_period,
+            #     begin_time=self.begin_time,
+            #     end_time=self.end_time,
+            #     data={},
+            #     timeout=120.0,
             # )
-            # model.save('./dataset/pre_diff.h5')  # 会创建一个包含模型信息的文件夹
-            # 加载模型
-            model = tf.keras.models.load_model('./dataset/pre_diff.h5')
 
-            # 评估模型
-            test_loss, test_acc = model.evaluate(X_test, y_test)
-            print(f"\n测试集性能：损失={test_loss:.4f}, 准确率={test_acc:.4f}")
-            # --------------------------
-            # 步骤3：模型预测
-            # --------------------------
+            print('模型计算概率')
             test_x = extract_xdata(predict_wm_pattern)
-            y_pred_prob = model.predict(test_x, verbose=2)  # (3,)
-            print('预测价差')
-            print(y_pred_prob)
+            request_data = {
+                "test_x": test_x.tolist(),
+                "model": 'pre_diff'
+            }
+            # 发送预测请求
+            print('正在请求概率计算')
+            response = call_dl_api2(
+                # url=settings.AI_URL,
+                url='http://192.168.1.182:8083/api/ai/myai',
+                task='wm_predic_v3',
+                goods=self.kline_goods,
+                period=self.kline_period,
+                begin_time=self.begin_time,
+                end_time=self.end_time,
+                data=request_data,
+                timeout=120.0,
+            )
+            if response.get('status_code') == 200:
+                print('概率计算正常')
 
-            for index, p_list in enumerate(y_pred_prob):
-                self.probabilities_result_add(predict_wm_pattern[index], p_list)
 
-            # self.probabilities_result_add(may_m, y_pred_prob[0])
-            # self.probabilities_result_add(may_w, y_pred_prob[1])
+            diff_results = response['diff_results']
+            patterns = response['patterns']
+
+            print(diff_results)
+            print(patterns)
+
+            for index, p_list in enumerate(diff_results):
+                print(index, p_list)
+                self.probabilities_result_add(predict_wm_pattern[index], p_list, patterns[index])
 
         return super().stop()
 
@@ -383,6 +389,23 @@ class ResWMpredictByModelData(bt.Strategy):
                 "position": 'right',
                 "data": [i],
             })
+        # 写形态
+        for i in self.BarStateText1:
+            # print(i)
+            self.result_data_dict["lines"].append({
+                "type": "text",
+                "TextColor": self.indicator_params.get("TextColor", "#0000FF"),
+                "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFFFFF"),
+                "position": 'top',
+                "data": [i],
+            })
+        # 画竖线
+        for i in self.verticalBrokenline:
+            self.result_data_dict["lines"].append({
+                "type": "verticalBrokenline",
+                "color": self.indicator_params.get("DnColor", "#FF0000"),
+                "data": [i]
+            })
 
         self.result_data_dict["lines"].append({
             "type": "bottomText",
@@ -391,25 +414,31 @@ class ResWMpredictByModelData(bt.Strategy):
         })
         return [self.result_data_dict["lines"], None, None]
 
-
-    def probabilities_result_add(self, status, probabilities):
-        '绘制概率的结果'
-        points_list = status['points']
+    def probabilities_result_add(self, status, probabilities, patterns):
+        # print('绘制概率的结果',status)
+        points_list = status.points
         points_4 = points_list[3]
         points_3 = points_list[2]
-        base_price = points_3['kline_data']['price']
-        price_diff = points_4['kline_data']['price'] - base_price
+        base_price = points_3['kline_data'].price
+        price_diff = points_4['kline_data'].price - base_price
 
-        klineId = points_4['kline_data']['kLineId']
+        klineId = points_4['kline_data'].kLineId
+        value_str = patterns
 
         for index, i in enumerate(probabilities):
             price = base_price - price_diff * index
 
+            self.BarStateText1.append({
+                "kLineId": points_3['kline_data'].kLineId,
+                "price": points_3['kline_data'].price,
+                "timestamp": self.Id_TS_dict.get(points_3['kline_data'].kLineId),
+                "value": value_str
+            })
             self.BarStateText.append({
                 "kLineId": klineId,
                 "price": price,
                 "timestamp": self.Id_TS_dict.get(klineId),
-                "value": f"{np.round(price, 2)}: " + str(np.round(i*100, 2)) + '%'
+                "value": f"{np.round(price, 2)}: " + str(np.round(i * 100, 2)) + '%'
             })
             self.BarState.append([
                 {
@@ -421,6 +450,13 @@ class ResWMpredictByModelData(bt.Strategy):
                     "price": price,
                 }
             ])
+        self.verticalBrokenline.append(
+            {
+                "kLineId": klineId,
+                "price": price,
+                "price2": [base_price + price_diff, base_price - price_diff * 2],
+                "timestamp": self.Id_TS_dict.get(klineId),
+            })
 
 
 

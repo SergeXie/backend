@@ -1,18 +1,20 @@
-import pickle
+import math
 import backtrader as bt
 import numpy as np
 import pandas as pd
 from utils.module.zigzag_calculator_byclass import ZigZagCalculator
+from utils.indicators.peak_trough import PeakTroughIndicator, PeakTroughType
+from utils.module.wm_pk_point_calculator import PeakTroughPointCalculator
 from utils.module.dll import train_two_classifiers, predict_binary
 from utils.module.dtw import calc_dtw_distance
 from utils.module.wm_pattern_recognizer import WMPatternRecognizer2
 import warnings
-from datetime import datetime
+from datetime import datetime, time
 from sklearn.exceptions import UndefinedMetricWarning
-from utils.module.wm_pattern import run_strategy
-
+from utils.module.wm_pattern import run_strategy_incremental
+from collections import Counter
 # 过滤特定警告
-warnings.filterwarnings('ignore', category=UndefinedMetricWarning)
+warnings.filterwarnings('ignore')
 
 
 class ResWMpredictByMathData(bt.Strategy):
@@ -24,6 +26,7 @@ class ResWMpredictByMathData(bt.Strategy):
         self.result_data_dict = dict()
         self.Id_TS_dict = {}
         self.Ts_to_hloc = {}
+        self.kLineId_to_all = dict()
         self.inp_depth = 12
 
         self.BarState = []
@@ -32,20 +35,36 @@ class ResWMpredictByMathData(bt.Strategy):
         self.W_sum = 0
         self.M_sum = 0
         self.all_kline_data = []
+        Z_from = indicator_params.get("Zfrom", 1)
+        self.Z_from = 'pc' if Z_from == 0 else 'zig'
 
         # 实例化独立的算法类
+        self.peak_trough = PeakTroughIndicator(self.data)
+        self.pk_point_calculator = PeakTroughPointCalculator()
         self.zigzag_calculator = ZigZagCalculator(inp_depth=self.inp_depth)
         self.pattern_recognizer = WMPatternRecognizer2()
 
         goods = self.indicator_params.get('Kline_goods')
         periods = self.indicator_params.get('Kline_period')
         endTime = self.indicator_params.get('end_time')
-        beginTime = '2020-01-01 00:00:00'
-        self.all_wm_pattern = run_strategy(goods, periods, endTime, beginTime)
-        from apis.v1.platform import select_multiple_goods_k_lines
-        # res = await select_multiple_goods_k_lines(goods, periods, beginTime, endTime)
-        # print('全部参数', self.all_wm_pattern[-1])
-        # print(res.data)
+        beginTime = '2025-01-01 00:00:00'
+        # self.all_wm_pattern = run_strategy(goods, periods, endTime, beginTime)
+
+        # 定义“历史”和“现在”的分割线
+        # 第一次运行时，会计算 2000-01-01 到 2025-01-01 的数据并存为pkl文件
+        # 下次运行时，直接读取pkl，只计算 2025-01-01 往后的数据
+        HISTORY_SPLIT_POINT = "2026-01-01 00:00:00"
+
+        # 调用增量运行函数
+        self.all_wm_pattern = run_strategy_incremental(
+            goods=goods,
+            periods=periods,
+            history_split_time=HISTORY_SPLIT_POINT,  # 分割点
+            current_end_time=endTime,  # 最新时间
+            history_begin_time="2000-01-01 00:00:00"  # 这里为了测试快一点写了2020
+        )
+        tmp = [i.value for i in self.all_wm_pattern]
+        self.counts = Counter(tmp)
 
 
         # 确保数据长度足够时再开始计算
@@ -53,11 +72,6 @@ class ResWMpredictByMathData(bt.Strategy):
 
     def next(self):
         self.Id_TS_dict[int(self.data.klineId[0])] = self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')
-
-        # 确保数据长度足够
-        if len(self) < self.inp_depth:
-            return
-
         # 准备当前K线数据，传递给ZigZagCalculator
         current_kline_data = {
             "kLineId": self.data.klineId[0],  # 假设datafeed提供了klineId
@@ -68,22 +82,44 @@ class ResWMpredictByMathData(bt.Strategy):
             "close": self.data.close[0],
             "volume": self.data.volume[0],
         }
+        self.kLineId_to_all[int(self.data.klineId[0])] = current_kline_data
         self.all_kline_data.append(current_kline_data)
         self.Ts_to_hloc[self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')] = [self.data.high[0],
                                                  self.data.low[0],
                                                  self.data.open[0],
                                                  self.data.close[0]]
 
+        # 确保数据长度足够
+        if len(self) < self.inp_depth:
+            return
         # 调用ZigZag算法类的处理方法
-        # process_kline会返回是否产生了新的zigzag点，如果产生，就通知形态识别器
-        new_zigzag_point_or_updated = self.zigzag_calculator.process_kline(current_kline_data)
+        if self.Z_from == 'zig':
+            new_zigzag_point_or_updated = self.zigzag_calculator.process_kline(current_kline_data)
+            if new_zigzag_point_or_updated:
+                zigzag_points = self.zigzag_calculator.get_zigzag_points(as_dict=False)
+                self.pattern_recognizer.analyze_zigzag_points(zigzag_points)
+        elif self.Z_from == 'pc':  # 峰值连线
 
+            val = self.peak_trough.lines.pt_r[0]
+            if val > 0:
+                pt_type = PeakTroughType.Peak
+            elif val < 0:
+                pt_type = PeakTroughType.Trough
+            else:
+                pt_type = PeakTroughType.Normal
 
+            center_line_id = self.peak_trough.lines.pt_center[0]
+            center_line_id = self.data.klineId[0] if pt_type == PeakTroughType.Normal else center_line_id
+            self.pk_point_calculator.process_point(self.kLineId_to_all.get(int(center_line_id)), pt_type)
+            # print('峰值连线',val)
+            # 如果值不是 NaN，说明当前K线确认了一个顶或底
+            if not math.isnan(val):
+                PeakTrough_points = self.pk_point_calculator.get_PeakTrough_points(as_dict=False)
+                self.pattern_recognizer.analyze_zigzag_points(PeakTrough_points)
 
     def stop(self):
         digit = int(self.datas[0].digits[0])
-        zigzag_points = self.zigzag_calculator.get_zigzag_points(as_dict=False)
-        print('看中了',zigzag_points)
+        zigzag_points = self.pattern_recognizer.get_zigzag_points()
 
         zigzag_list = []
         for zig in zigzag_points:
@@ -175,7 +211,7 @@ class ResWMpredictByMathData(bt.Strategy):
                 weight = [weight[index] for index, i in enumerate(early_times) if "M" in i.value]
 
                 p = probability(m_zigzag_points, datafrom='m',weight=weight)
-                print("m概率:", p)
+                # print("m概率:", p)
 
                 price_diff = self.Ts_to_hloc.get(maybe_m.start_third)[1] - self.Ts_to_hloc.get(maybe_m.start_four)[0]  # 高点到低点的价差
                 klineId = maybe_m.four_kLineId
@@ -201,7 +237,6 @@ class ResWMpredictByMathData(bt.Strategy):
                         "timestamp": self.Id_TS_dict.get(klineId),
                     })
 
-
             # -----------获取最后一个可能的w，用于计算概率----------------
             for maybe_w in self.pattern_recognizer.get_maybe_w_patterns():
                 # maybe_w = self.pattern_recognizer.get_maybe_w_patterns()[-1]
@@ -220,7 +255,7 @@ class ResWMpredictByMathData(bt.Strategy):
                 weight = [weight[index] for index, i in enumerate(early_times) if "W" in i.value]
 
                 p = probability(w_zigzag_points, datafrom='w',weight=weight)
-                print("w概率:", p)
+                # print("w概率:", p)
 
                 price_diff = self.Ts_to_hloc.get(maybe_w.start_third)[0] - self.Ts_to_hloc.get(maybe_w.start_four)[1]  # 高点到低点的价差
                 klineId = maybe_w.four_kLineId
@@ -261,7 +296,7 @@ class ResWMpredictByMathData(bt.Strategy):
                 m_zigzag_points = [i.points for i in early_times if "M" in i.value]
                 weight = [weight[index] for index, i in enumerate(early_times) if "M" in i.value]
                 p = probability(m_zigzag_points, datafrom='m',weight=weight)
-                print("m概率:", p)
+                # print("m概率:", p)
                 price_diff = self.Ts_to_hloc.get(standard_m.start_third)[1] - self.Ts_to_hloc.get(standard_m.start_four)[0]  # 高点到低点的价差
                 klineId = standard_m.end_kLineId
                 for index, i in enumerate(p['probabilities'][-2:]):
@@ -299,7 +334,7 @@ class ResWMpredictByMathData(bt.Strategy):
                 w_zigzag_points = [i.points for i in early_times if "W" in i.value]
                 weight = [weight[index] for index, i in enumerate(early_times) if "W" in i.value]
                 p = probability(w_zigzag_points, datafrom='w',weight=weight)
-                print("w概率:", p)
+                # print("w概率:", p)
                 price_diff = self.Ts_to_hloc.get(standard_w.start_third)[0] - self.Ts_to_hloc.get(standard_w.start_four)[1]  # 高点到低点的价差
                 klineId = standard_w.end_kLineId
                 for index, i in enumerate(p['probabilities'][-2:]):
@@ -322,11 +357,8 @@ class ResWMpredictByMathData(bt.Strategy):
                 })
 
 
-
-
-
     def get_analysis(self):
-        zigzag_points = self.zigzag_calculator.get_zigzag_points()
+        zigzag_points = self.pattern_recognizer.get_zigzag_points()
         self.result_data_dict["lines"] = [
             {
                 "type": "brokenline",
@@ -355,11 +387,15 @@ class ResWMpredictByMathData(bt.Strategy):
                 "position": 'right',
                 "data": [i],
             })
+
+        self.counts
         self.result_data_dict["lines"].append({
             "type": "bottomText",
             "color": self.indicator_params.get("DnColor", "#FF0000"),
-            "data": f"W形态个数: {self.W_sum}, M形态个数: {self.M_sum},"
+            "data": f"W1形态个数: {self.counts['W1形态']}, M1形态个数: {self.counts['M1形态']},"
+                    f"W2形态个数: {self.counts['W2形态']}, M2形态个数: {self.counts['M2形态']},"
         })
+        # 画竖线
         for i in self.verticalBrokenline:
             self.result_data_dict["lines"].append({
                 "type": "verticalBrokenline",

@@ -1,26 +1,18 @@
 import pickle
-import math
 import backtrader as bt
 import numpy as np
 import tensorflow as tf
-# from utils.module.zigzag_calculator import ZigZagCalculator
-from utils.module.zigzag_calculator_byclass import ZigZagCalculator
-from utils.module.wm_pattern_recognizer import WMPatternRecognizer2
-from utils.indicators.peak_trough import PeakTroughIndicator, PeakTroughType
+from utils.module.zigzag_calculator import ZigZagCalculator
+from utils.module.wm_pattern_recognizer import WMPatternRecognizer
 from utils.indicators.wm_predict_bymath import get_klines_in_range
 from utils.module.dtw import calc_dtw_distance
 from utils.indicators.wm_predict_bymath import klines_to_dataframe, merge_klines
 from utils.indicators.wm_predict_bymath import convert_to_weight, probability
-from utils.module.wm_pattern import run_strategy
-from utils.module.wm_pk_point_calculator import PeakTroughPointCalculator
-from utils.module.t2 import extract_data_to_diffclass, build_lstm_model_status, build_lstm_model_class, extract_xdata, \
-    extract_data_to_statusclass
-
 import warnings
 from sklearn.exceptions import UndefinedMetricWarning
 
 # 过滤特定警告
-warnings.filterwarnings('ignore')
+warnings.filterwarnings('ignore', category=UndefinedMetricWarning)
 
 
 class ResWMpredictByModelData(bt.Strategy):
@@ -41,35 +33,30 @@ class ResWMpredictByModelData(bt.Strategy):
         self.W_sum = 0
         self.M_sum = 0
         self.all_kline_data = []
-        self.ts_to_kLineId = {}
         self.Ts_to_hloc = {}
-        self.kLineId_to_ts = {}
-        self.kLineId_to_all = {}
-        Z_from = indicator_params.get("Zfrom", 1)
-        self.Z_from = 'pc' if Z_from == 0 else 'zig'
 
         # ----------
         # 参数 # 0为指标,1为模型
         self.wm_from = self.indicator_params.get('WMfrom', 0)
         self.pre_from = self.indicator_params.get('Prefrom', 0)
+        # ---------
+
+        self
 
         # 实例化独立的算法类
         self.zigzag_calculator = ZigZagCalculator(inp_depth=self.p.inp_depth)
-        self.pk_point_calculator = PeakTroughPointCalculator()
-        self.pattern_recognizer = WMPatternRecognizer2()
+        self.pattern_recognizer = WMPatternRecognizer()
 
         # 确保数据长度足够时再开始计算
         self.addminperiod(self.p.inp_depth)
 
-        goods = self.indicator_params.get('Kline_goods')
-        periods = self.indicator_params.get('Kline_period')
-        endTime = self.indicator_params.get('end_time')
-        beginTime = '2025-01-01 00:00:00'
-        self.all_wm_pattern = run_strategy(goods, periods, endTime, beginTime)  # 历史全部的wm
-
     def next(self):
-        self.ts_to_kLineId[self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')] = int(self.data.klineId[0])
-        self.kLineId_to_ts[int(self.data.klineId[0])] = self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')
+        self.Id_TS_dict[int(self.data.klineId[0])] = self.datas[0].datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')
+
+        # 确保数据长度足够
+        if len(self) < self.p.inp_depth:
+            return
+
         # 准备当前K线数据，传递给ZigZagCalculator
         current_kline_data = {
             "kLineId": self.data.klineId[0],  # 假设datafeed提供了klineId
@@ -80,94 +67,17 @@ class ResWMpredictByModelData(bt.Strategy):
             "close": self.data.close[0],
             "volume": self.data.volume[0],
         }
-        self.kLineId_to_all[int(self.data.klineId[0])] = current_kline_data
+        self.all_kline_data.append(current_kline_data)
+        self.Ts_to_hloc[self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')] = [self.data.high[0],
+                                                                                         self.data.low[0],
+                                                                                         self.data.open[0],
+                                                                                         self.data.close[0]]
 
-        if self.Z_from == 'zig':
-            # 确保数据长度足够
-            if len(self) < self.p.inp_depth:
-                return
-            # 调用ZigZag算法类的处理方法
-            # process_kline会返回是否产生了新的zigzag点，如果产生，就通知形态识别器
-            new_zigzag_point_or_updated = self.zigzag_calculator.process_kline(current_kline_data)
-
-            # 如果ZigZag有更新，就通知形态识别器进行分析
-            if new_zigzag_point_or_updated:
-                zigzag_points = self.zigzag_calculator.get_zigzag_points(as_dict=False)
-                self.pattern_recognizer.analyze_zigzag_points(zigzag_points)
-
-        #################################################################################################
-        elif self.Z_from == 'pc':  # 峰值连线
-
-            val = self.peak_trough.lines.pt_r[0]
-            if val > 0:
-                pt_type = PeakTroughType.Peak
-            elif val < 0:
-                pt_type = PeakTroughType.Trough
-            else:
-                pt_type = PeakTroughType.Normal
-
-            center_line_id = self.peak_trough.lines.pt_center[0]
-            center_line_id = self.data.klineId[0] if pt_type == PeakTroughType.Normal else center_line_id
-            self.pk_point_calculator.process_point(self.kLineId_to_all.get(center_line_id), pt_type)
-            # print('峰值连线',val)
-            # 如果值不是 NaN，说明当前K线确认了一个顶或底
-            if not math.isnan(val):
-                PeakTrough_points = self.pk_point_calculator.get_PeakTrough_points(as_dict=False)
-                self.pattern_recognizer.analyze_zigzag_points(PeakTrough_points)
+        # 调用ZigZag算法类的处理方法
+        # process_kline会返回是否产生了新的zigzag点，如果产生，就通知形态识别器
+        new_zigzag_point_or_updated = self.zigzag_calculator.process_kline(current_kline_data)
 
     def stop(self):
-        w1 = []
-        w2 = []
-        m1 = []
-        m2 = []
-
-        for i in self.all_wm_pattern:
-            if "W1" in i.value:
-                w1.append(i)
-            elif "W2" in i.value:
-                w2.append(i)
-            elif "M1" in i.value:
-                m1.append(i)
-            elif "M2" in i.value:
-                m2.append(i)
-        print(len(w1), len(w2), len(m1), len(m2))
-
-        zigzag_points = self.pattern_recognizer.get_zigzag_points()
-        print(self.all_wm_pattern[-1])
-
-        print('模型计算概率')
-        X, y = extract_data_to_diffclass(self.all_wm_pattern)  # 用全部数据训练
-        # print(X.shape, y.shape)
-        # 划分训练集和测试集（8:2）
-        split_idx = int(0.8 * len(X))
-        X_train, X_test = X[:split_idx], X[split_idx:]
-        y_train, y_test = y[:split_idx], y[split_idx:]
-        # --------------------------
-        # 步骤2：构建并训练模型
-        # --------------------------
-        max_seq_len = 200
-        model = build_lstm_model_class(max_seq_len=max_seq_len, feat_dim=7)
-        # 训练模型
-        print("\n开始训练模型...")
-        history = model.fit(
-            X_train, y_train,
-            batch_size=64,
-            epochs=20,
-            validation_data=(X_test, y_test),
-            shuffle=True
-        )
-        model.save('./dataset/pre_diff.h5')  # 会创建一个包含模型信息的文件夹
-        # 加载模型
-        model = tf.keras.models.load_model('./dataset/pre_diff.h5')
-
-        # 评估模型
-        test_loss, test_acc = model.evaluate(X_test, y_test)
-        print(f"\n测试集性能：损失={test_loss:.4f}, 准确率={test_acc:.4f}")
-
-        print('停了')
-        return
-        print('没停')
-
         digit = int(self.datas[0].digits[0])
         zigzag_points = self.zigzag_calculator.get_zigzag_points()
 
@@ -211,6 +121,16 @@ class ResWMpredictByModelData(bt.Strategy):
         #
         # pass
 
+        with open('./dataset/all_wm_pattern_kline.pkl', 'rb') as file:
+            all_wm_pattern = pickle.load(file)
+        with open('./dataset/all_no_pattern_kline.pkl', 'rb') as file:
+            all_none_pattern = pickle.load(file)
+        for i in all_wm_pattern:
+            if "W" in i['pattern_type']:
+                self.W_sum += 1
+            if "M" in i['pattern_type']:
+                self.M_sum += 1
+
         all_save_pattern = all_wm_pattern + all_none_pattern[:len(all_wm_pattern)]  # 保存的全部形态数据
         # 指标时间段内的全部形态
         all_5point = self.pattern_recognizer.get_all_5point_list()
@@ -230,6 +150,8 @@ class ResWMpredictByModelData(bt.Strategy):
         print(all_wm_pattern[0])
         print(all_none_pattern[0])
 
+        from utils.module.t2 import extract_data_to_diffclass, build_lstm_model_status, build_lstm_model_class, \
+            extract_xdata, extract_data_to_statusclass
         #  ----------------------------------------这里先预测是否是形态--------------------------------
         X, y = extract_data_to_statusclass(all_save_pattern)
         print(X.shape, y.shape)
