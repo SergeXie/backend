@@ -288,20 +288,20 @@ def extract_xdata(all_wm_pattern: List[Dict]):
         # --------------------------
         # 步骤1：提取当前W形态的关键数据
         # --------------------------
-        points = wm_dict["points"]
+        points = wm_dict.points
 
         # 前4点和第5点的price
-        p1 = points[0]["kline_data"]["price"]
-        p2 = points[1]["kline_data"]["price"]
-        p3 = points[2]["kline_data"]["price"]
-        p4 = points[3]["kline_data"]["price"]
+        p1 = points[0]["kline_data"].price
+        p2 = points[1]["kline_data"].price
+        p3 = points[2]["kline_data"].price
+        p4 = points[3]["kline_data"].price
 
         # 计算价差Δ和绝对值
         delta = p4 - p3
         abs_delta = np.abs(delta)
 
         # 提取前4点范围内的K线数据（target_klines）
-        target_klines = wm_dict["target_klines"]
+        target_klines = wm_dict.target_klines
 
         # --------------------------
         # 步骤2：构建K线序列特征（去除成交量特征）
