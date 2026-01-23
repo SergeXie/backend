@@ -9,83 +9,183 @@ import time
 import pandas as pd
 import os
 import pickle
+import json
+import ast
+from dataclasses import dataclass, field, fields, asdict
+from typing import List, Dict, Optional
 
 # ====================== 自定义模块导入 ======================
-# 请确保这些文件在你的 utils/module 目录下
+# 请确保这些模块路径在你的项目中是正确的
 from utils.module.zigzag_calculator_byclass import ZigZagCalculator
 from utils.module.wm_pattern_recognizer import WMPatternRecognizer2
+from utils.module.wm_pattern_recognizer import StandardMPattern, StandardWPattern, StandardPattern, PatternBase
 
 # ====================== 数据库配置 ======================
 db_url = 'mysql+pymysql://cmdb:cmdb123456@192.168.1.126/dql'
 engine = create_engine(db_url, pool_recycle=3600, echo=False)
 
-# ====================== 内存缓存配置 (用于短时缓存) ======================
-CACHE = {}
-CACHE_EXPIRE_SECONDS = 3600
+# ====================== ORM 模型定义 ======================
+from sqlalchemy import Column, String, Integer, DateTime, Text, JSON, Float, and_
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+Base = declarative_base()
 
 
-def get_cache_key(goods, periods, endTime):
-    return f"{goods}_{periods}_{endTime}"
-
-
-def get_cached_result(goods, periods, endTime):
-    key = get_cache_key(goods, periods, endTime)
-    if key not in CACHE:
-        return None
-    expire_time, result = CACHE[key]
-    if datetime.datetime.now() > expire_time:
-        del CACHE[key]
-        return None
-    return result
-
-
-def set_cache_result(goods, periods, endTime, result):
-    key = get_cache_key(goods, periods, endTime)
-    expire_time = datetime.datetime.now() + datetime.timedelta(seconds=CACHE_EXPIRE_SECONDS)
-    CACHE[key] = (expire_time, result)
-
-
-# ====================== 磁盘存档管理器 (新增) ======================
-class DiskCacheManager:
+class WMPatternResult(Base):
     """
-    负责将长周期的历史计算结果持久化到磁盘 (Pickle格式)
+    用于存储计算出的 WM 形态结果
     """
+    __tablename__ = 'dql_wm_patterns_results'
 
-    def __init__(self, cache_dir='./dataset/wm'):
-        self.cache_dir = cache_dir
-        if not os.path.exists(cache_dir):
-            try:
-                os.makedirs(cache_dir)
-            except Exception as e:
-                print(f"创建缓存目录失败: {e}")
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    goods = Column(String(50), index=True, nullable=False)
+    period = Column(String(20), index=True, nullable=False)
 
-    def _get_path(self, goods, periods, split_time):
-        # 将时间字符串转换为安全的文件名
-        safe_time = str(split_time).replace(':', '').replace(' ', '_').replace('-', '')
-        filename = f"{goods}_{periods}_{safe_time}.pkl"
-        return os.path.join(self.cache_dir, filename)
+    # 形态的关键时间点
+    start_timestamp = Column(String(30))
+    end_timestamp = Column(String(30), index=True)
 
-    def save(self, goods, periods, split_time, data):
-        path = self._get_path(goods, periods, split_time)
+    # 形态名称 (如: M形态, W1形态)
+    pattern_title = Column(String(100))
+
+    # 使用 JSON 类型存储完整的形态数据 (包含 points, target_klines 等)
+    # MySQL 5.7+ 的 JSON 类型会自动处理序列化/反序列化
+    detail_data = Column(JSON)
+
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
+
+Session = sessionmaker(bind=engine)
+
+
+# ====================== 数据库缓存管理器 (核心修改) ======================
+class DatabaseCacheManager:
+    def __init__(self):
+        pass
+
+    def _serialize_pattern(self, p: StandardPattern) -> dict:
+        """
+        将 StandardPattern 对象转换为可存入数据库的字典。
+        现在包含 target_klines。
+        """
+        # 1. 将 dataclass 转为字典
+        p_dict = asdict(p)
+
+        # 2. 数据清理/检查
+        # 之前我们删除了 target_klines，现在保留它。
+        # target_klines 是 List[Dict]，可以直接被 MySQL JSON 字段支持。
+
+        # 可选：如果 target_klines 为 None，可以初始化为空列表，方便后续处理
+        if p_dict.get('target_klines') is None:
+            p_dict['target_klines'] = []
+
+        return {
+            "start_timestamp": p.start_timestamp,
+            "end_timestamp": p.end_timestamp,
+            "pattern_title": p.value,
+            "detail_data": p_dict  # 包含 target_klines 的完整数据
+        }
+
+    def _deserialize_pattern(self, db_row: WMPatternResult) -> StandardPattern:
+        """
+        将数据库行数据还原为 StandardMPattern 或 StandardWPattern 对象。
+        """
+        # 1. 获取 JSON 数据 (SQLAlchemy 会自动将 JSON 列转为 Python 字典)
+        data = db_row.detail_data if db_row.detail_data else {}
+
+        # 2. 确定目标类
+        pattern_title = db_row.pattern_title or data.get('value', '')
+
+        if 'W' in pattern_title:
+            target_cls = StandardWPattern
+        else:
+            target_cls = StandardMPattern  # 默认为 M
+
+        # 3. 过滤有效字段并构造参数
+        valid_fields = {f.name for f in fields(target_cls)}
+        init_kwargs = {}
+
+        for k, v in data.items():
+            if k in valid_fields:
+                init_kwargs[k] = v
+
+        # 4. 确保 target_klines 存在
+        # 如果数据库里的 JSON 这一项是 null 或不存在，我们给它补一个空列表或 None
+        if 'target_klines' in valid_fields and 'target_klines' not in init_kwargs:
+            init_kwargs['target_klines'] = []
+
+        # 5. 实例化
         try:
-            with open(path, 'wb') as f:
-                pickle.dump(data, f)
-            print(f"💾 [磁盘存档] 已保存至: {path}, 数据条数: {len(data)}")
+            return target_cls(**init_kwargs)
         except Exception as e:
-            print(f"❌ [磁盘存档] 保存失败: {e}")
+            # 增加一些容错日志
+            print(f"⚠️ [DB反序列化] 转换失败 ID: {db_row.id}, 类型: {pattern_title}, 错误: {e}")
+            return None
 
-    def load(self, goods, periods, split_time):
-        path = self._get_path(goods, periods, split_time)
-        if os.path.exists(path):
-            try:
-                with open(path, 'rb') as f:
-                    data = pickle.load(f)
-                print(f"📂 [磁盘存档] 已加载: {path}, 数据条数: {len(data)}")
-                return data
-            except Exception as e:
-                print(f"⚠️ [磁盘存档] 读取失败 (可能文件损坏): {e}")
-                return None
-        return None
+    def load_history(self, goods, periods, split_time) -> List[StandardPattern]:
+        """
+        从数据库加载 <= split_time 的所有历史形态
+        """
+        session = Session()
+        try:
+            results = session.query(WMPatternResult).filter(
+                WMPatternResult.goods == goods,
+                WMPatternResult.period == periods,
+                WMPatternResult.end_timestamp <= split_time
+            ).order_by(WMPatternResult.end_timestamp.asc()).all()
+
+            if not results:
+                return []
+
+            patterns = []
+            for r in results:
+                p_obj = self._deserialize_pattern(r)
+                if p_obj:
+                    patterns.append(p_obj)
+
+            # 可以在这里打印一下第一条数据的 target_klines 长度，确认是否加载成功
+            if patterns:
+                first_len = len(patterns[0].target_klines) if patterns[0].target_klines else 0
+                print(f"📂 [DB读取] 已加载 {len(patterns)} 条历史数据 (首条K线数: {first_len})")
+
+            return patterns
+        except Exception as e:
+            print(f"⚠️ [DB读取] 失败: {e}")
+            return []
+        finally:
+            session.close()
+
+    def save_bulk(self, goods, periods, patterns: List[StandardPattern]):
+        """
+        批量保存形态数据
+        """
+        if not patterns:
+            return
+
+        session = Session()
+        try:
+            orm_objects = []
+            for p in patterns:
+                data = self._serialize_pattern(p)
+
+                obj = WMPatternResult(
+                    goods=goods,
+                    period=periods,
+                    start_timestamp=data['start_timestamp'],
+                    end_timestamp=data['end_timestamp'],
+                    pattern_title=data['pattern_title'],
+                    detail_data=data['detail_data']
+                )
+                orm_objects.append(obj)
+
+            session.add_all(orm_objects)
+            session.commit()
+            print(f"💾 [DB保存] 已写入数据库: {len(orm_objects)} 条 (含target_klines)")
+        except Exception as e:
+            session.rollback()
+            print(f"❌ [DB保存] 失败: {e}")
+        finally:
+            session.close()
 
 
 # ====================== 数据库查询辅助 ======================
@@ -112,6 +212,7 @@ def select_goods_common(goods):
 
 # ====================== 数据加载 ======================
 def get_kline_data_optimized(goods, periods, endTime, beginTime):
+    # ... (保持不变，省略以节省空间) ...
     start_time = time.perf_counter()
     try:
         good_table, tradingGoods = select_goods_common(goods)
@@ -158,7 +259,6 @@ def get_kline_data_optimized(goods, periods, endTime, beginTime):
         df.set_index('datetime', inplace=True)
 
         data = PandasDataPlus(dataname=df)
-        print(f"数据加载完成，行数: {len(df)}，用时: {time.perf_counter() - start_time:.4f}秒")
         return data
 
     except Exception as e:
@@ -189,18 +289,14 @@ class ResWMpredictByMathData(bt.Strategy):
         self.inp_depth = 12
         self.all_kline_data = []
 
-        # 实例化算法类
         self.zigzag_calculator = ZigZagCalculator(inp_depth=self.inp_depth)
         self.pattern_recognizer = WMPatternRecognizer2()
 
-        # 确保数据长度足够
         self.addminperiod(self.inp_depth)
 
-        # 耗时统计
         self.next_total_time = 0.0
         self.ts_list = []
 
-        # 【优化1】预先缓存 Data Lines 的引用，减少 next 中的属性查找开销
         self.d_klineId = self.data.klineId
         self.d_open = self.data.open
         self.d_high = self.data.high
@@ -208,36 +304,21 @@ class ResWMpredictByMathData(bt.Strategy):
         self.d_close = self.data.close
         self.d_volume = self.data.volume
 
-        # 【优化2】预先计算所有时间字符串
-        # 警告：这是基于 runonce=True (默认) 的假设，数据已全部加载
-        # 这消除了 next() 中极慢的 strftime 操作
-        print("正在预处理时间索引...")
-        t0 = time.perf_counter()
         self.all_date_strings = [
             bt.num2date(x).strftime('%Y-%m-%d %H:%M:%S')
             for x in self.data.datetime.array
         ]
-        print(f"时间预处理完成，耗时: {time.perf_counter() - t0:.4f}秒")
 
     def next(self):
-        t_start = time.perf_counter()
-
-        # 检查长度
         if len(self) < self.inp_depth:
-            self.next_total_time += time.perf_counter() - t_start
             return
 
-        # 【优化3】直接通过索引获取预处理好的时间字符串
-        # len(self) 返回的是当前已处理的总长度，-1 即为当前索引
         idx = len(self) - 1
         current_ts_str = self.all_date_strings[idx]
-
-        # 获取当前 klineId (转int)
         k_id = int(self.d_klineId[0])
 
         self.Id_TS_dict[k_id] = current_ts_str
 
-        # 【优化4】构造字典时直接使用缓存的 line 引用，不再调用 self.data.xxx
         current_kline_data = {
             "kLineId": k_id,
             "timestamp": current_ts_str,
@@ -251,179 +332,107 @@ class ResWMpredictByMathData(bt.Strategy):
         self.all_kline_data.append(current_kline_data)
         self.ts_list.append(current_ts_str)
 
-        self.Ts_to_hloc[current_ts_str] = [
-            self.d_high[0], self.d_low[0], self.d_open[0], self.d_close[0]
-        ]
-
-        # 处理ZigZag点
         self.zigzag_calculator.process_kline(current_kline_data)
 
-        self.next_total_time += time.perf_counter() - t_start
-
     def stop(self):
-        start_time = time.perf_counter()
-        # print(f"⏱️ next() 方法总耗时: {self.next_total_time:.6f} 秒")
-
         zigzag_points = self.zigzag_calculator.get_zigzag_points(as_dict=False)
-
-        # 批量处理
         min_points = 5
         if len(zigzag_points) >= min_points:
-            # 这里如果 zigzag 点很多，循环切片依然耗时，但比 next 里的开销小
             for i in range(min_points, len(zigzag_points) + 1):
                 window = zigzag_points[i - min_points: i]
                 self.pattern_recognizer.analyze_zigzag_points(window)
 
-        # print(f"stop后处理用时: {time.perf_counter() - start_time:.6f}秒")
-
     def get_analysis(self):
-        start_time = time.perf_counter()
-
         wm_pattern = self.pattern_recognizer.get_pattern_titles()
         ts_list = self.ts_list
         kline_data = self.all_kline_data
 
-        # 二分查找快速匹配 K线数据
         for pattern in wm_pattern:
+            # 填充 target_klines
             start_idx = bisect.bisect_left(ts_list, pattern.start_timestamp)
             end_idx = bisect.bisect_right(ts_list, pattern.end_timestamp)
+
+            # 这是一个 List[Dict]，会被保存到 detail_data 中
             pattern.target_klines = kline_data[start_idx:end_idx]
 
-        # print(f"get_analysis匹配用时: {time.perf_counter() - start_time:.6f}秒")
         return wm_pattern
 
 
-# ====================== 基础运行函数 ======================
-def run_strategy(goods, periods, endTime, beginTime, force_refresh=False):
-    """
-    基础策略运行函数，执行一次 Backtrader 回测
-    """
-    # 1. 内存缓存检查 (仅在非强制刷新时)
-
+# ====================== 基础运行函数  ======================
+def run_strategy(goods, periods, endTime, beginTime):
     cerebro = bt.Cerebro()
-
-    # 加载数据
     data = get_kline_data_optimized(goods, periods, endTime, beginTime)
     if data is None:
         return []
 
     cerebro.adddata(data)
     cerebro.addstrategy(ResWMpredictByMathData)
-
-    # 运行策略
-    # print(f"🚀,{goods},{periods} 开始计算: {beginTime} 至 {endTime}")
-    t_start = time.perf_counter()
     result = cerebro.run(stdstats=False, runonce=True)
-
-    # 获取结果
-    trader_return = result[0].get_analysis()
-
-    # 写入内存缓存
-    set_cache_result(goods, periods, endTime, trader_return)
-    # print(f"✅ 计算完成，耗时: {time.perf_counter() - t_start:.4f}秒，发现形态数: {len(trader_return)}")
-
-    return trader_return
+    return result[0].get_analysis()
 
 
-# ====================== 增量运行函数 (核心逻辑) ======================
+# ====================== 增量运行函数 ======================
 def run_strategy_incremental(goods, periods, history_split_time, current_end_time,
                              history_begin_time="2000-01-01 00:00:00"):
-    """
-    增量运行策略：
-    1. 检查是否有截止到 history_split_time 的磁盘存档。
-    2. 如果没有，计算历史数据并保存。
-    3. 如果有，加载存档，并计算 [history_split_time - buffer] 到 [current_end_time] 的新数据。
-    4. 合并结果。
-    """
-    disk_manager = DiskCacheManager()
+    db_manager = DatabaseCacheManager()
 
-    # --- 1. 获取历史存档 ---
-    history_patterns = disk_manager.load(goods, periods, history_split_time)
+    # 1. 尝试从数据库加载历史 (现在包含 target_klines)
+    history_patterns = db_manager.load_history(goods, periods, history_split_time)
 
-    if history_patterns is None:
-        print(f"⚡ 未检测到历史存档，开始全量计算历史部分 ({history_begin_time} -> {history_split_time})...")
-        history_patterns = run_strategy(goods, periods, history_split_time, history_begin_time, force_refresh=True)
-        # 保存到磁盘
-        disk_manager.save(goods, periods, history_split_time, history_patterns)
+    if not history_patterns:
+        print(f"⚡ 未检测到数据库历史记录，开始全量计算历史部分...")
+        history_patterns = run_strategy(goods, periods, history_split_time, history_begin_time)
+        if history_patterns:
+            db_manager.save_bulk(goods, periods, history_patterns)
 
-    # --- 2. 准备增量计算区间 (包含回溯缓冲) ---
-    # 我们不能只从 split_time 开始算，因为 ZigZag 需要上下文。
-    # 这里我们往前推 30 天 (针对 M5/H1 周期足够，日线可适当增加)
-
+    # 2. 增量计算
     split_dt = pd.to_datetime(history_split_time)
-    buffer_days = 60  # 缓冲期，保证ZigZag计算稳定
-    overlap_start_dt = split_dt - datetime.timedelta(days=buffer_days)
+    overlap_start_dt = split_dt - datetime.timedelta(days=60)
     overlap_start_str = overlap_start_dt.strftime('%Y-%m-%d %H:%M:%S')
 
-    print(f"⚡ 开始增量计算 (含回溯缓冲): {overlap_start_str} -> {current_end_time}")
+    print(f"⚡ 开始增量计算: {overlap_start_str} -> {current_end_time}")
+    new_patterns_raw = run_strategy(goods, periods, current_end_time, overlap_start_str)
 
-    # 强制刷新计算新的一段，不走内存缓存
-    new_patterns_raw = run_strategy(goods, periods, current_end_time, overlap_start_str, force_refresh=True)
-
-    # --- 3. 结果过滤与合并 ---
+    # 3. 合并逻辑
     if not history_patterns:
-        # 如果历史为空（虽然前面已经处理了，但防万一），直接返回新的
+        if new_patterns_raw:
+            db_manager.save_bulk(goods, periods, new_patterns_raw)
         return new_patterns_raw
 
-    # 获取历史记录中最后一个形态的结束时间
-    # 假设 pattern 对象有 end_timestamp 属性，且格式为字符串 'YYYY-MM-DD HH:MM:SS'
     last_hist_pattern = history_patterns[-1]
-    last_hist_ts = last_hist_pattern.end_timestamp
-
-    print(f"🔍 正在拼接... 历史最后形态时间: {last_hist_ts}")
+    last_hist_ts = pd.to_datetime(last_hist_pattern.end_timestamp)
 
     valid_new_patterns = []
-    skipped_count = 0
 
     for p in new_patterns_raw:
-        # 字符串比较：保留结束时间晚于历史最后一条记录的形态
-        # 这样避免了重复记录，也解决了边界不一致的问题
-        if p.end_timestamp > last_hist_ts:
+        current_p_ts = pd.to_datetime(p.end_timestamp)
+        if current_p_ts > last_hist_ts:
             valid_new_patterns.append(p)
-        else:
-            skipped_count += 1
 
-    print(
-        f"📊 合并统计: 历史存档 {len(history_patterns)} 条 + 新增有效 {len(valid_new_patterns)} 条 (重叠过滤掉 {skipped_count} 条)")
+    print(f"📊 合并统计: 历史 {len(history_patterns)} + 新增 {len(valid_new_patterns)}")
 
-    # 列表拼接
-    final_result = history_patterns + valid_new_patterns
+    if valid_new_patterns:
+        db_manager.save_bulk(goods, periods, valid_new_patterns)
 
-    return final_result
+    # 返回全部对象
+    return history_patterns + valid_new_patterns
 
 
 # ====================== 测试入口 ======================
 if __name__ == "__main__":
-    # 配置参数
     test_goods = "FPG-XAUUSD"
     test_periods = "M5"
-
-    # 定义“历史”和“现在”的分割线
-    # 第一次运行时，会计算 2000-01-01 到 2025-01-01 的数据并存为pkl文件
-    # 下次运行时，直接读取pkl，只计算 2025-01-01 往后的数据
     HISTORY_SPLIT_POINT = "2025-01-01 00:00:00"
-
-    # 当前最新时间 (实际使用中可以用 datetime.datetime.now().strftime...)
-    # CURRENT_NOW = "2025-10-20 00:00:00"
     CURRENT_NOW = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    start_t = time.perf_counter()
-
-    # 调用增量运行函数
     final_patterns = run_strategy_incremental(
         goods=test_goods,
         periods=test_periods,
         history_split_time=HISTORY_SPLIT_POINT,
         current_end_time=CURRENT_NOW,
-        history_begin_time="2000-01-01 00:00:00"  # 这里为了测试快一点写了2020，你可以改成2000
+        history_begin_time="2000-01-01 00:00:00"
     )
 
     print(f"🎉 最终结果总数: {len(final_patterns)}")
-    print(f"🎉 全流程总耗时: {time.perf_counter() - start_t:.4f}秒")
-
-    # 简单打印最后几个结果验证
-    if final_patterns:
-        print("--- 最新生成的3个形态 ---")
-        for p in final_patterns[-3:]:
-
-            print(f"形态: {p.value} | 开始: {p.start_timestamp} | 结束: {p.end_timestamp}")
+    if final_patterns and final_patterns[0].target_klines:
+        print(f"✅ 数据校验: 第一条形态包含 {len(final_patterns[0].target_klines)} 条K线详情")
