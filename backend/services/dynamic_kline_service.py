@@ -64,17 +64,19 @@ class DynamicKlineService:
     # ================= 时间区间 =================
 
     def calc_period_range(self, period: str, now: datetime.datetime):
-        minutes = self.PERIOD_MINUTES[period]
+        minutes = self.PERIOD_MINUTES.get(period, None)
+        if minutes:
+            start = now.replace(
+                minute=(now.minute // minutes) * minutes,
+                second=0,
+                microsecond=0
+            )
+            start = start + datetime.timedelta(minutes=minutes)
+            end = start + datetime.timedelta(minutes=minutes)
 
-        start = now.replace(
-            minute=(now.minute // minutes) * minutes,
-            second=0,
-            microsecond=0
-        )
-        start = start + datetime.timedelta(minutes=minutes)
-        end = start + datetime.timedelta(minutes=minutes)
+            return start, end, minutes,period
 
-        return start, end, minutes
+
 
     # ================= 查询 =================
 
@@ -174,13 +176,14 @@ class DynamicKlineService:
         start_time_str: str,
         now: datetime.datetime
     ):
-        start_time, end_time, minutes = self.calc_period_range(period, now)
+        start_time, end_time, minutes, period_ = self.calc_period_range(period, now)
 
         # ---------- 0号K ----------
         m1_rows = await self.query_kline("M1", start_time, end_time)
         is_final = not bool(m1_rows)
 
         if m1_rows:
+            print("131313")
             df = pd.DataFrame([{
                 "tradeDateTime": x.tradeDateTime,
                 "opening": float(x.opening),
@@ -197,6 +200,9 @@ class DynamicKlineService:
             lineData = self.build_dynamic_bar(df, period, start_time)
 
         else:
+            print("13131")
+            print("start_time:{}".format(start_time))
+            print("end_time:{}".format(end_time))
             prev = await self.query_kline(
                 period,
                 start_time - datetime.timedelta(minutes=minutes),
