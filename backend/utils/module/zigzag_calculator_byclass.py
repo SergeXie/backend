@@ -189,7 +189,8 @@ class ZigZagCalculator:
                     high=current_high,
                     low=current_low,
                     close=current_close,
-                    open=current_open
+                    open=current_open,
+                    hloc=[current_high, current_low,current_open, current_close]
                 )
                 self.point_manager.add_point(new_point)
                 new_zigzag_point_generated = True
@@ -207,7 +208,8 @@ class ZigZagCalculator:
                     high=current_high,
                     low=current_low,
                     close=current_close,
-                    open=current_open
+                    open=current_open,
+                    hloc=[current_high, current_low,current_open, current_close]
                 )
                 self.point_manager.add_point(new_point)
                 new_zigzag_point_generated = True
@@ -227,7 +229,8 @@ class ZigZagCalculator:
                     high=current_high,
                     low=current_low,
                     close=current_close,
-                    open=current_open
+                    open=current_open,
+                    hloc=[current_high, current_low,current_open, current_close]
                 )
                 self.point_manager.add_point(new_point)
                 new_zigzag_point_generated = True
@@ -245,7 +248,8 @@ class ZigZagCalculator:
                     high=current_high,
                     low=current_low,
                     close=current_close,
-                    open=current_open
+                    open=current_open,
+                    hloc=[current_high, current_low,current_open, current_close]
                 )
                 self.point_manager.add_point(new_point)
                 new_zigzag_point_generated = True
@@ -265,7 +269,8 @@ class ZigZagCalculator:
                     high=current_high,
                     low=current_low,
                     close=current_close,
-                    open=current_open
+                    open=current_open,
+                    hloc=[current_high, current_low,current_open, current_close]
                 )
                 self.point_manager.add_point(new_point)
                 new_zigzag_point_generated = True
@@ -283,7 +288,8 @@ class ZigZagCalculator:
                     high=current_high,
                     low=current_low,
                     close=current_close,
-                    open=current_open
+                    open=current_open,
+                    hloc=[current_high, current_low,current_open, current_close]
                 )
                 self.point_manager.add_point(new_point)
                 new_zigzag_point_generated = True

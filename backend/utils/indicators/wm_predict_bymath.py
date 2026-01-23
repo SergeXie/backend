@@ -584,6 +584,7 @@ def add_dataset(dataset, zigzag_points_1for5, stutas=0):
     )
     return dataset
 
+
 def probability(zigzag_points, datafrom='m', weight=None):
     '''
     datafrom表示要计算概率的轴枢点，为m或为w
@@ -596,17 +597,29 @@ def probability(zigzag_points, datafrom='m', weight=None):
         thi = i[2]['kline_data']
         fou = i[3]['kline_data']
         fif = i[4]['kline_data']
+        # print('@@@', fif)
+
+        hloc_fif = get_hloc(fif)
+        hloc_thi = get_hloc(thi)
+        hloc_fou = get_hloc(fou)
+
         if datafrom == 'm':
-            p = (fif.hloc[1] - thi.hloc[1]) / (thi.hloc[1] - fou.hloc[0])
+            # m: 使用 low（hloc[1]）和 high（hloc[0]）
+            # 根据你原始注释：hloc = [high, low, open, close]
+            p = (hloc_fif[1] - hloc_thi[1]) / (hloc_thi[1] - hloc_fou[0])
         elif datafrom == 'w':
-            p = (fif.hloc[0] - thi.hloc[0]) / (thi.hloc[0] - fou.hloc[1])
+            # w: 使用 high（hloc[0]）和 low（hloc[1]）
+            p = (hloc_fif[0] - hloc_thi[0]) / (hloc_thi[0] - hloc_fou[1])
+        else:
+            raise ValueError("datafrom must be 'm' or 'w'")
+
         math_diff_list.append(p)
-    # print('math_diff_list', datafrom, math_diff_list)
+
     try:
         com = calculate_probability_distribution(math_diff_list, bins=[0, 1.0, 2.0, 3.0], weights=weight)
         return com
-    except:
-        print('error')
+    except Exception as e:
+        print('error in probability:', e)
         return None
 
 def calculate_probability_distribution(data, bins=None, num_bins=6, weights=None):
@@ -680,3 +693,11 @@ def calculate_probability_distribution(data, bins=None, num_bins=6, weights=None
         "intervals": intervals,
         "probabilities": probabilities.round(4).tolist()  # 保留4位小数
     }
+
+
+def get_hloc(obj):
+    """通用方式获取 hloc，兼容 dict 和 对象"""
+    if isinstance(obj, dict):
+        return obj['hloc']
+    else:
+        return obj.hloc

@@ -12,11 +12,12 @@ class ZigZagPoint:
     low: float  # K线最低价
     close: float  # K线收盘价
     open: float  # K线开盘价
+    hloc: List[float]
 
-    @property
-    def hloc(self) -> tuple:
-        """返回hloc元组"""
-        return (self.high, self.low, self.close, self.open)
+    # @property
+    # def hloc(self) -> tuple:
+    #     """返回hloc元组"""
+    #     return (self.high, self.low, self.close, self.open)
 
     def to_dict(self) -> dict:
         """转换为字典格式"""
