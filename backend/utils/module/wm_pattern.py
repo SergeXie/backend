@@ -18,7 +18,7 @@ from typing import List, Dict, Optional
 # 请确保这些模块路径在你的项目中是正确的
 from utils.module.zigzag_calculator_byclass import ZigZagCalculator
 from utils.module.wm_pattern_recognizer import WMPatternRecognizer2
-from utils.module.wm_pattern_recognizer import StandardMPattern, StandardWPattern, StandardPattern, PatternBase
+from utils.module.wm_pattern_recognizer import StandardMPattern, StandardWPattern, StandardPattern, MaybeMPattern, MaybeWPattern
 
 # ====================== 数据库配置 ======================
 db_url = 'mysql+pymysql://cmdb:cmdb123456@192.168.1.126/dql'
@@ -89,17 +89,27 @@ class DatabaseCacheManager:
     def _deserialize_pattern(self, db_row: WMPatternResult) -> StandardPattern:
         """
         将数据库行数据还原为 StandardMPattern 或 StandardWPattern 对象。
+        增加容错处理：自动补全缺失的字段。
         """
-        # 1. 获取 JSON 数据 (SQLAlchemy 会自动将 JSON 列转为 Python 字典)
+        # 1. 获取 JSON 数据
         data = db_row.detail_data if db_row.detail_data else {}
 
         # 2. 确定目标类
         pattern_title = db_row.pattern_title or data.get('value', '')
-
-        if 'W' in pattern_title:
+        # 1. 先拦截 "Maybe" 的情况 (W3, M3)
+        if 'W3' in pattern_title:
+            target_cls = MaybeWPattern
+        elif 'M3' in pattern_title:
+            target_cls = MaybeMPattern
+        elif '可能W' in pattern_title:
             target_cls = StandardWPattern
-        else:
-            target_cls = StandardMPattern  # 默认为 M
+        elif '可能M' in pattern_title:
+            target_cls = StandardMPattern
+        elif 'W' in pattern_title:
+            target_cls = StandardWPattern
+        elif 'M' in pattern_title:
+            target_cls = StandardMPattern
+
 
         # 3. 过滤有效字段并构造参数
         valid_fields = {f.name for f in fields(target_cls)}
@@ -118,7 +128,6 @@ class DatabaseCacheManager:
         try:
             return target_cls(**init_kwargs)
         except Exception as e:
-            # 增加一些容错日志
             print(f"⚠️ [DB反序列化] 转换失败 ID: {db_row.id}, 类型: {pattern_title}, 错误: {e}")
             return None
 
@@ -344,6 +353,9 @@ class ResWMpredictByMathData(bt.Strategy):
 
     def get_analysis(self):
         wm_pattern = self.pattern_recognizer.get_pattern_titles()
+        non_m_pattern = self.pattern_recognizer.get_non_standard_m_patterns()
+        non_w_pattern = self.pattern_recognizer.get_non_standard_w_patterns()
+        wm_pattern = wm_pattern + non_w_pattern + non_m_pattern
         ts_list = self.ts_list
         kline_data = self.all_kline_data
 
@@ -376,16 +388,17 @@ def run_strategy_incremental(goods, periods, history_split_time, current_end_tim
                              history_begin_time="2000-01-01 00:00:00"):
     db_manager = DatabaseCacheManager()
 
-    # 1. 尝试从数据库加载历史 (现在包含 target_klines)
+    # 1. 尝试从数据库加载历史 (保持不变：读取缓存)
     history_patterns = db_manager.load_history(goods, periods, history_split_time)
 
     if not history_patterns:
         print(f"⚡ 未检测到数据库历史记录，开始全量计算历史部分...")
+        # 这里的逻辑保持不变：如果是历史部分缺失，计算后依然建议保存，以便下次作为缓存
         history_patterns = run_strategy(goods, periods, history_split_time, history_begin_time)
         if history_patterns:
             db_manager.save_bulk(goods, periods, history_patterns)
 
-    # 2. 增量计算
+    # 2. 增量计算 (保持不变)
     split_dt = pd.to_datetime(history_split_time)
     overlap_start_dt = split_dt - datetime.timedelta(days=60)
     overlap_start_str = overlap_start_dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -395,8 +408,10 @@ def run_strategy_incremental(goods, periods, history_split_time, current_end_tim
 
     # 3. 合并逻辑
     if not history_patterns:
-        if new_patterns_raw:
-            db_manager.save_bulk(goods, periods, new_patterns_raw)
+        # 如果没有历史记录，new_patterns_raw 就是全量数据
+        # 根据你的需求：因为这部分是“当前计算”的，如果也被视为增量/实时部分，则不保存
+        # 但通常如果第一次运行，这里可能也需要保存。
+        # 如果你希望严格执行“本次运行产生的新数据不保存”，这里也可以注释掉 save_bulk
         return new_patterns_raw
 
     last_hist_pattern = history_patterns[-1]
@@ -406,15 +421,22 @@ def run_strategy_incremental(goods, periods, history_split_time, current_end_tim
 
     for p in new_patterns_raw:
         current_p_ts = pd.to_datetime(p.end_timestamp)
+        # 只有时间晚于历史记录最后一条的，才算作“纯增量”
         if current_p_ts > last_hist_ts:
             valid_new_patterns.append(p)
 
     print(f"📊 合并统计: 历史 {len(history_patterns)} + 新增 {len(valid_new_patterns)}")
 
-    if valid_new_patterns:
-        db_manager.save_bulk(goods, periods, valid_new_patterns)
+    # ================= [核心修改] =================
+    # 原逻辑：保存增量数据
+    # if valid_new_patterns:
+    #     db_manager.save_bulk(goods, periods, valid_new_patterns)
 
-    # 返回全部对象
+    if valid_new_patterns:
+        print(f"🚀 [提示] 发现 {len(valid_new_patterns)} 条增量形态")
+    # =============================================
+
+    # 返回全部对象 (历史 + 增量)
     return history_patterns + valid_new_patterns
 
 

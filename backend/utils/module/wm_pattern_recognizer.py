@@ -632,6 +632,7 @@ class MaybePattern(PatternBase):
     start_fourth: int
     end_price: float
     end_kLineId: int
+    target_klines: list = field(default=None)
 
 
 
