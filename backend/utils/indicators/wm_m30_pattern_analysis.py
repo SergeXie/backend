@@ -5,8 +5,8 @@ import random
 import pandas as pd
 from backtrader.feeds import PandasData
 
-from utils.module.wm_pattern_recognizer import WMPatternRecognizer
-from utils.module.zigzag_calculator import ZigZagCalculator
+from utils.module.wm_pattern_recognizer import WMPatternRecognizer2
+from utils.module.zigzag_calculator_byclass import ZigZagCalculator
 from utils.indicators.packconnection import IndicatorDataProcessor
 from utils.indicators.packconnection import DataAnalysisOrganizer
 
@@ -27,7 +27,7 @@ class ResponseWMM30Data(bt.Strategy):
 
         # 实例化独立的算法类
         self.zigzag_calculator = ZigZagCalculator(inp_depth=self.p.inp_depth)
-        self.pattern_recognizer = WMPatternRecognizer()
+        self.pattern_recognizer = WMPatternRecognizer2()
         # 确保数据长度足够时再开始计算
         self.addminperiod(self.p.inp_depth)
 
@@ -107,12 +107,8 @@ class ResponseWMM30Data(bt.Strategy):
 
             # 如果ZigZag有更新，就通知形态识别器进行分析
             if new_zigzag_point_or_updated:
-                zigzag_points = self.zigzag_calculator.get_zigzag_points()
-                dict_index2ts, dict_ts2index = self.zigzag_calculator.get_index_timestamp_maps()
-                self.pattern_recognizer.analyze_zigzag_points(zigzag_points, dict_index2ts, dict_ts2index)
-
-
-
+                zigzag_points = self.zigzag_calculator.get_zigzag_points(as_dict=False)
+                self.pattern_recognizer.analyze_zigzag_points(zigzag_points)
 
 
             #################################################################################################
@@ -151,21 +147,21 @@ class ResponseWMM30Data(bt.Strategy):
 
         # pattern = m_tmp[-2]
         for pattern in m_tmp:
-            if 'M' in pattern['value']:
+            if 'M' in pattern.value:
                 multiple = self.get_multiple_m(self.h_list, self.l_list, self.o_list, self.c_list, self.ts_list, pattern)
                 # print(multiple)
-                if pattern['value'] == 'M2形态':
+                if pattern.value == 'M2形态':
                     m2_count.append(multiple)
-                if pattern['value'] == 'M1形态':
+                if pattern.value == 'M1形态':
                     m1_count.append(multiple)
 
         for pattern in w_tmp:
-            if 'W' in pattern['value']:
+            if 'W' in pattern.value:
                 multiple = self.get_multiple_w(self.h_list, self.l_list, self.o_list, self.c_list, self.ts_list, pattern)
                 # print(multiple)
-                if pattern['value'] == 'W2形态':
+                if pattern.value == 'W2形态':
                     w2_count.append(multiple)
-                if pattern['value'] == 'W1形态':
+                if pattern.value == 'W1形态':
                     w1_count.append(multiple)
 
 
@@ -203,12 +199,13 @@ class ResponseWMM30Data(bt.Strategy):
 
         # pattern_titles = self.pattern_recognizer.get_pattern_titles()  # 获取原始形态标题列表
         # maybe_pattern_titles = self.pattern_recognizer.get_maybe_detected_patterns()
-        show_pattern = self.indicator_params.get("show_mabye_pattern")
+        show_pattern = self.indicator_params.get("show_mabye_pattern",0)
+
         # print(show_pattern)
         if show_pattern == 0:  # 确认形态
             pattern_titles = self.pattern_recognizer.get_pattern_titles()  # 获取原始形态标题列表
         elif show_pattern == 1:
-            pattern_titles = self.pattern_recognizer.get_maybe_classification()
+            pattern_titles = self.pattern_recognizer.get_maybe_detected_patterns()
         print("这里@@@@@@@@@@@@")
         pattern_titles_non_w = self.pattern_recognizer.get_non_standard_w_patterns()
         pattern_titles_non_m = self.pattern_recognizer.get_non_standard_m_patterns()
@@ -241,10 +238,13 @@ class ResponseWMM30Data(bt.Strategy):
         return [self.result_data_dict["lines"], None, None]
 
     def get_multiple_m(self, h_list, l_list, o_list, c_list, ts_list, pattern, sta=''):
-        four_point_ts = pattern['points'][3]['timestamp']
+        print(pattern)
+        four_point_ts = pattern.points[3]['timestamp']
         # print(four_point_ts,'@@@@@@@@@')
         # 基础价差
-        base_diff = pattern['points'][3]['kline_data']['price'] - pattern['points'][2]['kline_data']['price']
+        # base_diff = pattern['points'][3]['kline_data']['price'] - pattern['points'][2]['kline_data']['price']
+        base_diff = pattern.points[3]['kline_data'].price - pattern.points[2]['kline_data'].price
+
         # print(pattern['points'][3]['kline_data']['price'] , pattern['points'][2]['kline_data']['price'])
 
         # 1. 找到目标时间在时间戳列表中的索引
@@ -275,29 +275,29 @@ class ResponseWMM30Data(bt.Strategy):
             min_index_in_slice = tmp_slice.index(min_l) + h1_index
 
         except:
-            min_l = pattern['points'][3]['kline_data']['price']
+            min_l = pattern.points[3]['kline_data'].price
             min_index_in_slice = h1_index
         # 真实价差
-        diff = min_l - pattern['points'][3]['kline_data']['price']
+        diff = min_l - pattern.points[3]['kline_data'].price
         # print(min_l)
 
-        start_ts = pattern.get('start')
-        high_price = pattern.get('leftTop_price')
-        if l_list[min_index_in_slice] < pattern.get('rigthBottom_price'):
+        start_ts = pattern.start
+        high_price = pattern.leftTop_price
+        if l_list[min_index_in_slice] < pattern.rightBottom_price:
             end_ts = ts_list[min_index_in_slice]
             low_price = l_list[min_index_in_slice]
         else:
-            end_ts = pattern.get('end')
-            low_price = pattern.get('rigthBottom_price')
+            end_ts = pattern.end
+            low_price = pattern.rightBottom_price
         self.all_wm_picture_list = list_add(self.all_wm_picture_list, pattern, start_ts, end_ts, high_price, low_price)
 
         return abs(diff/base_diff)
 
     def get_multiple_w(self, h_list, l_list, o_list, c_list, ts_list, pattern,  sta=''):
-        four_point_ts = pattern['points'][3]['timestamp']
+        four_point_ts = pattern.points[3]['timestamp']
         # print(four_point_ts,'@@@@@@@@@')
         # 基础价差
-        base_diff = pattern['points'][3]['kline_data']['price'] - pattern['points'][2]['kline_data']['price']
+        base_diff = pattern.points[3]['kline_data'].price - pattern.points[2]['kline_data'].price
         # print(pattern['points'][3]['kline_data']['price'] , pattern['points'][2]['kline_data']['price'])
 
         # 1. 找到目标时间在时间戳列表中的索引
@@ -327,20 +327,20 @@ class ResponseWMM30Data(bt.Strategy):
             max_h = max(tmp_slice)
             max_index_in_slice = tmp_slice.index(max_h) + l1_index
         except:
-            max_h = pattern['points'][3]['kline_data']['price']
+            max_h = pattern.points[3]['kline_data'].price
             max_index_in_slice = l1_index
         # 真实价差
-        diff = max_h - pattern['points'][3]['kline_data']['price']
+        diff = max_h - pattern.points[3]['kline_data'].price
         # print(max_h)
 
-        start_ts = pattern.get('start')
-        low_price = pattern.get('rigthBottom_price')
-        if h_list[max_index_in_slice] < pattern.get('rigthBottom_price'):
+        start_ts = pattern.start
+        low_price = pattern.rightBottom_price
+        if h_list[max_index_in_slice] < pattern.rightBottom_price:
             end_ts = ts_list[max_index_in_slice]
             high_price = h_list[max_index_in_slice]
         else:
-            end_ts = pattern.get('end')
-            high_price = pattern.get('rigthBottom_price')
+            end_ts = pattern.end
+            high_price = pattern.rightBottom_price
         self.all_wm_picture_list = list_add(self.all_wm_picture_list, pattern, start_ts, end_ts, high_price, low_price)
 
         return abs(diff/base_diff)
@@ -360,7 +360,7 @@ def list_add(wm_list, pattern, start_ts, end_ts, high_price, low_price):
                 "time": end_ts,
                 "price": low_price
             },
-            "classType": pattern.get('value')  # 添加形态类型
+            "classType": pattern.value  # 添加形态类型
         }]
     })
     return my_list

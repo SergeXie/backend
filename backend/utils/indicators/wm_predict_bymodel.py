@@ -41,8 +41,8 @@ class ResWMpredictByModelData(bt.Strategy):
 
         # ----------
         # 参数 # 0为指标,1为模型
-        self.wm_from = self.indicator_params.get('WMfrom', 0)
-        self.pre_from = self.indicator_params.get('Prefrom', 0)
+        self.wm_from = self.indicator_params.get('WMfrom', 1)
+        self.pre_from = self.indicator_params.get('Prefrom', 1)
         # ---------
 
         # 实例化独立的算法类
@@ -156,7 +156,7 @@ class ResWMpredictByModelData(bt.Strategy):
         print('正在请求形态分类')
         response = call_dl_api2(
             # url=settings.AI_URL,
-            url='http://192.168.1.182:8083/api/ai/myai',
+            url='http://192.168.1.60:8083/api/ai/myai',
             task='wm_predic_v2',
             goods=self.kline_goods,
             period=self.kline_period,
@@ -332,7 +332,7 @@ class ResWMpredictByModelData(bt.Strategy):
             print('正在请求概率计算')
             response = call_dl_api2(
                 # url=settings.AI_URL,
-                url='http://192.168.1.182:8083/api/ai/myai',
+                url='http://192.168.1.60:8083/api/ai/myai',
                 task='wm_predic_v3',
                 goods=self.kline_goods,
                 period=self.kline_period,
