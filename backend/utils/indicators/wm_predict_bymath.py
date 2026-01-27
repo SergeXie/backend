@@ -35,6 +35,7 @@ class ResWMpredictByMathData(bt.Strategy):
         self.W_sum = 0
         self.M_sum = 0
         self.all_kline_data = []
+        self.BarStateText1 = []
         Z_from = indicator_params.get("Zfrom", 1)
         self.Z_from = 'pc' if Z_from == 0 else 'zig'
 
@@ -236,6 +237,12 @@ class ResWMpredictByMathData(bt.Strategy):
                         "price2": [base_price-price_diff, base_price + price_diff * 2],
                         "timestamp": self.Id_TS_dict.get(klineId),
                     })
+                self.BarStateText1.append({
+                    "kLineId": maybe_m.kLineId,
+                    "price": maybe_m.price,
+                    "timestamp": self.Id_TS_dict.get(maybe_m.kLineId),
+                    "value": maybe_m.value
+                })
 
             # -----------获取最后一个可能的w，用于计算概率----------------
             for maybe_w in self.pattern_recognizer.get_maybe_w_patterns():
@@ -280,10 +287,18 @@ class ResWMpredictByMathData(bt.Strategy):
                         "price2": [base_price-price_diff, base_price + price_diff * 2],
                         "timestamp": self.Id_TS_dict.get(klineId),
                     })
+                self.BarStateText1.append({
+                    "kLineId": maybe_w.kLineId,
+                    "price": maybe_w.price,
+                    "timestamp": self.Id_TS_dict.get(maybe_w.kLineId),
+                    "value": maybe_w.value
+                })
+
 
 
         elif show_pattern == 0:  # 确认形态
-            for standard_m in self.pattern_recognizer.get_standard_m_patterns():
+            standard_m_list = self.pattern_recognizer.get_standard_m_patterns()
+            for standard_m in standard_m_list:
                 last_m_start = standard_m.start
                 base_time = datetime.strptime(last_m_start, time_format)
                 early_indices = [idx for idx, t in enumerate(time_list) if t < base_time]
@@ -320,8 +335,15 @@ class ResWMpredictByMathData(bt.Strategy):
                         "price2": [standard_m.end_price, standard_m.end_price + price_diff * 2],
                         "timestamp": self.Id_TS_dict.get(klineId),
                     })
+                self.BarStateText1.append({
+                    "kLineId": standard_m.kLineId,
+                    "price": standard_m.price,
+                    "timestamp": self.Id_TS_dict.get(standard_m.kLineId),
+                    "value": standard_m.value
+                })
 
-            for standard_w in self.pattern_recognizer.get_standard_w_patterns():
+            standard_w_list = self.pattern_recognizer.get_standard_w_patterns()
+            for standard_w in standard_w_list:
                 last_w_start = standard_w.start
                 base_time = datetime.strptime(last_w_start, time_format)
                 early_indices = [idx for idx, t in enumerate(time_list) if t < base_time]
@@ -355,9 +377,16 @@ class ResWMpredictByMathData(bt.Strategy):
                     "price2": [standard_w.end_price, standard_w.end_price + price_diff * 2],
                     "timestamp": self.Id_TS_dict.get(klineId),
                 })
+                self.BarStateText1.append({
+                    "kLineId": standard_w.kLineId,
+                    "price": standard_w.price,
+                    "timestamp": self.Id_TS_dict.get(standard_w.kLineId),
+                    "value": standard_w.value
+                })
 
 
     def get_analysis(self):
+        print(self.BarStateText1)
         zigzag_points = self.pattern_recognizer.get_zigzag_points()
         self.result_data_dict["lines"] = [
             {
@@ -394,13 +423,24 @@ class ResWMpredictByMathData(bt.Strategy):
             "color": self.indicator_params.get("DnColor", "#FF0000"),
             "data": f"W1形态个数: {self.counts['W1形态']}, M1形态个数: {self.counts['M1形态']},"
                     f"W2形态个数: {self.counts['W2形态']}, M2形态个数: {self.counts['M2形态']},"
+                    f"W3形态个数: {self.counts['W3形态']}, M3形态个数: {self.counts['M3形态']},"
         })
         # 画竖线
         for i in self.verticalBrokenline:
             self.result_data_dict["lines"].append({
                 "type": "verticalBrokenline",
-                "color": self.indicator_params.get("DnColor", "#FF0000"),
+                "color": self.indicator_params.get("FFFF00", "#FFFF00"),
                 "data": [i]
+            })
+        # 写形态
+        for i in self.BarStateText1:
+            # print(i)
+            self.result_data_dict["lines"].append({
+                "type": "text",
+                "TextColor": self.indicator_params.get("TextColor", "#0000FF"),
+                "BackgroundColor": self.indicator_params.get("BackgroundColor", "#FFFFFF"),
+                "position": 'top',
+                "data": [i],
             })
         return [self.result_data_dict["lines"], None, None]
 

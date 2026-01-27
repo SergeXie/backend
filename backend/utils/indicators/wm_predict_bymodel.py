@@ -403,7 +403,7 @@ class ResWMpredictByModelData(bt.Strategy):
         for i in self.verticalBrokenline:
             self.result_data_dict["lines"].append({
                 "type": "verticalBrokenline",
-                "color": self.indicator_params.get("DnColor", "#FF0000"),
+                "color": self.indicator_params.get("FFFF00", "#FFFF00"),
                 "data": [i]
             })
 
