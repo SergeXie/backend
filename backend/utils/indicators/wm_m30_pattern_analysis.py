@@ -9,7 +9,8 @@ from utils.module.wm_pattern_recognizer import WMPatternRecognizer2
 from utils.module.zigzag_calculator_byclass import ZigZagCalculator
 from utils.indicators.packconnection import IndicatorDataProcessor
 from utils.indicators.packconnection import DataAnalysisOrganizer
-
+from utils.indicators.peak_trough import PeakTroughIndicator, PeakTroughType
+from utils.module.wm_pk_point_calculator import PeakTroughPointCalculator
 
 # 假设 ZigZagCalculator 和 WMPatternRecognizer 已经在当前文件中定义或已导入
 
@@ -28,11 +29,13 @@ class ResponseWMM30Data(bt.Strategy):
         # 实例化独立的算法类
         self.zigzag_calculator = ZigZagCalculator(inp_depth=self.p.inp_depth)
         self.pattern_recognizer = WMPatternRecognizer2()
+        self.pk_point_calculator = PeakTroughPointCalculator()
         # 确保数据长度足够时再开始计算
         self.addminperiod(self.p.inp_depth)
 
         ##################################################################
         self.data_processor = IndicatorDataProcessor(self.data, indicator_params)
+        self.peak_trough = PeakTroughIndicator(self.data)
         self.result_data = []
         self.result_data_original = []
         self.po_high = []
@@ -70,6 +73,7 @@ class ResponseWMM30Data(bt.Strategy):
         self.w2_list = []
         self.w3_list = []
         self.all_wm_picture_list = []
+        self.kLineId_to_all={}
 
         self.zigzag = []
         Z_from = indicator_params.get("Zfrom", 1)
@@ -77,7 +81,19 @@ class ResponseWMM30Data(bt.Strategy):
 
 
     def next(self):
+
+
         ts = self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S')
+        current_kline_data = {
+            "kLineId": self.data.klineId[0],  # 假设datafeed提供了klineId
+            "timestamp": self.data.datetime.datetime(0).strftime('%Y-%m-%d %H:%M:%S'),
+            "open": self.data.open[0],
+            "high": self.data.high[0],
+            "low": self.data.low[0],
+            "close": self.data.close[0],
+            "volume": self.data.volume[0],
+        }
+        self.kLineId_to_all[int(self.data.klineId[0])] = current_kline_data
         self.ts_list.append(ts)
         self.h_list.append(self.data.high[0])
         self.l_list.append(self.data.low[0])
@@ -112,18 +128,24 @@ class ResponseWMM30Data(bt.Strategy):
 
 
             #################################################################################################
-        elif self.Z_from == 'pc':
-            result_data, result_data_original, po_high, po_low = self.data_processor.process_next_data()
-            # print('这里',po_high)
-            self.result_data.extend(result_data)  # 原点
-            self.result_data_original.extend(result_data_original)  # 偏点
-            self.po_high.extend(po_high)  # 破高
-            self.po_low.extend(po_low)  # 破低
 
-            if len(result_data) != 0:
-                self.zigzag.append(result_data[0])
-                dict_index2ts, dict_ts2index = self.data_processor.get_index_timestamp_maps()
-                self.pattern_recognizer.analyze_zigzag_points(self.zigzag, dict_index2ts, dict_ts2index)
+        elif self.Z_from == 'pc':  # 峰值连线
+            val = self.peak_trough.lines.pt_r[0]
+            if val > 0:
+                pt_type = PeakTroughType.Peak
+            elif val < 0:
+                pt_type = PeakTroughType.Trough
+            else:
+                pt_type = PeakTroughType.Normal
+
+            center_line_id = self.peak_trough.lines.pt_center[0]
+            center_line_id = self.data.klineId[0] if pt_type == PeakTroughType.Normal else center_line_id
+            self.pk_point_calculator.process_point(self.kLineId_to_all.get(center_line_id), pt_type)
+            # print('峰值连线',val)
+            # 如果值不是 NaN，说明当前K线确认了一个顶或底
+            if not math.isnan(val):
+                PeakTrough_points = self.pk_point_calculator.get_PeakTrough_points(as_dict=False)
+                self.pattern_recognizer.analyze_zigzag_points(PeakTrough_points)
 
     def stop(self):
         (self.notnallpoint,

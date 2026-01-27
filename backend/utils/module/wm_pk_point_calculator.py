@@ -126,7 +126,8 @@ class PeakTroughPointCalculator:
                 high=current_high,
                 low=current_low,
                 close=current_close,
-                open=current_open
+                open=current_open,
+                hloc=(current_high, current_low, current_close, current_open)
             )
             self.point_manager.add_point(new_point)
         if pt_type == self.last_pt_type:
@@ -140,7 +141,8 @@ class PeakTroughPointCalculator:
                 high=current_high,
                 low=current_low,
                 close=current_close,
-                open=current_open
+                open=current_open,
+                hloc=(current_high, current_low, current_close, current_open)
             )
             self.point_manager.add_point(new_point)
 
