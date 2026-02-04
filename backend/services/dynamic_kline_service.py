@@ -21,6 +21,7 @@ class DynamicKlineService:
     }
 
     PANDAS_FREQ = {
+        "M1": "1min",
         "M5": "5min",
         "M15": "15min",
         "M30": "30min",
