@@ -3,8 +3,6 @@ import calendar
 import pandas as pd
 from sqlalchemy import select
 from utils.common import select_goods_common
-
-
 class DynamicKlineService:
     """
     动态 0 号 K 线 Service（包含 goods 映射 + model 解析）
@@ -23,7 +21,6 @@ class DynamicKlineService:
     }
 
     PANDAS_FREQ = {
-        "M1": "1min",
         "M5": "5min",
         "M15": "15min",
         "M30": "30min",
@@ -64,20 +61,34 @@ class DynamicKlineService:
     # ================= 时间区间 =================
 
     def calc_period_range(self, period: str, now: datetime.datetime):
-        minutes = self.PERIOD_MINUTES.get(period, None)
-        if minutes:
+        minutes = self.PERIOD_MINUTES[period]
+        if period == "W1":
+            start = now - datetime.timedelta(days=now.weekday() + 1)
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + datetime.timedelta(days=7)
+        elif period == "D1":
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + datetime.timedelta(days=1)
+        elif period == "MN":
+            start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            _, last_day = calendar.monthrange(now.year, now.month)
+            end = start.replace(day=last_day, hour=23, minute=59, second=59)
+        else:
             start = now.replace(
                 minute=(now.minute // minutes) * minutes,
                 second=0,
                 microsecond=0
             )
-            start = start + datetime.timedelta(minutes=minutes)
             end = start + datetime.timedelta(minutes=minutes)
 
-            return start, end, minutes,period
-
-
-
+        start = now.replace(
+            minute=(now.minute // minutes) * minutes,
+            second=0,
+            microsecond=0
+        )
+        start = start + datetime.timedelta(minutes=minutes)
+        end = start + datetime.timedelta(minutes=minutes)
+        return start, end, minutes
     # ================= 查询 =================
 
     async def query_kline(
@@ -176,14 +187,13 @@ class DynamicKlineService:
         start_time_str: str,
         now: datetime.datetime
     ):
-        start_time, end_time, minutes, period_ = self.calc_period_range(period, now)
+        start_time, end_time, minutes = self.calc_period_range(period, now)
 
         # ---------- 0号K ----------
         m1_rows = await self.query_kline("M1", start_time, end_time)
         is_final = not bool(m1_rows)
-
         if m1_rows:
-            print("131313")
+            print("111")
             df = pd.DataFrame([{
                 "tradeDateTime": x.tradeDateTime,
                 "opening": float(x.opening),
@@ -198,11 +208,8 @@ class DynamicKlineService:
             } for x in m1_rows]).set_index("tradeDateTime")
 
             lineData = self.build_dynamic_bar(df, period, start_time)
-
         else:
-            print("13131")
-            print("start_time:{}".format(start_time))
-            print("end_time:{}".format(end_time))
+            print("222")
             prev = await self.query_kline(
                 period,
                 start_time - datetime.timedelta(minutes=minutes),
