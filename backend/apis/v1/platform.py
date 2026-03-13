@@ -172,9 +172,11 @@ async def get_dynamic_kline(
     startTime: str = Query(None, title="起始时间")
 ):
     async with async_db_session() as db:
-        now = datetime.datetime.utcnow() + datetime.timedelta(hours=2)
+        now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
+
         # 当前时间
         print("startTime:{}".format(startTime))
+
         # now = pd.to_datetime(startTime)
         service = await DynamicKlineService.create(
             db=db,
@@ -195,6 +197,7 @@ async def get_dynamic_kline(
         )
 
         return await response_base.success(data=data)
+
 
 
 @router.get("/selectFrontKline", name="获取K线历史数据")

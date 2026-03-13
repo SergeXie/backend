@@ -48,7 +48,7 @@ class DynamicKlineService:
         - select_goods_common
         """
 
-        # ⚠️ 临时兼容策略（与你原逻辑完全一致）
+        #  临时兼容策略（与你原逻辑完全一致）
         if goods == "FPG-XAUUSD_合成":
             goods = "FPG-XAUUSD"
 
@@ -81,17 +81,14 @@ class DynamicKlineService:
             end_time = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)  # 月底
 
         elif period == "H4":
-            now = datetime.datetime.utcnow()
             # H4处理
+            now = datetime.datetime.utcnow()
             start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
             end_time = start_time + datetime.timedelta(minutes=interval_minutes)
         else:
             # 其他周期处理
             start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
             end_time = start_time + datetime.timedelta(minutes=interval_minutes)
-            print("end_time")
-            print(start_time)
-            print(end_time)
 
         return start_time, end_time, interval_minutes
     # ================= 查询 =================
@@ -198,7 +195,6 @@ class DynamicKlineService:
         m1_rows = await self.query_kline("M1", start_time, end_time)
         is_final = not bool(m1_rows)
         if m1_rows:
-            print("111")
             df = pd.DataFrame([{
                 "tradeDateTime": x.tradeDateTime,
                 "opening": float(x.opening),
@@ -214,7 +210,6 @@ class DynamicKlineService:
 
             lineData = self.build_dynamic_bar(df, period, start_time)
         else:
-            print("222")
             prev = await self.query_kline(
                 period,
                 start_time - datetime.timedelta(minutes=minutes),
