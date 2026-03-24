@@ -61,36 +61,42 @@ class DynamicKlineService:
 
     # ================= 时间区间 =================
 
-    def calc_period_range(self, period: str, now: datetime.datetime):
+    def calc_period_range(self, period: str, now: datetime.datetime, start_time_str:str):
         interval_minutes = self.PERIOD_MINUTES[period]
-        if period == "W1":
-            # 获取上一周的时间范围
-            start_time = now - datetime.timedelta(days=now.weekday() + 1)  # 上一周的周日
-            start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)  # 设置为当天零点
-            end_time = start_time + datetime.timedelta(days=7)  # 上一周的周末
+        # if period == "W1":
+        #     # 获取上一周的时间范围
+        #     start_time = now - datetime.timedelta(days=now.weekday() + 1)  # 上一周的周日
+        #     start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)  # 设置为当天零点
+        #     end_time = start_time + datetime.timedelta(days=7)  # 上一周的周末
+        #
+        # elif period == "D1":
+        #     # D1 周期，调整到当天的 00:00:00
+        #     start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        #     end_time = start_time + datetime.timedelta(days=1)  # 次日 00:00:00
 
-        elif period == "D1":
-            # D1 周期，调整到当天的 00:00:00
-            start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_time = start_time + datetime.timedelta(days=1)  # 次日 00:00:00
+        # if period == "MN":
+        #     # 本月的月初和月底
+        #     start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)  # 月初
+        #     _, last_day = calendar.monthrange(now.year, now.month)  # 获取本月最后一天
+        #     end_time = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)  # 月底
 
-        elif period == "MN":
-            # 本月的月初和月底
-            start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)  # 月初
-            _, last_day = calendar.monthrange(now.year, now.month)  # 获取本月最后一天
-            end_time = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)  # 月底
-
-        elif period == "H4":
-            # H4处理
-            now = datetime.datetime.utcnow()
-            start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
-            end_time = start_time + datetime.timedelta(minutes=interval_minutes)
-        else:
+        # elif period == "H4":
+        #     # H4处理
+        #     start_time = datetime.datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S") + datetime.timedelta(minutes=interval_minutes)
+        #     end_time = start_time + datetime.timedelta(minutes=interval_minutes)
+        # else:
             # 其他周期处理
-            start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
-            end_time = start_time + datetime.timedelta(minutes=interval_minutes)
+            # start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
+            # end_time = start_time + datetime.timedelta(minutes=interval_minutes)
+            # print("end_time")
+            # print(start_time)
+            # print(end_time)
+
+        start_time = datetime.datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S") + datetime.timedelta(minutes=interval_minutes)
+        end_time = start_time + datetime.timedelta(minutes=interval_minutes)
 
         return start_time, end_time, interval_minutes
+
     # ================= 查询 =================
 
     async def query_kline(
@@ -189,7 +195,7 @@ class DynamicKlineService:
         start_time_str: str,
         now: datetime.datetime
     ):
-        start_time, end_time, minutes = self.calc_period_range(period, now)
+        start_time, end_time, minutes = self.calc_period_range(period, now, start_time_str)
 
         # ---------- 0号K ----------
         m1_rows = await self.query_kline("M1", start_time, end_time)
