@@ -3,7 +3,7 @@
 import zoneinfo
 from datetime import datetime
 
-from core.conf import settings
+from common.conf import settings
 
 
 class TimeZone:

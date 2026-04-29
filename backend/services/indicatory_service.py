@@ -4,9 +4,11 @@ from fastapi import Request
 from sqlalchemy import select
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DqlIndicators
-from utils.common import model_classes, fetch_trading_data
-from workers.backtrader_runner import run_backtrader_strategy
+from common.common import model_classes, fetch_trading_data
+from core.bt.runner.backtrader_runner import run_backtrader_strategy
+from schemas.base import DqlIndicators
+
+
 async def get_indicator_data_async(request: Request, data_type: str, executor, name):
     try:
         indicator_request = await request.json()

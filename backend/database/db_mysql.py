@@ -1,65 +1,56 @@
 import sys
-import traceback
-from typing import Annotated
-from fastapi import Depends
-from sqlalchemy import URL
+from typing import AsyncGenerator
+from loguru import logger
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from common.log import log
-from typing import Union
-from core.conf import settings
+from common.conf import settings
 
-
-def create_engine_and_session(url: Union[str, URL]):
+def initialize_database():
+    """
+    初始化唯一的数据库引擎和会话工厂。
+    这种方式确保了全局只有一个 Engine 和 SessionMaker。
+    """
     try:
-
-        # u12VxHdAT38UEa67Kc
-        # 数据库引擎
-        # engine = create_async_engine("mysql+aiomysql://cmdb:cmdb123456@192.168.0.126:3306/dql?charset=utf8mb4",
-        #                              echo=False, future=True, pool_pre_ping=True)
-
         engine = create_async_engine(
-            "mysql+aiomysql://cmdb:cmdb123456@192.168.1.126:3306/dql?charset=utf8mb4",
+            url=settings.DATABASE_URL,
             echo=False,
             future=True,
-            pool_pre_ping=True,  # 连接获取前检测是否可用，防止失效连接
-            pool_recycle=1800,  # 30 分钟后回收连接，防止 MySQL 连接超时
-            pool_size=10,  # 连接池最大连接数，适用于高并发
-            max_overflow=5,  # 连接池最大溢出数，可创建额外连接数
-            pool_timeout=30,  # 获取连接的超时时间，防止阻塞
+            pool_pre_ping=True,
+            pool_recycle=1800,
+            pool_size=20,       # 既然是唯一库，可以适当调大连接池
+            max_overflow=10,
+            pool_timeout=30,
         )
-        log.success('数据库连接成功')
-
+        # 创建会话工厂
+        session_factory = async_sessionmaker(
+            bind=engine,
+            autoflush=False,
+            expire_on_commit=False,
+            class_=AsyncSession  # 显式指定类
+        )
+        return engine, session_factory
     except Exception as e:
-        info = traceback.format_exc()
-        print("bug:{}".format(info))
-        log.error('❌ 数据库链接失败 {}', e)
-
+        logger.error('数据库链接失败 {}', e)
         sys.exit()
-    else:
-        db_session = async_sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
-        return engine, db_session
 
+# 全局单例对象
+async_engine, async_db_session = initialize_database()
 
-SQLALCHEMY_DATABASE_URL = (
-    'mysql+asyncmy://root:python@127.0.0.1:3306/dql_test?charset=utf8mb4'
-)
-
-
-async_engine, async_db_session = create_engine_and_session(SQLALCHEMY_DATABASE_URL)
-
-
-async def get_db() -> AsyncSession:
-    """session 生成器"""
-    session = async_db_session()
-    try:
-        yield session
-    except Exception as se:
-        await session.rollback()
-        raise se
-    finally:
-        await session.close()
-
-# Session Annotated
-CurrentSession = Annotated[AsyncSession, Depends(get_db)]
+# --- 2. Session 生成器 ---
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    FastAPI 依赖注入使用的 Session 生成器。
+    yield 确保了请求结束后自动关闭连接。
+    """
+    async with async_db_session() as session:
+        try:
+            yield session
+            # 如果你想在每个请求结束时自动 commit，可以在这里写
+            # await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            # async with 会自动调用 session.close()
+            pass
 
 

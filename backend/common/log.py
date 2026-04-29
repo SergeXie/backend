@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from core import path_conf
-from core.conf import settings
+from common import path_conf
+from common.conf import settings
 
 if TYPE_CHECKING:
     import loguru

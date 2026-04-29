@@ -5,8 +5,8 @@ from datetime import datetime
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from common.log import log
-from models.dql_platform import DplGoodsTest, DqlStrategyTestResult
-from utils.common import fetch_indicators, run_backtest, adjust_unpaired_trades, fetch_trading_data, model_classes, \
+from schemas.base import DqlGoods, DqlStrategyTestResult
+from common.common import fetch_indicators, run_backtest, adjust_unpaired_trades, fetch_trading_data, model_classes, \
     generate_random_string
 
 
@@ -104,7 +104,7 @@ class StrategyRunBacktestService:
         return result_data
 
     async def _get_goods(self, db, goods):
-        res = await db.execute(select(DplGoodsTest).where(DplGoodsTest.goods == goods))
+        res = await db.execute(select(DqlGoods).where(DqlGoods.goods == goods))
         return res.scalars().first()
 
     async def _get_kline(self, db, item, strategy):
