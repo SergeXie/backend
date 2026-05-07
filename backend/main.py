@@ -1,7 +1,7 @@
 import sys
 import uvicorn
 from common.log import log
-from core.registrar import register_app
+from common.app_register import register_app
 from scheduled_task.backtesting_task import scheduler
 
 
@@ -23,5 +23,5 @@ if __name__ == "__main__":
 
     log.info("启动")
     # uvicorn.run(app, host="0.0.0.0", port=8082, reload=True)
-    uvicorn.run("main:app", host="0.0.0.0", port=8082, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8082)
 

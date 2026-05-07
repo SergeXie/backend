@@ -3,17 +3,15 @@ import json
 import traceback
 import dramatiq
 import pandas as pd
-from cachetools import TTLCache
 from dramatiq.brokers.rabbitmq import RabbitmqBroker
 from dramatiq.middleware import AsyncIO
 from sqlalchemy import select, update
 from common.log import log
 from database.db_mysql import async_db_session
-from models.dql_platform import DqlStrategy, DqlStrategyTestResult, DplGoodsTest
-from utils.common import fetch_trading_data, model_classes, PandasData, DynamicSpreadCommission, indicator_classes, \
-    save_trader_result
-from utils.public_strategy import ComprehensiveAnalyzer
-from utils.strategys import reload_strategies
+from schemas.base import DqlStrategy, DqlStrategyTestResult, DqlGoods
+from common.common import fetch_trading_data, model_classes, PandasData
+from core.bt.base.public_strategy import ComprehensiveAnalyzer
+from core.bt.strategys import reload_strategies
 import backtrader as bt
 
 # 配置 RabbitMQ broker
@@ -38,8 +36,8 @@ async def task_run_backtest(strategy_data_requests, tester_uid, task_name=None):
         async with async_db_session() as db:
 
             # 根据品种或者品种表的手数和盈亏倍率
-            dp_goods_data = await db.execute(select(DplGoodsTest).where(
-                DplGoodsTest.goods == strategy_data_requests.get("goods")))
+            dp_goods_data = await db.execute(select(DqlGoods).where(
+                DqlGoods.goods == strategy_data_requests.get("goods")))
 
             goods_data = dp_goods_data.scalars().first()
 

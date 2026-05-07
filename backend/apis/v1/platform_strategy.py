@@ -18,17 +18,17 @@ from apis.v1.platform import model_classes
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DqlStrategyTestResult, DqlStrategy, DplGoodsTest, DqlOrder, DqlIndicators, \
+from schemas.base import DqlStrategyTestResult, DqlStrategy, DqlGoods, DqlOrder, DqlIndicators, \
     DqlStrategyIndicatorRel
-from schemas.platorm import DqlIndicatorsModel
-from schemas.platorm_strategr_schemas import TestResultRequest, RealOrderFloatingProfitModel
+from schemas.platform_schemas import DqlIndicatorsModel
+from schemas.strategy_schemas import TestResultRequest, RealOrderFloatingProfitModel
 from services.strategy_run_backtest_service import create_strategy_record, strategy_run_backtest_service
-from utils.common import get_entities_list, generate_random_string, \
+from common.common import get_entities_list, generate_random_string, \
     generate_lazy_pinyin, \
     to_float, format_datetime, select_goods_common, select_kline_data, fetch_indicators
-from utils.strategys import reload_strategies
+from core.bt.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
-from utils.trader_report_calculate import  normalize_to_float, process_manual_upload, process_auto_upload
+from core.bt.tools.trader_report_calculate import  normalize_to_float, process_manual_upload, process_auto_upload
 from dateutil import parser
 
 router = APIRouter()
@@ -436,8 +436,8 @@ async def fetch_tester_result(request: Request):
 
             for data in dql_strategy_test_result_all:
                 # 查询品种表各个品种的精度
-                goods_digits = await db.execute(select(DplGoodsTest.digits).where(
-                    DplGoodsTest.goods == data.goodsId
+                goods_digits = await db.execute(select(DqlGoods.digits).where(
+                    DqlGoods.goods == data.goodsId
                 ))
                 result_goods_digits = goods_digits.scalars().first()
                 indicatorDataList = list()

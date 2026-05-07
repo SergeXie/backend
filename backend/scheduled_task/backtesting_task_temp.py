@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, time
 
 from common.log import log
 from database.db_mysql import async_db_session
-from models.dql_platform import TradingFPG, DplGoodsTest, DqlOrder
-from utils.common import fetch_indicators, run_backtest, save_trader_result, task_run_backtest
+from common.common import fetch_indicators, save_trader_result, task_run_backtest
+from schemas.base import DqlOrder, DqlGoods
 
 # CYCLES = ['M15', "M30", "H1", "H4"]
 CYCLES = ['M15']
@@ -66,7 +66,7 @@ async def fetch_period_data(db, period, _goods, strategyUid, begin_time, end_tim
         return
 
     strategy = await fetch_indicators(db, strategyUid["趋势止损策略"])
-    dpl_goods = await db.execute(select(DplGoodsTest).where(DplGoodsTest.goods == _goods))
+    dpl_goods = await db.execute(select(DqlGoods).where(DqlGoods.goods == _goods))
     goods_data = dpl_goods.scalars().first()
 
     backtesting_param = {

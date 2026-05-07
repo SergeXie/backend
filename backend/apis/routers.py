@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from core.conf import settings
+from common.conf import settings
 from apis.v1.platform import router as platform_router
 from apis.v1.platform_strategy import router as indicators_strategy_router
 from apis.v1.platform_trade import router as trade_strategy
