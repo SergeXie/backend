@@ -1,10 +1,10 @@
-from dataclasses import fields
-from typing import List, Optional
+from dataclasses import fields, is_dataclass
+from typing import List, Optional, Type
 
 from sqlalchemy import select, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.bt.tools.wm_pattern_recognizer import MaybeWPattern, MaybeMPattern, StandardWPattern
+from core.bt.tools.wm_pattern_recognizer import MaybeWPattern, MaybeMPattern, StandardWPattern, StandardPattern, StandardMPattern
 from schemas.wm_result_do import WMPatternResult
 
 from loguru import logger
@@ -138,10 +138,9 @@ class WMPatternResultService:
         将识别到的形态对象批量序列化并异步保存至数据库
         """
         if not patterns:
-            return
+            return 0
 
         try:
-            # 1. 使用列表推导式快速构建 ORM 对象列表
             orm_objects = [
                 WMPatternResult(
                     goods=goods,
@@ -155,18 +154,14 @@ class WMPatternResultService:
                 for p in patterns
             ]
 
-            # 2. 利用之前定义的 add_bulk_data 逻辑
             db.add_all(orm_objects)
-
-            # 3. 异步提交
-            await db.commit()
-            logger.info(f"WM形态结构数据成功写入 {len(orm_objects)} 条记录 ({goods}/{periods})")
+            await db.flush()
+            logger.info(f"WM形态结构数据已加入事务 {len(orm_objects)} 条 ({goods}/{periods})")
+            return len(orm_objects)
 
         except Exception as e:
-            await db.rollback()
             logger.error(f"WM形态结构数据失败: {e}")
-            # 这里建议重新抛出异常，让上层 run_strategy_incremental 知道保存失败
-            raise e
+            raise
 
     @staticmethod
     def _serialize_obj(p: StandardPattern) -> dict:

@@ -7,9 +7,9 @@ from core.bt.indicators.peak_trough import PeakTroughIndicator, PeakTroughType
 from core.bt.entity.wm_peak_trough import PeakTroughPointCalculator
 from core.ai.dtw import calc_dtw_distance
 from core.bt.tools.wm_pattern_recognizer import WMPatternRecognizer2
+from core.bt.tools.wm_extractor import run_strategy_incremental_sync
 import warnings
 from datetime import datetime
-from core.bt.tools.wm_pattern import run_strategy_incremental
 from collections import Counter
 # 过滤特定警告
 warnings.filterwarnings('ignore')
@@ -55,7 +55,7 @@ class ResWMpredictByMathData(bt.Strategy):
         HISTORY_SPLIT_POINT = "2026-01-01 00:00:00"
 
         # 调用增量运行函数
-        self.all_wm_pattern = run_strategy_incremental(
+        self.all_wm_pattern = run_strategy_incremental_sync(
             goods=goods,
             periods=periods,
             history_split_time=HISTORY_SPLIT_POINT,  # 分割点
@@ -124,54 +124,6 @@ class ResWMpredictByMathData(bt.Strategy):
         for zig in zigzag_points:
             zigzag_list.append(zig)
             self.pattern_recognizer.analyze_zigzag_points(zigzag_list)
-
-
-        #________________保存全部的wm形态_____________________________#
-
-        # wm_pattern = self.pattern_recognizer.get_all_wm_patterns()
-        # for pattern in wm_pattern:
-        #     # 获取该模式时间范围内的所有K线
-        #     target_klines = get_klines_in_range(
-        #         all_klines=self.all_kline_data,  # 替换为实际的全量K线数据
-        #         start_timestamp=pattern['start_timestamp'],
-        #         end_timestamp=pattern['end_timestamp']
-        #     )
-        #     pattern['target_klines'] = target_klines
-        #     pattern['period'] = "H4"
-        #
-        # print(len(wm_pattern))
-        #
-        # with open('./dataset/all_wm_pattern_kline_h4.pkl', 'wb') as file:
-        #     pickle.dump(wm_pattern, file)
-
-        # # 加载数据
-        # with open('./dataset/all_wm_pattern_kline_h4.pkl', 'rb') as file:
-        #     h4 = pickle.load(file)
-        # with open('./dataset/all_wm_pattern_kline_h1.pkl', 'rb') as file:
-        #     h1 = pickle.load(file)
-        # with open('./dataset/all_wm_pattern_kline_m5.pkl', 'rb') as file:
-        #     m5 = pickle.load(file)
-        # with open('./dataset/all_wm_pattern_kline_m15.pkl', 'rb') as file:
-        #     m15 = pickle.load(file)
-        # with open('./dataset/all_wm_pattern_kline_m30.pkl', 'rb') as file:
-        #     m30 = pickle.load(file)
-        # print(type(h4), len(h1), len(m5), len(m15), len(m30))
-        #
-        # all = m5+m15+m30+h1+h4
-        # with open('./dataset/all_wm_pattern_kline.pkl', 'wb') as file:
-        #     pickle.dump(all, file)
-        # ________________保存全部的wm形态_____________________________#
-        # with open('./dataset/all_wm_pattern_kline.pkl', 'rb') as file:
-        #     all_wm_pattern = pickle.load(file)
-        # for i in all_wm_pattern:
-        #     if "W" in i['pattern_type']:
-        #         self.W_sum += 1
-        #     if "M" in i['pattern_type']:
-        #         self.M_sum += 1
-
-
-        # print(len(all_wm_pattern))
-        # print(all_wm_pattern[-5:])
 
 
         #_______________计算相似度____________________
