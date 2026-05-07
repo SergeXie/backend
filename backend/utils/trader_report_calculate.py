@@ -249,6 +249,37 @@ def extract_transactions(section_header, stop_text):
             row = row.find_next_sibling('tr', align='right')
     return trades
 
+# 提取首次入金金额（balance）
+def extract_first_balance_amount(section_header):
+
+    if not section_header:
+        return 0.0
+
+    row = section_header.find_next('tr', align='center').find_next_sibling('tr')
+
+    while row:
+
+        cols = row.find_all('td')
+
+        if len(cols) > 2:
+
+            order_type = cols[2].text.strip().lower()
+
+            # balance 行
+            if order_type == "balance":
+
+                try:
+                    # 最后一列就是金额
+                    amount = to_float(cols[-1].text.strip())
+
+                    return amount
+
+                except Exception:
+                    return 0.0
+
+        row = row.find_next_sibling('tr')
+
+    return 0.0
 
 def extract_order_prefixes(value_):
     """
@@ -409,14 +440,13 @@ def generate_trader_report(soup, account_list):
         log.error(f"解析报告出错：{info}")
 
 
-def process_manual_generate_trader_report(soup, account_list):
+def process_manual_generate_trader_report(soup, account_list, balance_amount):
     """
     生成交易报告
     """
     try:
         # 提取报告数据
         trader_report = {
-            "startingCash": soup.find(string="Balance:").find_next().text,
             "FreeMargin": soup.find(string="Free Margin:").find_next().text,
             "totalNetProfit": soup.find(string="Total Net Profit:").find_next().text,
             "totalProfit": soup.find(string="Gross Profit:").find_next().text,
@@ -455,7 +485,7 @@ def process_manual_generate_trader_report(soup, account_list):
             "score": 0,
         }
         # 计算所需的指标
-        initial_cleaned = trader_report["startingCash"].replace(' ', '')
+        initial_cleaned = balance_amount
         initial_cash = float(initial_cleaned)
         consecutive_metrics = calculate_consecutive_win_loss(account_list)
         trade_metrics = calculate_trade_metrics(account_list, initial_cash)
@@ -464,7 +494,7 @@ def process_manual_generate_trader_report(soup, account_list):
         max_fur = calculate_max_fur(account_list)
         additional_metrics = calculate_additional_metrics(account_list)
 
-        trader_report["startingCash"] = initial_cash
+        trader_report["startingCash"] = balance_amount
         trader_report["averageConsecutiveWins"] = consecutive_metrics["averageConsecutiveWins"]
         trader_report["averageConsecutiveLosses"] = consecutive_metrics["averageConsecutiveLosses"]
         trader_report["yieldRate"] = trade_metrics["yieldRate"]
@@ -620,6 +650,7 @@ async def process_manual_upload(soup, data_json, strategy,
 
     closed_transactions = extract_transactions(closed_transactions_header, stop_text='Closed P/L:')
     open_transactions = extract_transactions(open_transactions_header, stop_text='Floating P/L:')
+    balance_amount = extract_first_balance_amount(closed_transactions_header)
 
     account_list.extend(closed_transactions)
     account_list.extend(open_transactions)
@@ -627,7 +658,7 @@ async def process_manual_upload(soup, data_json, strategy,
     filtered_result = await data_filters(db, account_list, startTime, endTime, upload_type)
 
     # 提取报告数据
-    trader_report, additional_metrics, newReportTemplate = process_manual_generate_trader_report(soup, filtered_result)
+    trader_report, additional_metrics, newReportTemplate = process_manual_generate_trader_report(soup, filtered_result, balance_amount)
 
     try:
         # 创建策略结果记录
