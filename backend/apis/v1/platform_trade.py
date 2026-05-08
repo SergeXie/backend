@@ -1,51 +1,29 @@
-import copy
 import json
-import os
 import traceback
-import datetime
-import traceback
-import uuid
-import pickle
 import random
 from enum import Enum
 
-import holidays
 from utils.timezone import timezone
 import asyncio
 import pandas as pd
-from fastapi import APIRouter
-from sqlalchemy import select
-from starlette.requests import Request
-from common.log import log
 from common.response.response_schema import response_base
-from database.db_mysql import async_db_session
-from models.dql_platform import TradingStrategy, DqlStrategy, DplGoodsTest, DqlOrderholdpoint, DqlOrderhistorypoint
-from utils.common import generate_random_string
-from fastapi import APIRouter, Query
+from schemas.base import DqlStrategy, DqlGoods, DqlOrderholdpoint, DqlOrderhistorypoint, TradingStrategy
+from common.common import generate_random_string
+from fastapi import APIRouter
 from urllib.parse import parse_qs
-from sqlalchemy import select, and_
 from starlette.requests import Request
-from starlette.responses import Response
 from common.log import log
 from database.db_mysql import async_db_session
-from sqlalchemy import select, desc, update, func
-from utils.common import select_goods_common, RandomIDGenerator, select_kline_data, Trader, \
-    GoodTrader, PandasData, cache, get_indicator_data, model_classes, \
-    get_entities_list
-from models.dql_platform import DqlStrategyTestResult
-from models.dql_platform import TradingStrategy
-from sqlalchemy.ext.asyncio import AsyncSession
-from utils.indicators import *
-from typing import List, Dict, Optional
-from datetime import datetime, timedelta, time
-from utils.strategys import reload_strategies
-from fastapi import BackgroundTasks, WebSocket, WebSocketDisconnect
+from sqlalchemy import select, desc
+from common.common import select_goods_common, PandasData, model_classes
+from core.bt.indicators import *
+from typing import Dict
+from datetime import datetime
+from core.bt.strategys import reload_strategies
+from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.exc import OperationalError
-from apis.v1.platform_strategy import create_strategy_record
+
 router = APIRouter()
-
-file_path = './order_point.txt'
-
 
 @router.post("/tradeStrategyCreate", name="交易策略生成")
 async def trade_strategy_create(request: Request):
@@ -288,9 +266,8 @@ class ConnectionManager:
 manager = ConnectionManager()
 async def send_tradeUid(clientid, data):
     if data is not None:
-        with open(file_path, 'a') as file:
-            file.write(f"{data}\n")
         data = "<<" + data + ">>"
+        log.info(f"[signal]{clientid}-->{data}")
         await manager.send_message_tradeUid(data, clientid)
 
 async def send_websocket(websocket, data):
@@ -424,8 +401,8 @@ async def send_forex_updates(data):
             moni = False
 
         async with async_db_session() as db:
-            dp_goods_data = await db.execute(select(DplGoodsTest).where(
-                DplGoodsTest.goods == goods))
+            dp_goods_data = await db.execute(select(DqlGoods).where(
+                DqlGoods.goods == goods))
             goods_data = dp_goods_data.scalars().first()
             strategy = await fetch_indicators(uid=strategyUid)
 

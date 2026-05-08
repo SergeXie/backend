@@ -1,5 +1,3 @@
-import calendar
-import datetime
 import json
 import multiprocessing
 import traceback
@@ -13,20 +11,20 @@ from starlette.responses import Response
 from common.log import log
 from common.response.response_schema import response_base
 from database.db_mysql import async_db_session
-from models.dql_platform import DplGoodsTest, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult, DqlOrder, \
+from schemas.base import DqlGoods, DqlIndicators, DqlStrategy, DqlPwdLink, DqlStrategyTestResult, DqlOrder, \
     DqlStrategyIndicatorRel
-from schemas.base import ErrorModel
-from schemas.platorm import GoodsResponse, AddTraderStrategyData, AddTraderTicksData, DqlIndicatorsModel
+from schemas.rsp import ErrorModel
+from schemas.platform_schemas import GoodsResponse, AddTraderStrategyData, AddTraderTicksData, DqlIndicatorsModel
 from services.dynamic_kline_service import DynamicKlineService
 from services.indicatory_service import get_indicator_data_async
-from utils.common import select_goods_common, RandomIDGenerator, select_kline_data, Trader, \
+from common.common import select_goods_common, RandomIDGenerator, select_kline_data, Trader, \
     GoodTrader, PandasData, cache, get_indicator_data, model_classes, \
     get_entities_list, generate_random_string, statistics_from_orders, adjust_unpaired_trades, filter_by_time
-from utils.prod_backtrader import MyStrategy
+from core.bt.base.base_strategy import MyStrategy
 from utils.timezone import timezone
 import pandas as pd
-from utils.indicators import *
-from utils.trader_report_calculate import ManualComprehensiveAnalyzer
+from core.bt.indicators import *
+from core.bt.tools.trader_report_calculate import ManualComprehensiveAnalyzer
 
 router = APIRouter()
 
@@ -65,7 +63,7 @@ async def test_user(page_no: Optional[int] = 1, page_size: Optional[int] = 100):
     async with async_db_session() as db:
         # 计算偏移量
         offset = (page_no - 1) * page_size
-        platform_goods = await db.execute(select(DplGoodsTest).offset(offset).limit(page_size))
+        platform_goods = await db.execute(select(DqlGoods).offset(offset).limit(page_size))
         result = platform_goods.scalars().all()
 
         data_list = [{"pkId": data.pkid, "goods": data.goods,
@@ -130,7 +128,7 @@ async def select_kline_orders(goods: str, period: str, beginTime: str, endTime: 
         indicatorDataList.append(indicator_dict)
 
         digits = (await db.execute(
-            select(DplGoodsTest.digits).where(DplGoodsTest.goods == goods)
+            select(DqlGoods.digits).where(DqlGoods.goods == goods)
         )).scalars().first()
 
     # 需要格式化的所有时间字段
@@ -218,7 +216,7 @@ async def select_kline_front(lineId: Optional[int] = 0,
     # 将当前时间转换为字符串时间
     formatted_current_time = current_time.strftime('%Y-%m-%d %H:%M:%S')
     # 根据给定的交易品种 交易平台和周期查询出 所有数据来，返回K线数据出去
-    # 查询中间表 DplGoodsTest
+    # 查询中间表 DqlGoods
     async with async_db_session() as db:
         select_model_class, result = await select_goods_common(db, goods, model_classes)
 
@@ -343,7 +341,7 @@ async def select_multiple_goods_k_lines(goods: str = Query(..., title="交易平
     :param endTime:
     :return:
     """
-    # 查询中间表 DplGoodsTest
+    # 查询中间表 DqlGoods
     async with async_db_session() as db:
 
         select_model_class, result = await select_goods_common(db, goods, model_classes)

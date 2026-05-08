@@ -1,7 +1,7 @@
 import sys
 import uvicorn
 from common.log import log
-from core.registrar import register_app
+from common.app_register import register_app
 from scheduled_task.backtesting_task import scheduler
 
 
