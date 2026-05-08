@@ -11,19 +11,17 @@ from loguru import logger
 
 class WMPatternResultService:
     @classmethod
-    async def get_data(cls, db: AsyncSession, goods: str, periods: str, end_time: str) -> List[WMPatternResult]:
+    async def get_data(cls, db: AsyncSession, goods: str, periods: str) -> List[WMPatternResult]:
         """
-        根据商品、周期和时间上限获取形态记录
+        根据商品、周期获取全部形态记录
         :param db: 异步数据库 Session
-        :param end_time: 筛选 end_timestamp <= 该值的数据
         """
         stmt = (
             select(WMPatternResult)
             .where(
                 and_(
                     WMPatternResult.goods == goods,
-                    WMPatternResult.period == periods,
-                    WMPatternResult.end_timestamp <= end_time
+                    WMPatternResult.period == periods
                 )
             )
             .order_by(WMPatternResult.end_timestamp.asc())

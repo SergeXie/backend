@@ -7,7 +7,7 @@ from core.bt.indicators.peak_trough import PeakTroughIndicator, PeakTroughType
 from core.bt.entity.wm_peak_trough import PeakTroughPointCalculator
 from core.ai.dtw import calc_dtw_distance
 from core.bt.tools.wm_pattern_recognizer import WMPatternRecognizer2
-from core.bt.tools.wm_extractor import run_strategy_incremental_sync
+from core.bt.tools.wm_extractor import load_patterns_sync
 import warnings
 from datetime import datetime
 from collections import Counter
@@ -45,22 +45,11 @@ class ResWMpredictByMathData(bt.Strategy):
 
         goods = self.indicator_params.get('Kline_goods')
         periods = self.indicator_params.get('Kline_period')
-        endTime = self.indicator_params.get('end_time')
-        beginTime = '2025-01-01 00:00:00'
-        # self.all_wm_pattern = run_strategy(goods, periods, endTime, beginTime)
-
-        # 定义“历史”和“现在”的分割线
-        # 第一次运行时，会计算 2000-01-01 到 2025-01-01 的数据并存为pkl文件
-        # 下次运行时，直接读取pkl，只计算 2025-01-01 往后的数据
-        HISTORY_SPLIT_POINT = "2026-01-01 00:00:00"
-
-        # 调用增量运行函数
-        self.all_wm_pattern = run_strategy_incremental_sync(
+        # 预测场景只读取数据库中已经落库的 WM 形态。
+        # WM 的全量 / 增量计算由定时任务统一执行，避免预测请求阻塞在计算过程上。
+        self.all_wm_pattern = load_patterns_sync(
             goods=goods,
             periods=periods,
-            history_split_time=HISTORY_SPLIT_POINT,  # 分割点
-            current_end_time=endTime,  # 最新时间
-            history_begin_time="2000-01-01 00:00:00"  # 这里为了测试快一点写了2020
         )
         tmp = [i.value for i in self.all_wm_pattern]
         self.counts = Counter(tmp)

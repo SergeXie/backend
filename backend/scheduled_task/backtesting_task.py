@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, time
 from common.log import log
 from database.db_mysql import async_db_session
 from common.common import fetch_indicators, save_trader_result, task_run_backtest
+from scheduled_task.wm_incremental_task import weekly_wm_incremental_task, minute_h1_task
 from schemas.base import DqlOrder, DqlGoods
 
 CYCLES = ['M15', "M30", "H1", "H4"]
@@ -100,4 +101,20 @@ async def daily_task():
 scheduler = AsyncIOScheduler()
 
 scheduler.add_job(daily_task, "cron", hour=6, minute=15, day_of_week='mon-fri')
+scheduler.add_job(
+    weekly_wm_incremental_task,
+    "cron",
+    hour=6,
+    minute=15,
+    day_of_week='sat',
+    id="weekly_wm_incremental_task",
+    replace_existing=True,
+)
+# scheduler.add_job(
+#     minute_h1_task,
+#     "interval",
+#     minutes=1,
+#     id="minute_h1_task",
+#     replace_existing=True,
+# )
 # scheduler.add_job(daily_task, "interval", minutes=1)  # 用于测试
