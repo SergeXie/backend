@@ -6,10 +6,9 @@ import re
 import sys
 import traceback
 import shutil
-from collections import defaultdict, namedtuple
+from collections import namedtuple
 import chardet
 from datetime import datetime
-from bs4 import BeautifulSoup
 from fastapi import APIRouter, Query, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy import select, desc, func, and_
 from starlette.requests import Request
@@ -25,11 +24,11 @@ from schemas.strategy_schemas import TestResultRequest, RealOrderFloatingProfitM
 from services.strategy_run_backtest_service import create_strategy_record, strategy_run_backtest_service
 from common.common import get_entities_list, generate_random_string, \
     generate_lazy_pinyin, \
-    to_float, format_datetime, select_goods_common, select_kline_data, fetch_indicators
+    select_goods_common, select_kline_data, fetch_indicators
 from core.bt.strategys import reload_strategies
 from task_dramatiq.dramatiq_strategy import task_run_backtest
-from core.bt.tools.trader_report_calculate import  normalize_to_float, process_manual_upload, process_auto_upload
-from dateutil import parser
+from core.bt.tools.trader_report_calculate import normalize_to_float
+from core.bt.tools.trader_report_submit_service import TraderReportSubmitService
 
 router = APIRouter()
 
@@ -1012,85 +1011,41 @@ async def submit_trader_report(request: Request, background_tasks: BackgroundTas
     """
     try:
         data_json = await request.json()
-        file_path = data_json.get("file_path", None)  # 文件名
-        uid = data_json.get("uid", None)  # 策略uid
-        goods = data_json.get("goods", None)  # 交易品种
-        period = data_json.get("period", None)  # 周期
-        startTime = data_json.get("startTime", None)  # 开始时间
-        endTime = data_json.get("endTime", None)  # 结束时间
-        startTime = parser.parse(startTime).strftime('%Y-%m-%d %H:%M:%S')
-        endTime = parser.parse(endTime).strftime('%Y-%m-%d %H:%M:%S')
-        upload_type = data_json.get("uploadType", "0")  # 上传类型
+        file_path = data_json.get("file_path")
+        uid = data_json.get("uid")
+        goods = data_json.get("goods")
+        period = data_json.get("period")
+        startTime = TraderReportSubmitService.parse_report_time(data_json.get("startTime"))
+        endTime = TraderReportSubmitService.parse_report_time(data_json.get("endTime"))
+        upload_type = data_json.get("uploadType", "0")
 
-        # 获取上传文件的编码
-        with open(file_path, 'rb') as file:
-            raw_data = file.read()
-            encoding = chardet.detect(raw_data)['encoding']
+        if not file_path or not os.path.exists(file_path):
+            return await response_base.fail(msg="文件路径不存在")
 
-        # 解析HTML内容
-        with open(file_path, 'r', encoding=encoding) as file:
-            soup = BeautifulSoup(file, 'html.parser')
+        soup = TraderReportSubmitService.load_html_soup(file_path)
 
         async with async_db_session() as db:
-            if not file_path or not os.path.exists(file_path):
-                return await response_base.fail(msg="文件路径不存在")
-
-            if upload_type == "2":  # 手动上传
+            if upload_type == TraderReportSubmitService.MANUAL_UPLOAD_TYPE:  # 手动上传
                 # 查询策略数据
                 strategy = await fetch_indicators(db, uid)
                 if not strategy:
                     return await response_base.fail(code=400, msg=f"提交失败,未找到存在策略！", data=[])
 
                 # 仅获取基础信息并快速响应
-                background_tasks.add_task(process_manual_upload,soup, data_json, strategy,
-                                          startTime, endTime, uid, goods, period, db, upload_type)
+                background_tasks.add_task(TraderReportSubmitService.run_manual_upload_task, soup, data_json, strategy,
+                                          startTime, endTime, uid, goods, period, upload_type)
 
             else:
                 # 自动解析HTML部分
-                transactions = []
-                grouped_transactions = defaultdict(list)
-                rows = soup.find_all('tr', align='right')
-                identifiers = []
-                # 遍历所有交易行，提取交易信息
-                for row in rows:
-                    cols = row.find_all('td')
-                    order_type = cols[2].text.strip().lower() if len(cols) > 2 else ''
-                    if len(cols) >= 14 and order_type in ['buy', 'sell']:  # 检查列数，确保是交易数据行
-                        if 'title' in cols[0].attrs:
-                            transaction = {
-                                'tradeid': cols[0].text.strip() if len(cols) > 0 else 0,
-                                'timestamp': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
-                                'openTime': format_datetime(cols[1].text.strip()) if len(cols) > 1 else None,
-                                'orderType': cols[2].text.strip() if len(cols) > 2 else '0',
-                                'goodsId': cols[4].text.strip() if len(cols) > 4 else None,
-                                'size': to_float(cols[3].text.strip()) if len(cols) > 3 else 0.0,
-                                'openPrice': to_float(cols[5].text.strip()) if len(cols) > 5 else 0.0,
-                                'stopLoss': to_float(cols[6].text.strip()) if len(cols) > 6 else 0.0,
-                                'takeProfit': to_float(cols[7].text.strip()) if len(cols) > 7 else 0.0,
-                                'closeTime': format_datetime(cols[8].text.strip()) if len(cols) > 8 else None,
-                                'price': to_float(cols[9].text.strip()) if len(cols) > 9 else 0.0,
-                                'commission': to_float(cols[10].text.strip()) if len(cols) > 10 else 0.0,
-                                'taxes': to_float(cols[11].text.strip()) if len(cols) > 11 else 0.0,
-                                'swap': to_float(cols[12].text.strip()) if len(cols) > 12 else 0.0,
-                                'pnl': to_float(cols[13].text.strip()) if len(cols) > 13 else 0.0,
-                                "keyid": cols[2].text.strip()
-                            }
-                            transactions.append(transaction)
-
-                    elif len(cols) == 3:  # 如果是标识符行，保存标识符
-                        identifiers.append(cols[2].text.strip())
-
-                # # 一一对应交易和标识符
-                for transaction, identifier in zip(transactions, identifiers):
-                    key = identifier.split('@')[0]  # 提取 @ 前面的部分 例如: NTROILM5S0001@1737024960@
-                    transaction['identifier'] = identifier
-                    grouped_transactions[key].append(transaction)
+                grouped_transactions = TraderReportSubmitService.extract_auto_grouped_transactions(soup)
 
                 if not grouped_transactions:
                     return await response_base.fail(msg="该文件不支持自动上传提交，未提取到关键信息部分")
 
                 # 仅获取基础信息并快速响应
-                background_tasks.add_task(process_auto_upload, soup,db, grouped_transactions, startTime, endTime)
+                background_tasks.add_task(
+                    TraderReportSubmitService.run_auto_upload_task, soup, grouped_transactions, startTime, endTime
+                )
 
             return await response_base.success()
 
