@@ -36,10 +36,6 @@ async def get_next_begin_and_last_workday_end(db, period, _goods):
 
     begin_time = begin_time_dt.strftime('%Y-%m-%d %H:%M:%S')
     end_time = end_time_dt.strftime('%Y-%m-%d %H:%M:%S')
-    print("=====")
-    print(begin_time)
-    print(end_time)
-    print("=======")
     return begin_time, end_time
 
 

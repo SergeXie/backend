@@ -523,7 +523,6 @@ class ResponseSMCPData(bt.Strategy):
         W = self.vals[8, 2]
         L = self.vals[8, 3]
         WR = round((W / (W + L)) * 100, 2)
-        print(f"WIN: {W}, LOSS: {L}, Profitability: {WR}")
 
     def get_analysis(self):
         W = self.vals[8, 2]
