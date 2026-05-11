@@ -154,113 +154,6 @@ class DynamicKlineService:
             "swapShort": float(row.swapShort),
         }
 
-    # ================= ⭐ 主入口 =================
-
-    def calc_current_period(
-            self,
-            period: str,
-            now: datetime.datetime
-    ):
-        """
-        计算当前时间所属动态K周期
-        """
-
-        interval_minutes = self.PERIOD_MINUTES[period]
-
-        # ================= W1 =================
-
-        if period == "W1":
-
-            start_time = now - datetime.timedelta(days=now.weekday())
-
-            start_time = start_time.replace(
-                hour=0,
-                minute=0,
-                second=0,
-                microsecond=0
-            )
-
-            end_time = start_time + datetime.timedelta(days=7)
-
-        # ================= D1 =================
-
-        elif period == "D1":
-
-            start_time = now.replace(
-                hour=0,
-                minute=0,
-                second=0,
-                microsecond=0
-            )
-
-            end_time = start_time + datetime.timedelta(days=1)
-
-        # ================= MN =================
-
-        elif period == "MN":
-
-            start_time = now.replace(
-                day=1,
-                hour=0,
-                minute=0,
-                second=0,
-                microsecond=0
-            )
-
-            if now.month == 12:
-
-                end_time = now.replace(
-                    year=now.year + 1,
-                    month=1,
-                    day=1,
-                    hour=0,
-                    minute=0,
-                    second=0,
-                    microsecond=0
-                )
-
-            else:
-
-                end_time = now.replace(
-                    month=now.month + 1,
-                    day=1,
-                    hour=0,
-                    minute=0,
-                    second=0,
-                    microsecond=0
-                )
-
-        # ================= H4 =================
-
-        elif period == "H4":
-
-            hour = (now.hour // 4) * 4
-
-            start_time = now.replace(
-                hour=hour,
-                minute=0,
-                second=0,
-                microsecond=0
-            )
-
-            end_time = start_time + datetime.timedelta(hours=4)
-
-        # ================= 普通分钟周期 =================
-
-        else:
-
-            start_time = now.replace(
-                minute=(now.minute // interval_minutes) * interval_minutes,
-                second=0,
-                microsecond=0
-            )
-
-            end_time = start_time + datetime.timedelta(
-                minutes=interval_minutes
-            )
-
-        return start_time, end_time
-
     async def check_current_kline_finished(
             self,
             period: str,
@@ -330,6 +223,7 @@ class DynamicKlineService:
             ),
         }
 
+    # ================= ⭐ 主入口 =================
     async def get_dynamic_kline(
             self,
             period: str,
@@ -370,10 +264,6 @@ class DynamicKlineService:
         dynamic_end = dynamic_start + datetime.timedelta(
             minutes=interval_minutes
         )
-
-        print(f"startTime:{start_time_str}")
-        print(f"dynamic_start:{dynamic_start}")
-        print(f"dynamic_end:{dynamic_end}")
 
         # ================= 当前动态K是否已正式生成 =================
 
