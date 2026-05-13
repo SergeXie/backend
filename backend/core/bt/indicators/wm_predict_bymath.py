@@ -1,11 +1,12 @@
 import math
+from bisect import bisect_left
 import backtrader as bt
 import numpy as np
 import pandas as pd
 from core.bt.tools.zigzag_calculator_byclass import ZigZagCalculator
 from core.bt.indicators.peak_trough import PeakTroughIndicator, PeakTroughType
 from core.bt.entity.wm_peak_trough import PeakTroughPointCalculator
-from core.ai.dtw import calc_dtw_distance
+from core.ai.dtw import df_to_sequence, fast_dtw
 from core.bt.tools.wm_pattern_recognizer import WMPatternRecognizer2
 from core.bt.tools.wm_extractor import load_patterns_sync
 import warnings
@@ -42,6 +43,14 @@ class ResWMpredictByMathData(bt.Strategy):
         self.pk_point_calculator = PeakTroughPointCalculator()
         self.zigzag_calculator = ZigZagCalculator(inp_depth=self.inp_depth)
         self.pattern_recognizer = WMPatternRecognizer2()
+        self.history_patterns_by_type = {'M': [], 'W': []}
+        self.history_start_times_by_type = {'M': [], 'W': []}
+        self.history_feature_matrix_by_type = {
+            'M': np.empty((0, 5), dtype=np.float64),
+            'W': np.empty((0, 5), dtype=np.float64),
+        }
+        self.history_top_k = int(self.indicator_params.get('history_top_k', 500))
+        self.history_keep_ratio = float(self.indicator_params.get('history_keep_ratio', 0.2))
 
         goods = self.indicator_params.get('Kline_goods')
         periods = self.indicator_params.get('Kline_period')
@@ -53,6 +62,7 @@ class ResWMpredictByMathData(bt.Strategy):
         )
         tmp = [i.value for i in self.all_wm_pattern]
         self.counts = Counter(tmp)
+        self._prepare_history_patterns()
 
 
         # 确保数据长度足够时再开始计算
@@ -107,51 +117,17 @@ class ResWMpredictByMathData(bt.Strategy):
 
     def stop(self):
         digit = int(self.datas[0].digits[0])
-        zigzag_points = self.pattern_recognizer.get_zigzag_points()
-
-        zigzag_list = []
-        for zig in zigzag_points:
-            zigzag_list.append(zig)
-            self.pattern_recognizer.analyze_zigzag_points(zigzag_list)
-
-
-        #_______________计算相似度____________________
-        time_format = "%Y-%m-%d %H:%M:%S"  # 定义时间类型
-
-
-        all_wm_pattern_kline = []
-        time_list = []
-        for i in self.all_wm_pattern:
-            all_wm_pattern_kline.append(klines_to_dataframe(merge_klines(i.target_klines)))
-            datetime_list = datetime.strptime(i.start_timestamp, time_format)
-            time_list.append(datetime_list)
+        if not self.all_wm_pattern:
+            return
 
         show_pattern = self.indicator_params.get("show_mabye_pattern")
 
         if show_pattern == 1:  # 可能形态
             # -----------获取最后一个可能的m，用于计算概率----------------
             for maybe_m in self.pattern_recognizer.get_maybe_m_patterns():
-                # maybe_m = self.pattern_recognizer.get_maybe_m_patterns()[1]
-                last_m_start = maybe_m.start
-                base_time = datetime.strptime(last_m_start, time_format)
-                early_indices = [idx for idx, t in enumerate(time_list) if t < base_time]
-                # print(early_indices)
-                early_times = self.all_wm_pattern[:early_indices[-1]]
-                # print("对应早于基准时间的元素：", early_times)
-
-                last_m_end = maybe_m.end
-                last_m_kline = get_klines_in_range(self.all_kline_data, last_m_start, last_m_end)
-                last_m_kline_df = klines_to_dataframe(merge_klines(last_m_kline))
-                # print(last_m_kline_df)
-                # print(all_wm_pattern_kline[-1])
-                # print(calc_dtw_distance(last_m_kline_df, last_m_kline_df))
-                distance = [calc_dtw_distance(last_m_kline_df, i) for i in all_wm_pattern_kline]
-                weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
-                m_zigzag_points = [i.points for i in early_times if "M" in i.value]
-                weight = [weight[index] for index, i in enumerate(early_times) if "M" in i.value]
-
-                p = probability(m_zigzag_points, datafrom='m',weight=weight)
-                # print("m概率:", p)
+                p = self._calculate_pattern_probability(maybe_m, pattern_type='M', datafrom='m')
+                if not p:
+                    continue
 
                 price_diff = self.Ts_to_hloc.get(maybe_m.start_third)[1] - self.Ts_to_hloc.get(maybe_m.start_four)[0]  # 高点到低点的价差
                 klineId = maybe_m.four_kLineId
@@ -185,23 +161,9 @@ class ResWMpredictByMathData(bt.Strategy):
 
             # -----------获取最后一个可能的w，用于计算概率----------------
             for maybe_w in self.pattern_recognizer.get_maybe_w_patterns():
-                # maybe_w = self.pattern_recognizer.get_maybe_w_patterns()[-1]
-                last_w_start = maybe_w.start
-                base_time = datetime.strptime(last_w_start, time_format)
-                early_indices = [idx for idx, t in enumerate(time_list) if t < base_time]
-                early_times = self.all_wm_pattern[:early_indices[-1]]
-
-                last_w_end = maybe_w.end
-                last_w_kline = get_klines_in_range(self.all_kline_data, last_w_start, last_w_end)
-                last_w_kline_df = klines_to_dataframe(merge_klines(last_w_kline))
-
-                distance = [calc_dtw_distance(last_w_kline_df, i) for i in all_wm_pattern_kline]
-                weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
-                w_zigzag_points = [i.points for i in early_times if "W" in i.value]
-                weight = [weight[index] for index, i in enumerate(early_times) if "W" in i.value]
-
-                p = probability(w_zigzag_points, datafrom='w',weight=weight)
-                # print("w概率:", p)
+                p = self._calculate_pattern_probability(maybe_w, pattern_type='W', datafrom='w')
+                if not p:
+                    continue
 
                 price_diff = self.Ts_to_hloc.get(maybe_w.start_third)[0] - self.Ts_to_hloc.get(maybe_w.start_four)[1]  # 高点到低点的价差
                 klineId = maybe_w.four_kLineId
@@ -238,19 +200,9 @@ class ResWMpredictByMathData(bt.Strategy):
         elif show_pattern == 0:  # 确认形态
             standard_m_list = self.pattern_recognizer.get_standard_m_patterns()
             for standard_m in standard_m_list:
-                last_m_start = standard_m.start
-                base_time = datetime.strptime(last_m_start, time_format)
-                early_indices = [idx for idx, t in enumerate(time_list) if t < base_time]
-                early_times = self.all_wm_pattern[:early_indices[-1]]
-                last_m_end = standard_m.end
-                last_m_kline = get_klines_in_range(self.all_kline_data, last_m_start, last_m_end)
-                last_m_kline_df = klines_to_dataframe(merge_klines(last_m_kline))
-                distance = [calc_dtw_distance(last_m_kline_df, i) for i in all_wm_pattern_kline]
-                weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
-                m_zigzag_points = [i.points for i in early_times if "M" in i.value]
-                weight = [weight[index] for index, i in enumerate(early_times) if "M" in i.value]
-                p = probability(m_zigzag_points, datafrom='m',weight=weight)
-                # print("m概率:", p)
+                p = self._calculate_pattern_probability(standard_m, pattern_type='M', datafrom='m')
+                if not p:
+                    continue
                 price_diff = self.Ts_to_hloc.get(standard_m.start_third)[1] - self.Ts_to_hloc.get(standard_m.start_four)[0]  # 高点到低点的价差
                 klineId = standard_m.end_kLineId
                 for index, i in enumerate(p['probabilities'][-2:]):
@@ -283,19 +235,9 @@ class ResWMpredictByMathData(bt.Strategy):
 
             standard_w_list = self.pattern_recognizer.get_standard_w_patterns()
             for standard_w in standard_w_list:
-                last_w_start = standard_w.start
-                base_time = datetime.strptime(last_w_start, time_format)
-                early_indices = [idx for idx, t in enumerate(time_list) if t < base_time]
-                early_times = self.all_wm_pattern[:early_indices[-1]]
-                last_w_end = standard_w.end
-                last_w_kline = get_klines_in_range(self.all_kline_data, last_w_start, last_w_end)
-                last_w_kline_df = klines_to_dataframe(merge_klines(last_w_kline))
-                distance = [calc_dtw_distance(last_w_kline_df, i) for i in all_wm_pattern_kline]
-                weight = convert_to_weight(distance)  # 计算得到最后一个可能的m与历史的权重
-                w_zigzag_points = [i.points for i in early_times if "W" in i.value]
-                weight = [weight[index] for index, i in enumerate(early_times) if "W" in i.value]
-                p = probability(w_zigzag_points, datafrom='w',weight=weight)
-                # print("w概率:", p)
+                p = self._calculate_pattern_probability(standard_w, pattern_type='W', datafrom='w')
+                if not p:
+                    continue
                 price_diff = self.Ts_to_hloc.get(standard_w.start_third)[0] - self.Ts_to_hloc.get(standard_w.start_four)[1]  # 高点到低点的价差
                 klineId = standard_w.end_kLineId
                 for index, i in enumerate(p['probabilities'][-2:]):
@@ -322,6 +264,125 @@ class ResWMpredictByMathData(bt.Strategy):
                     "timestamp": self.Id_TS_dict.get(standard_w.kLineId),
                     "value": standard_w.value
                 })
+
+    def _prepare_history_patterns(self):
+        time_format = "%Y-%m-%d %H:%M:%S"
+        for pattern in self.all_wm_pattern:
+            target_klines = getattr(pattern, 'target_klines', None)
+            start_timestamp = getattr(pattern, 'start_timestamp', None)
+            value = getattr(pattern, 'value', '')
+            if not target_klines or not start_timestamp:
+                continue
+
+            pattern_type = 'M' if 'M' in value else 'W' if 'W' in value else None
+            if not pattern_type:
+                continue
+
+            history_df = klines_to_dataframe(merge_klines(target_klines))
+            history_sequence = df_to_sequence(history_df)
+            if not history_sequence:
+                continue
+
+            start_time = datetime.strptime(start_timestamp, time_format)
+
+            self.history_patterns_by_type[pattern_type].append({
+                'pattern': pattern,
+                'start_time': start_time,
+                'sequence': history_sequence,
+                'feature_vector': build_feature_vector(history_sequence),
+            })
+
+        for pattern_type, pattern_items in self.history_patterns_by_type.items():
+            pattern_items.sort(key=lambda item: item['start_time'])
+            self.history_start_times_by_type[pattern_type] = [item['start_time'] for item in pattern_items]
+            if pattern_items:
+                self.history_feature_matrix_by_type[pattern_type] = np.vstack(
+                    [item['feature_vector'] for item in pattern_items]
+                )
+
+    def _get_history_candidate_prefix(self, base_time, pattern_type):
+        history_times = self.history_start_times_by_type.get(pattern_type, [])
+        if not history_times:
+            return 0
+        return bisect_left(history_times, base_time)
+
+    def _resolve_history_keep_count(self, candidate_count):
+        ratio_count = int(candidate_count * self.history_keep_ratio)
+        keep_count = max(2, self.history_top_k, ratio_count)
+        return min(candidate_count, keep_count)
+
+    def _select_top_history_candidates(self, candidate_items, candidate_feature_matrix, current_feature_vector):
+        candidate_count = len(candidate_items)
+        if candidate_count <= 2:
+            return candidate_items
+
+        keep_count = self._resolve_history_keep_count(candidate_count)
+        if candidate_count <= keep_count:
+            return candidate_items
+
+        length_gap_limit = max(5.0, current_feature_vector[0] * 0.6)
+        length_mask = np.abs(candidate_feature_matrix[:, 0] - current_feature_vector[0]) <= length_gap_limit
+
+        if np.count_nonzero(length_mask) >= 2:
+            filtered_indices = np.flatnonzero(length_mask)
+            filtered_matrix = candidate_feature_matrix[length_mask]
+        else:
+            filtered_indices = np.arange(candidate_count)
+            filtered_matrix = candidate_feature_matrix
+
+        if len(filtered_indices) <= keep_count:
+            return [candidate_items[index] for index in filtered_indices]
+
+        base_vector = np.array([1.0, 1e-9, 1e-9, 1e-9, 1e-9], dtype=np.float64)
+        denominator = np.maximum(
+            np.maximum(np.abs(filtered_matrix), np.abs(current_feature_vector)),
+            base_vector,
+        )
+        weight_vector = np.array([0.35, 0.25, 0.20, 0.10, 0.10], dtype=np.float64)
+        score_matrix = np.abs(filtered_matrix - current_feature_vector) / denominator
+        scores = score_matrix @ weight_vector
+
+        top_local_indices = np.argpartition(scores, keep_count - 1)[:keep_count]
+        top_local_indices = top_local_indices[np.argsort(scores[top_local_indices])]
+        selected_indices = filtered_indices[top_local_indices]
+        return [candidate_items[index] for index in selected_indices]
+
+    def _calculate_pattern_probability(self, current_pattern, pattern_type, datafrom):
+        base_time = datetime.strptime(current_pattern.start, "%Y-%m-%d %H:%M:%S")
+        history_prefix = self._get_history_candidate_prefix(base_time, pattern_type)
+        if history_prefix < 2:
+            return None
+
+        history_candidates = self.history_patterns_by_type.get(pattern_type, [])[:history_prefix]
+        history_feature_matrix = self.history_feature_matrix_by_type.get(pattern_type)
+        history_feature_matrix = history_feature_matrix[:history_prefix]
+
+        current_klines = get_klines_in_range(self.all_kline_data, current_pattern.start, current_pattern.end)
+        if len(current_klines) < 2:
+            return None
+
+        current_kline_df = klines_to_dataframe(merge_klines(current_klines))
+        if current_kline_df.empty:
+            return None
+
+        current_sequence = df_to_sequence(current_kline_df)
+        current_feature_vector = build_feature_vector(current_sequence)
+        history_candidates = self._select_top_history_candidates(
+            history_candidates,
+            history_feature_matrix,
+            current_feature_vector,
+        )
+        if len(history_candidates) < 2:
+            return None
+
+        distances = [int(fast_dtw(current_sequence, item['sequence'])) for item in history_candidates]
+        weights = convert_to_weight(distances)
+        zigzag_points = [item['pattern'].points for item in history_candidates]
+
+        if len(zigzag_points) < 2:
+            return None
+
+        return probability(zigzag_points, datafrom=datafrom, weight=weights)
 
 
     def get_analysis(self):
@@ -407,6 +468,25 @@ def convert_to_weight(values):
         weights.append(round(weight))
 
     return weights
+
+
+def build_feature_vector(sequence):
+    if not sequence:
+        return np.zeros(5, dtype=np.float64)
+
+    seq_array = np.asarray(sequence, dtype=np.float64)
+    open_prices = seq_array[:, 0]
+    high_prices = seq_array[:, 1]
+    low_prices = seq_array[:, 2]
+    close_prices = seq_array[:, 3]
+
+    return np.array([
+        float(len(sequence)),
+        float(np.max(high_prices) - np.min(low_prices)),
+        float(close_prices[-1] - open_prices[0]),
+        float(np.mean(np.abs(close_prices - open_prices))),
+        float(np.mean(high_prices - low_prices)),
+    ], dtype=np.float64)
 
 def calculate_dtw_distance_matrix(all_series, dtw_func):
     """
