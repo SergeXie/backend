@@ -24,7 +24,6 @@ class ResponseBollingerData(bt.Strategy):
         self.result_data_mid = []
         self.result_data_top = []
         self.result_data_bot = []
-        print('ok')
 
     def next(self):
         current_kline_id = int(self.data.klineId[0])

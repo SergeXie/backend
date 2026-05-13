@@ -2,6 +2,9 @@ import datetime
 import pandas as pd
 from sqlalchemy import select
 from common.common import select_goods_common
+from utils.timezone import timezone
+
+
 class DynamicKlineService:
     """
     动态 0 号 K 线 Service（包含 goods 映射 + model 解析）
@@ -58,43 +61,6 @@ class DynamicKlineService:
 
         return cls(db, model, result, goods)
 
-    # ================= 时间区间 =================
-
-    def calc_period_range(self, period: str, now: datetime.datetime, start_time_str:str):
-        interval_minutes = self.PERIOD_MINUTES[period]
-        # if period == "W1":
-        #     # 获取上一周的时间范围
-        #     start_time = now - datetime.timedelta(days=now.weekday() + 1)  # 上一周的周日
-        #     start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)  # 设置为当天零点
-        #     end_time = start_time + datetime.timedelta(days=7)  # 上一周的周末
-        #
-        # elif period == "D1":
-        #     # D1 周期，调整到当天的 00:00:00
-        #     start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        #     end_time = start_time + datetime.timedelta(days=1)  # 次日 00:00:00
-
-        # if period == "MN":
-        #     # 本月的月初和月底
-        #     start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)  # 月初
-        #     _, last_day = calendar.monthrange(now.year, now.month)  # 获取本月最后一天
-        #     end_time = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)  # 月底
-
-        # elif period == "H4":
-        #     # H4处理
-        #     start_time = datetime.datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S") + datetime.timedelta(minutes=interval_minutes)
-        #     end_time = start_time + datetime.timedelta(minutes=interval_minutes)
-        # else:
-            # 其他周期处理
-            # start_time = now.replace(minute=(now.minute // interval_minutes) * interval_minutes, second=0, microsecond=0)
-            # end_time = start_time + datetime.timedelta(minutes=interval_minutes)
-            # print("end_time")
-            # print(start_time)
-            # print(end_time)
-
-        start_time = datetime.datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S") + datetime.timedelta(minutes=interval_minutes)
-        end_time = start_time + datetime.timedelta(minutes=interval_minutes)
-
-        return start_time, end_time, interval_minutes
 
     # ================= 查询 =================
 
@@ -151,8 +117,10 @@ class DynamicKlineService:
         self,
         df: pd.DataFrame,
         period: str,
-        start_time: datetime.datetime
+        start_time: str
     ):
+        start_time = timezone.f_str(start_time)
+
         freq = self.PANDAS_FREQ[period]
 
         resampled = df.resample(freq).agg({
@@ -186,54 +154,171 @@ class DynamicKlineService:
             "swapShort": float(row.swapShort),
         }
 
-    # ================= ⭐ 主入口 =================
-
-    async def get_dynamic_kline(
-        self,
-        period: str,
-        start_time_str: str,
-        now: datetime.datetime
+    async def check_current_kline_finished(
+            self,
+            period: str,
+            dynamic_start: datetime.datetime
     ):
-        start_time, end_time, minutes = self.calc_period_range(period, now, start_time_str)
+        """
+        判断当前动态K
+        是否已经正式生成
+        """
 
-        # ---------- 0号K ----------
-        m1_rows = await self.query_kline("M1", start_time, end_time)
-        is_final = not bool(m1_rows)
-        if m1_rows:
-            df = pd.DataFrame([{
-                "tradeDateTime": x.tradeDateTime,
-                "opening": float(x.opening),
-                "high": float(x.high),
-                "low": float(x.low),
-                "closed": float(x.closed),
-                "vol": x.vol,
-                "spread": x.spread,
-                "pkId": 0,
-                "swapLong": x.swapLong,
-                "swapShort": x.swapShort,
-            } for x in m1_rows]).set_index("tradeDateTime")
+        stmt = select(self.model).where(
+            self.model.platform == self.result.platform,
+            self.model.tradingGoods == self.result.trading_goods,
+            self.model.type == period,
+            self.model.tradeDateTime == dynamic_start
+        )
 
-            lineData = self.build_dynamic_bar(df, period, start_time)
-        else:
-            prev = await self.query_kline(
+        res = await self.db.execute(stmt)
+
+        return res.scalars().first()
+
+    def build_dynamic_bar(
+            self,
+            rows,
+            start_time: datetime.datetime,
+            pk_id: int = 0
+    ):
+        """
+        手动聚合动态K
+        """
+
+        if not rows:
+            return None
+
+        first = rows[0]
+        last = rows[-1]
+
+        return {
+            "pkId": pk_id,
+
+            "timestamp": start_time.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+
+            "unxTimestamp": int(start_time.timestamp()),
+
+            "open": float(first.opening),
+
+            "high": max(float(x.high) for x in rows),
+
+            "low": min(float(x.low) for x in rows),
+
+            "close": float(last.closed),
+
+            "vol": sum(int(x.vol) for x in rows),
+
+            "spread": float(last.spread),
+
+            "swapLong": float(
+                sum(float(x.swapLong) for x in rows)
+                / len(rows)
+            ),
+
+            "swapShort": float(
+                sum(float(x.swapShort) for x in rows)
+                / len(rows)
+            ),
+        }
+
+    # ================= ⭐ 主入口 =================
+    async def get_dynamic_kline(
+            self,
+            period: str,
+            start_time_str: str,
+    ):
+        """
+        动态0号K接口（跨天 + 动态K + 历史增量K）
+
+        参数:
+            period: K线周期 (M1/M5/M15/M30/H1/H4/D1/W1/MN)
+            start_time_str: 前端最后一根已完成正式K线时间
+            now: 当前系统时间
+
+        返回:
+            {
+                goods,
                 period,
-                start_time - datetime.timedelta(minutes=minutes),
-                start_time,
-                limit=1,
-                desc=True
-            )
-            lineData = self.build_kline_dict(prev[0]) if prev else None
+                utc,
+                is_final,
+                lineData,
+                klinePeriodData
+            }
+        """
+        interval_minutes = self.PERIOD_MINUTES[period]
 
-        # ---------- 历史K ----------
-        if start_time_str:
+        # ================= 前端最后正式K =================
+        if not start_time_str:
+            # 首次加载，没有历史K
+            return {
+                "goods": self.goods,
+                "period": period,
+                "utc": self.result.utc,
+                "is_final": False,
+                "lineData": None,
+                "klinePeriodData": []
+            }
 
-            start_dt = datetime.datetime.strptime(
-                start_time_str, "%Y-%m-%d %H:%M:%S"
-            )
+        start_dt = datetime.datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S")
 
-            history = await self.query_kline(period, start_dt)
+        # ================= 初步计算下一根动态K时间 =================
+        dynamic_start = start_dt + datetime.timedelta(minutes=interval_minutes)
+        dynamic_end = dynamic_start + datetime.timedelta(minutes=interval_minutes)
+
+        # ================= 检查当天是否有M1数据 =================
+        stmt_next_m1 = select(self.model.tradeDateTime).where(
+            self.model.platform == self.result.platform,
+            self.model.tradingGoods == self.result.trading_goods,
+            self.model.type == "M1",
+            self.model.tradeDateTime >= dynamic_start
+        ).order_by(self.model.tradeDateTime.asc()).limit(1)
+
+        res_next_m1 = await self.db.execute(stmt_next_m1)
+        next_m1_dt = res_next_m1.scalar()
+
+        # 如果当天没有M1数据，则跨天到交易日开始（01:00）
+        if next_m1_dt is None and dynamic_start.hour < 1:
+            next_day = dynamic_start.replace(hour=1, minute=0, second=0, microsecond=0)
+            dynamic_start = next_day
+            dynamic_end = dynamic_start + datetime.timedelta(minutes=interval_minutes)
+
+        # ================= 查询当前动态K是否已正式生成 =================
+        stmt_finished = select(self.model).where(
+            self.model.platform == self.result.platform,
+            self.model.tradingGoods == self.result.trading_goods,
+            self.model.type == period,
+            self.model.tradeDateTime == dynamic_start
+        )
+        res_finished = await self.db.execute(stmt_finished)
+        finished_kline = res_finished.scalar()
+
+        # ================= 构建动态K或正式K =================
+        if finished_kline:
+            # 当前K已完成 → 直接用数据库正式K
+            lineData = self.build_kline_dict(finished_kline)
+            is_final = True
+            dynamic_pk_id = int(finished_kline.pkId)
         else:
-            history = []
+            # 当前K未完成 → 聚合M1生成动态K
+            m1_rows = await self.query_kline("M1", dynamic_start, dynamic_end)
+            lineData = self.build_dynamic_bar(m1_rows, dynamic_start, pk_id=0)
+            is_final = False
+            dynamic_pk_id = 0
+
+        # ================= 增量返回历史正式K =================
+        history = []
+        if is_final:
+            stmt_history = select(self.model).where(
+                self.model.platform == self.result.platform,
+                self.model.tradingGoods == self.result.trading_goods,
+                self.model.type == period,
+                self.model.tradeDateTime > start_dt,
+                self.model.tradeDateTime < dynamic_start
+            ).order_by(self.model.tradeDateTime)
+            res_hist = await self.db.execute(stmt_history)
+            history = res_hist.scalars().all()
 
         return {
             "goods": self.goods,

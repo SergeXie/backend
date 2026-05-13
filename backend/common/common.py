@@ -191,13 +191,11 @@ async def select_kline_data(db, query, period_dict=None):
 
     else:
         current_time = datetime.datetime.now()
-        print("起始时间：{}".format(current_time))
 
         detail = await db.execute(query)
 
         tradeing_datas = detail.scalars().all()
 
-        print("结束时间：{}".format(datetime.datetime.now()))
 
         # 批量处理数据
         result_list = [
@@ -231,7 +229,6 @@ async def select_goods_common(db, goods, model_classes):
 
     result = dp_goods_data.scalars().first()
 
-    print(result)
 
     if not result:
         return False, False
@@ -374,7 +371,6 @@ class DynamicSpreadCommission(bt.CommInfoBase):
         # 将 spread 计算为点差的百分比
         spread_percentage = self.current_spread
         # 计算点差成本
-        print(spread_percentage / 100)
         return 0
 
 
@@ -395,7 +391,6 @@ async def get_entities_list(entity_type, pageNo=1, pageSize=100, orderBy=0, keyW
             # 模糊搜索
             keyword = keyWord + '%'
 
-            print("entity_type")
             order = orderDict[orderBy]
             if entity_type.__tablename__ == "dql_strategy":
                 select_entities = await db.execute(
@@ -462,14 +457,10 @@ async def fetch_trading_data(db, goods, period, model_classes,
             return False
 
         if begin_time and end_time:
-            print("时段数据 开始执行时间：{}".format(datetime.datetime.now()))
-            print(need_begintime_class)
-            print(class_name)
             # 根据交易品种表的 table_name 字段查找主表，拿到交易历史数据后加入到backtrader的数据源中（开始时间 - 结束时间）
             if class_name is None:
                 class_name = ['None']
             if class_name[0] in need_begintime_class:
-                print('提前时间检测')
                 # backtrader ATR回测特定查询，从起始时间再剪一天
                 start_time = parser.parse(begin_time)
                 end_time = parser.parse(end_time)
@@ -487,9 +478,7 @@ async def fetch_trading_data(db, goods, period, model_classes,
                 ).order_by(select_model_class.tradeDateTime.desc())
 
             else:
-                print('正常时间检测')
                 if isSystemIndicatorQuery == -1:
-                    print("isSystemIndicatorQuery：{}".format(isSystemIndicatorQuery))
                     # 对特定的指标特定查询，从起始时间再剪一天
                     start_time = parser.parse(begin_time)
                     if period == "H4":
@@ -524,8 +513,6 @@ async def fetch_trading_data(db, goods, period, model_classes,
                  "digits": x.digits, "spread": x.spread} for x in result_list]
 
             result_list_data = sorted(results_data_list, key=lambda x: x['datetime'])
-
-            print("时段数据 结束执行时间：{}".format(datetime.datetime.now()))
 
             return result_list_data
 

@@ -170,12 +170,6 @@ async def get_dynamic_kline(
     startTime: str = Query(None, title="起始时间")
 ):
     async with async_db_session() as db:
-        now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
-
-        # 当前时间
-        print("startTime:{}".format(startTime))
-
-        # now = pd.to_datetime(startTime)
         service = await DynamicKlineService.create(
             db=db,
             goods=goods,
@@ -191,8 +185,8 @@ async def get_dynamic_kline(
         data = await service.get_dynamic_kline(
             period=period,
             start_time_str=startTime,
-            now=now
         )
+        print(data)
 
         return await response_base.success(data=data)
 
