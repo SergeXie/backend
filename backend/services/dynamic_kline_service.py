@@ -230,98 +230,101 @@ class DynamicKlineService:
             start_time_str: str,
     ):
         """
-        动态0号K
+        动态0号K接口（跨天 + 动态K + 历史增量K）
 
-        startTime:
-            前端最后一根正式K
+        参数:
+            period: K线周期 (M1/M5/M15/M30/H1/H4/D1/W1/MN)
+            start_time_str: 前端最后一根已完成正式K线时间
+            now: 当前系统时间
 
-        例如：
-
-        startTime = 09:10
-        M5
-
-        当前动态K:
-            09:15 ~ 09:20
+        返回:
+            {
+                goods,
+                period,
+                utc,
+                is_final,
+                lineData,
+                klinePeriodData
+            }
         """
-
-        # ================= 周期分钟 =================
-
         interval_minutes = self.PERIOD_MINUTES[period]
 
         # ================= 前端最后正式K =================
+        if not start_time_str:
+            # 首次加载，没有历史K
+            return {
+                "goods": self.goods,
+                "period": period,
+                "utc": self.result.utc,
+                "is_final": False,
+                "lineData": None,
+                "klinePeriodData": []
+            }
 
-        start_dt = datetime.datetime.strptime(
-            start_time_str,
-            "%Y-%m-%d %H:%M:%S"
+        start_dt = datetime.datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S")
+
+        # ================= 初步计算下一根动态K时间 =================
+        dynamic_start = start_dt + datetime.timedelta(minutes=interval_minutes)
+        dynamic_end = dynamic_start + datetime.timedelta(minutes=interval_minutes)
+
+        # ================= 检查当天是否有M1数据 =================
+        stmt_next_m1 = select(self.model.tradeDateTime).where(
+            self.model.platform == self.result.platform,
+            self.model.tradingGoods == self.result.trading_goods,
+            self.model.type == "M1",
+            self.model.tradeDateTime >= dynamic_start
+        ).order_by(self.model.tradeDateTime.asc()).limit(1)
+
+        res_next_m1 = await self.db.execute(stmt_next_m1)
+        next_m1_dt = res_next_m1.scalar()
+
+        # 如果当天没有M1数据，则跨天到交易日开始（01:00）
+        if next_m1_dt is None and dynamic_start.hour < 1:
+            next_day = dynamic_start.replace(hour=1, minute=0, second=0, microsecond=0)
+            dynamic_start = next_day
+            dynamic_end = dynamic_start + datetime.timedelta(minutes=interval_minutes)
+
+        # ================= 查询当前动态K是否已正式生成 =================
+        stmt_finished = select(self.model).where(
+            self.model.platform == self.result.platform,
+            self.model.tradingGoods == self.result.trading_goods,
+            self.model.type == period,
+            self.model.tradeDateTime == dynamic_start
         )
+        res_finished = await self.db.execute(stmt_finished)
+        finished_kline = res_finished.scalar()
 
-        # ================= 当前动态K时间 =================
-
-        dynamic_start = start_dt + datetime.timedelta(
-            minutes=interval_minutes
-        )
-
-        dynamic_end = dynamic_start + datetime.timedelta(
-            minutes=interval_minutes
-        )
-
-        # ================= 当前动态K是否已正式生成 =================
-
-        finished_kline = await self.check_current_kline_finished(
-            period,
-            dynamic_start
-        )
-
-        # ================= 当前动态K已正式完成 =================
-
+        # ================= 构建动态K或正式K =================
         if finished_kline:
-
+            # 当前K已完成 → 直接用数据库正式K
+            lineData = self.build_kline_dict(finished_kline)
             is_final = True
-
-            # 直接返回数据库正式K
-            lineData = self.build_kline_dict(
-                finished_kline
-            )
-
-            # 返回新增正式K
-            history = [finished_kline]
-
-        # ================= 当前还是动态K =================
-
+            dynamic_pk_id = int(finished_kline.pkId)
         else:
-
+            # 当前K未完成 → 聚合M1生成动态K
+            m1_rows = await self.query_kline("M1", dynamic_start, dynamic_end)
+            lineData = self.build_dynamic_bar(m1_rows, dynamic_start, pk_id=0)
             is_final = False
+            dynamic_pk_id = 0
 
-            # 查询动态K区间M1
-            m1_rows = await self.query_kline(
-                "M1",
-                dynamic_start,
-                dynamic_end
-            )
-
-            # 动态聚合
-            lineData = self.build_dynamic_bar(
-                m1_rows,
-                dynamic_start,
-                pk_id=0
-            )
-
-            history = []
+        # ================= 增量返回历史正式K =================
+        history = []
+        if is_final:
+            stmt_history = select(self.model).where(
+                self.model.platform == self.result.platform,
+                self.model.tradingGoods == self.result.trading_goods,
+                self.model.type == period,
+                self.model.tradeDateTime > start_dt,
+                self.model.tradeDateTime < dynamic_start
+            ).order_by(self.model.tradeDateTime)
+            res_hist = await self.db.execute(stmt_history)
+            history = res_hist.scalars().all()
 
         return {
             "goods": self.goods,
             "period": period,
             "utc": self.result.utc,
-
-            # 当前动态K是否正式完成
             "is_final": is_final,
-
-            # 当前K
             "lineData": lineData,
-
-            # 新正式K
-            "klinePeriodData": [
-                self.build_kline_dict(x)
-                for x in history
-            ]
+            "klinePeriodData": [self.build_kline_dict(x) for x in history]
         }

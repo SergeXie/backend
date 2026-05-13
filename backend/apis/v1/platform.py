@@ -186,6 +186,7 @@ async def get_dynamic_kline(
             period=period,
             start_time_str=startTime,
         )
+        print(data)
 
         return await response_base.success(data=data)
 
