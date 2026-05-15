@@ -56,7 +56,7 @@ class StrategyRunBacktestService:
         result_data = []
 
         for item in payload_list:
-
+            print("item:{}".format(item))
             # 1. 查策略
             strategy = await fetch_indicators(db, item["uid"])
             if not strategy:
@@ -79,7 +79,8 @@ class StrategyRunBacktestService:
                 trading_data,
                 params,
                 strategy,
-                goods_data
+                goods_data,
+                item.get("size", 1)
             )
             if backtest_result is None:
                 continue
