@@ -138,6 +138,7 @@ class StrategyRunBacktestService:
         tester_uid = await create_strategy_record(db, item, strategy)
         traderReport = backtest["traderReport"]
 
+        print("backtest:{}".format(backtest))
         await db.execute(
             update(DqlStrategyTestResult)
             .where(DqlStrategyTestResult.uid == tester_uid)
@@ -161,7 +162,8 @@ class StrategyRunBacktestService:
                 maxFUR=traderReport.get("maxFUR", 0),
                 score=traderReport.get("totalTrades", 0),
                 paramsStrName=item.get("paramsStrName", ""),
-                calculationStatus=1
+                calculationStatus=1,
+                newReportTemplate=json.dumps(backtest.get("newReportTemplate", {}))
             )
         )
         await db.commit()
