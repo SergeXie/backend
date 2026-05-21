@@ -68,7 +68,7 @@ async def test_user(page_no: Optional[int] = 1, page_size: Optional[int] = 100):
 
         data_list = [{"pkId": data.pkid, "goods": data.goods,
                       "digits": data.digits, "goodType": data.goodType,
-                      "platform": data.platform} for data in result]
+                      "platform": data.platform, "tradable": data.tradable} for data in result]
 
         return await response_base.success(data=data_list)
 
