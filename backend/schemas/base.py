@@ -47,6 +47,9 @@ class DqlGoods(Base):
     profitRatio: Mapped[int] = mapped_column(Integer, nullable=False, comment='盈亏倍率')
 
     contractSize: Mapped[int] = mapped_column(Integer, nullable=False, comment='合约大小')
+
+    tradable: Mapped[int] = mapped_column(Integer, nullable=False, comment='可交易品种 1 可交易 0 不可交易')
+
     prepaymentPercentage: Mapped[float] = mapped_column(Integer, nullable=False, comment='预付款百分比')
 
 

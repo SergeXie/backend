@@ -858,7 +858,7 @@ async def _dedup_and_insert(rows, db, strategyUid: str, period: str):
     await db.commit()
     return len(to_insert)
 
-def run_backtest(trading_data, indicator_data_request, strategys, goods_data):
+def run_backtest(trading_data, indicator_data_request, strategys, goods_data, size):
     """
     :param indicator_data_request: 请求参数
     :param strategys: 策略对象
@@ -891,7 +891,7 @@ def run_backtest(trading_data, indicator_data_request, strategys, goods_data):
             cerebro.addstrategy(strategy_classes.get(class_name), indicator_params,
                                 goodsId=indicator_data_request.get("goods", None),
                                 begin_time=indicator_data_request.get("startTime", None),
-                                baseLots=goods_data.baseLots)
+                                baseLots=float(size))
 
         # 综合分析器
         cerebro.addanalyzer(ComprehensiveAnalyzer, _name='comprehensive')

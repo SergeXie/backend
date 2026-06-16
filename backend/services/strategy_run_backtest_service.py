@@ -56,7 +56,7 @@ class StrategyRunBacktestService:
         result_data = []
 
         for item in payload_list:
-
+            print("item:{}".format(item))
             # 1. 查策略
             strategy = await fetch_indicators(db, item["uid"])
             if not strategy:
@@ -79,7 +79,8 @@ class StrategyRunBacktestService:
                 trading_data,
                 params,
                 strategy,
-                goods_data
+                goods_data,
+                item.get("size", 1)
             )
             if backtest_result is None:
                 continue
@@ -137,6 +138,7 @@ class StrategyRunBacktestService:
         tester_uid = await create_strategy_record(db, item, strategy)
         traderReport = backtest["traderReport"]
 
+        print("backtest:{}".format(backtest))
         await db.execute(
             update(DqlStrategyTestResult)
             .where(DqlStrategyTestResult.uid == tester_uid)
@@ -160,7 +162,8 @@ class StrategyRunBacktestService:
                 maxFUR=traderReport.get("maxFUR", 0),
                 score=traderReport.get("totalTrades", 0),
                 paramsStrName=item.get("paramsStrName", ""),
-                calculationStatus=1
+                calculationStatus=1,
+                newReportTemplate=json.dumps(backtest.get("newReportTemplate", {}))
             )
         )
         await db.commit()
