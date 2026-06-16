@@ -11,15 +11,23 @@ class MnStrategy(CommonStrategy):
     def __init__(self, indicator_params, goodsId=None, begin_time=None, baseLots=0.1):
         # 调用父类方法 （固定写法）
         super().__init__(goodsId)
+        self.last_trigger_minute = None
         # 接收参数示例
         # ND = indicator_params.get("NumericalDifference")
 
     def next(self):
-        con = self.data.datetime.datetime(0).timestamp()%120==0
-        if con and len(self) != 0 and self.position:
-            self.order = self.close(size=0.1)  # 平仓，以下一日开盘价卖出
-        elif con and len(self) != 0:
+        current_dt = self.data.datetime.datetime(0)
+        current_minute = current_dt.replace(second=0, microsecond=0)
+
+        if current_dt.second != 0 or self.last_trigger_minute == current_minute:
+            return
+
+        self.last_trigger_minute = current_minute
+
+        if current_dt.minute % 2 == 1 and not self.position:
             self.order = self.sell(size=0.1)
+        elif current_dt.minute % 2 == 0 and self.position:
+            self.order = self.close(size=0.1)  # 平仓，以下一日开盘价卖出
         # 编写策略
         pass
 
