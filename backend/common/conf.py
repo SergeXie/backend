@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     DATABASE_URL: str = Field(default="mysql+aiomysql://cmdb:cmdb123456@192.168.1.126:3306/dql?charset=utf8mb4")
-    AI_URL: str = Field(default="http://192.168.1.60:8083/api/ai/myai")
+    AI_URL: str = Field(default="http://192.168.1.182:8083/api/ai/myai")
 
     # Env Redis
     REDIS_HOST: str = Field(default="127.0.0.1")

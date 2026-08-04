@@ -585,6 +585,9 @@ async def websocket_endpoint(websocket: WebSocket):
                             history_orders = json.loads(result.scalars().all()[-1].cmd)  # 获取所有结果
                             # print('这里',history_orders)
                             if history_orders:
+                                # 将时间格式中的T替换为空格，确保不带T格式
+                                if 'datatime' in history_orders:
+                                    history_orders['datatime'] = str(history_orders['datatime']).replace('T', ' ')
                                 tmp = get_strategy_str(i, history_orders, history_orders, CMD='HeartBeat')
                                 await send_websocket(websocket, tmp)
 

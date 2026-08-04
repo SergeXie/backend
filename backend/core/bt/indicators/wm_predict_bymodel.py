@@ -327,7 +327,7 @@ class ResWMpredictByModelData(bt.Strategy):
             print('正在请求概率计算')
             response = call_dl_api2(
                 # url=settings.AI_URL,
-                url='http://192.168.1.60:8083/api/ai/myai',
+                url='http://192.168.1.182:8083/api/ai/myai',
                 task='wm_predic_v3',
                 goods=self.kline_goods,
                 period=self.kline_period,
